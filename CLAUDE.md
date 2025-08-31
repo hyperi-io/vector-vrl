@@ -98,8 +98,8 @@ uv run ruff check tests/ example.py
 - `Cargo.toml` - Rust dependencies and configuration (auto-updates Vector version)
 - `pyproject.toml` - Python package configuration
 - `build.rs` - Build script for automatic Vector version detection
-- `update_vector.sh` - Script to manually update Vector version and check features
-- `LICENSE` - Apache 2.0 license
+- `scripts/update-deps.sh` - Comprehensive dependency update management
+- `LICENSE` - HyperSec EULA license
 
 ## Dependencies
 - **Rust**: PyO3 for Python bindings, Vector for data processing (auto-updated to latest release)
@@ -114,8 +114,8 @@ The project automatically uses the latest Vector release:
 - Use `SKIP_VECTOR_UPDATE=1` environment variable to skip version updates for faster rebuilds
 
 ## Common Development Tasks
-1. **Adding new Vector features**: Check available features with `./update_vector.sh` 
+1. **Adding new Vector features**: Vector features auto-detected via build system 
 2. **Testing changes**: Use `maturin develop` then run Python tests
 3. **Performance testing**: Use example.py with large data sets
-4. **Manual version update**: Run `./update_vector.sh` to check latest features
+4. **Manual dependency update**: Run `./scripts/update-deps.sh` for latest versions
 5. **CI/CD**: GitHub Actions in `.github/workflows/ci.yaml`

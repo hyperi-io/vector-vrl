@@ -11,6 +11,7 @@ pyvector-rs integrates the power of [Vector](https://vector.dev/) data processin
 
 - **High Performance**: Rust-powered Vector integration with minimal copying
 - **Async/Await Support**: Native Python async/await interface
+- **VRL Syntax Validation**: Fast VRL syntax checking with detailed error reporting
 - **Multiple Sinks**: Send data to AWS S3, SQS, Elasticsearch, HTTP endpoints, files, and more
 - **Zero-Copy Processing**: Efficient data handling between Python and Vector
 - **Auto-Updating**: Automatically uses latest Vector releases
@@ -76,6 +77,38 @@ async def main():
 
 # Run
 asyncio.run(main())
+```
+
+### VRL Syntax Checking
+
+```python
+import pyvector
+
+# Fast VRL syntax validation
+result = pyvector.check_vrl_syntax('''
+. = parse_json!(.message)
+.timestamp = now()
+.level = upcase(.level)
+''')
+
+if result.valid:
+    print("✓ VRL syntax is valid")
+else:
+    print(f"✗ VRL error: {result.error}")
+    if result.line:
+        print(f"  Line {result.line}, Column {result.column}")
+
+# Check multiple scripts
+scripts = {
+    "parser": '. = parse_json!(.message)',
+    "enricher": '.timestamp = now()',
+    "invalid": 'bad syntax'
+}
+
+results = pyvector.check_vrl_batch(scripts)
+for name, result in results.items():
+    status = "✓" if result.valid else "✗"
+    print(f"{status} {name}: {result.message}")
 ```
 
 ## 🔧 Advanced Usage
@@ -325,6 +358,172 @@ Stop the Vector pipeline and clean up resources.
 Send data to a specific Vector source.
 - `source`: Name of the source (as defined in config)
 - `data`: Raw bytes to send (typically JSON-encoded)
+
+### VRL Syntax Validation
+
+Fast VRL syntax checking functions - no Vector instance required:
+
+#### `check_vrl_syntax(vrl_code: str) -> VrlResult`
+
+Check VRL syntax as fast as possible with full error details:
+
+```python
+import pyvector
+
+# Valid VRL
+result = pyvector.check_vrl_syntax('. = parse_json!(.message)')
+print(result.valid)      # True
+print(result.error_code) # 0
+
+# Invalid VRL
+result = pyvector.check_vrl_syntax('invalid syntax')
+print(result.valid)      # False  
+print(result.error_code) # 1
+print(result.error)      # Error message
+print(result.line)       # Line number (if available)
+print(result.column)     # Column number (if available)
+```
+
+#### `check_vrl_batch(scripts: dict) -> dict`
+
+Check multiple VRL scripts at once:
+
+```python
+scripts = {
+    "parse": '. = parse_json!(.message)',
+    "enrich": '.timestamp = now()',
+    "invalid": 'bad syntax here'
+}
+
+results = pyvector.check_vrl_batch(scripts)
+for name, result in results.items():
+    print(f"{name}: {'✓' if result.valid else '✗'}")
+```
+
+#### `validate_vrl_transform(config: str) -> VrlResult`
+
+Validate VRL in Vector transform configuration:
+
+```python
+transform_config = """
+[transforms.parse]
+type = "remap"
+source = '''
+. = parse_json!(.message)
+.processed = true
+'''
+"""
+
+result = pyvector.validate_vrl_transform(transform_config)
+print(f"Transform valid: {result.valid}")
+```
+
+#### `get_vrl_functions() -> list[str]`
+
+Get list of all available VRL functions:
+
+```python
+functions = pyvector.get_vrl_functions()
+print(f"Available VRL functions: {len(functions)}")
+print(functions[:10])  # First 10 functions
+```
+
+#### `explain_vrl_function(name: str) -> str | None`
+
+Get documentation for a VRL function:
+
+```python
+doc = pyvector.explain_vrl_function("parse_json")
+if doc:
+    print(doc)  # Function description and examples
+```
+
+### `VrlResult` Class
+
+Result object for VRL validation:
+
+- `valid: bool` - Whether VRL syntax is valid
+- `error_code: int` - Return code (0 = success, 1+ = error)  
+- `error: str | None` - Error message if invalid
+- `line: int | None` - Error line number (if available)
+- `column: int | None` - Error column number (if available)
+- `message: str` - Human-readable result message
+
+### CLI-Compatible Vector Instances
+
+Start Vector instances with CLI-like parameters and switches:
+
+#### `VectorCli(config: str | None, options: VectorCliOptions)`
+
+Create Vector instance with CLI-compatible options:
+
+```python
+import pyvector
+
+# Create CLI options (same as Vector CLI switches)
+opts = pyvector.VectorCliOptions(
+    config_path="/path/to/vector.toml",    # --config
+    verbose=2,                             # -vv  
+    log_format="json",                     # --log-format json
+    require_healthy=True,                  # --require-healthy
+    dry_run=False,                         # --dry-run
+    threads=4,                             # --threads 4
+    config_vars={"ENV": "prod"}            # --config-var ENV=prod
+)
+
+# Create Vector with CLI options
+vector = pyvector.VectorCli(config_string, opts)
+await vector.start()
+```
+
+#### `vector_from_cli_args(args: list, config: str = None)`
+
+Create Vector from CLI-style arguments:
+
+```python
+# Exactly like Vector CLI
+args = [
+    "--config", "/etc/vector/vector.toml",
+    "--verbose", "--verbose",              # -vv
+    "--log-format", "json", 
+    "--require-healthy",
+    "--threads", "8",
+    "--config-var", "DATA_DIR=/var/lib/vector",
+    "--config-var", "LOG_LEVEL=debug"
+]
+
+vector = pyvector.vector_from_cli_args(args)
+await vector.start()
+```
+
+#### `VectorCliOptions` Parameters
+
+All Vector CLI switches supported:
+
+- `config_path: str` - Config file path (`--config`)
+- `config_dir: str` - Config directory (`--config-dir`)  
+- `watch_config: bool` - Watch config changes (`--watch-config`)
+- `verbose: int` - Verbosity level (`-v`, `-vv`, `-vvv`)
+- `quiet: bool` - Quiet mode (`--quiet`)
+- `log_format: str` - Log format (`--log-format text|json`)
+- `require_healthy: bool` - Require healthy start (`--require-healthy`)
+- `dry_run: bool` - Dry run mode (`--dry-run`)
+- `threads: int` - Thread count (`--threads N`)
+- `internal_log_rate_limit: int` - Log rate limit (`--internal-log-rate-limit`)
+- `allow_empty_config: bool` - Allow empty config (`--allow-empty-config`)
+- `config_vars: dict` - Config variables (`--config-var KEY=VALUE`)
+
+#### Config Validation Functions
+
+```python
+# Fast config syntax checking
+valid = pyvector.check_config_syntax(config_string)
+print(f"Config valid: {valid}")
+
+# Validate config file
+valid = pyvector.validate_config_file("/path/to/vector.toml")
+print(f"File valid: {valid}")
+```
 
 ## 📊 Performance
 

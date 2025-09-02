@@ -3,11 +3,7 @@
 .cargo/
 Cargo.lock
 
-# Vector upstream (large external codebase - not our code - 61K+ files)
-vector-upstream/
-# Exclude from all tools to prevent 10K+ file scanning
-vector-upstream/**
-!vector-upstream/.gitkeep
+# Vector upstream removed to prevent 10K+ file issues
 
 # Python environments (NEVER track these - causes 10K+ git changes)
 .venv/

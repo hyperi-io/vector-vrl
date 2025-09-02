@@ -30,5 +30,33 @@
     },
     "git.ignoreLimitWarning": true,
     "git.useEditorAsCommitInput": false,
-    "git.enabled": false
+    "git.enabled": true,
+    
+    // Python-only linting and formatting
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        }
+    },
+    
+    // Rust-only settings (no auto-formatting of Rust files)
+    "[rust]": {
+        "editor.formatOnSave": false,
+        "editor.codeActionsOnSave": {}
+    },
+    
+    // Disable linting for Vector core files
+    "python.analysis.exclude": [
+        "**/src/**",
+        "**/target/**", 
+        "**/.cargo/**"
+    ],
+    
+    "ruff.exclude": [
+        "src/**",
+        "target/**",
+        ".cargo/**"
+    ]
 }

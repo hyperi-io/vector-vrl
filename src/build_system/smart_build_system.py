@@ -32,7 +32,7 @@ from lfs_cache_manager import LFSCacheManager, should_use_cache
 # Load configuration following corporate policy
 settings = Dynaconf(
     envvar_prefix="PYVECTOR", 
-    settings_files=['build/config/*.yaml'],
+    settings_files=['src/build_system/config/*.yaml'],
     load_dotenv=True
 )
 

@@ -1,7 +1,7 @@
 [project]
-name = "pyvector-build-system"
+name = "pyvector-python-tools"
 version = "0.1.0"
-description = "Smart build system for pyvector-rs with intelligent Vector version fallback"
+description = "Python tools for pyvector-rs including smart build system and test utilities"
 requires-python = ">=3.11"
 dependencies = [
     "requests>=2.32.0",

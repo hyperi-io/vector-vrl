@@ -47,16 +47,24 @@
         "editor.codeActionsOnSave": {}
     },
     
-    // Disable linting for Vector core files
+    // Scope Python tools to src/ directory only (NOT vector/)
+    "python.analysis.include": [
+        "src/**"
+    ],
     "python.analysis.exclude": [
-        "**/src/**",
-        "**/target/**", 
-        "**/.cargo/**"
+        "vector/**",
+        "target/**", 
+        ".cargo/**",
+        "build/**"
     ],
     
+    "ruff.include": [
+        "src/**/*.py"
+    ],
     "ruff.exclude": [
-        "src/**",
+        "vector/**",
         "target/**",
-        ".cargo/**"
+        ".cargo/**",
+        "build/**"
     ]
 }

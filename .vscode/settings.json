@@ -29,5 +29,6 @@
         "**/node_modules": true
     },
     "git.ignoreLimitWarning": true,
-    "git.useEditorAsCommitInput": false
+    "git.useEditorAsCommitInput": false,
+    "git.enabled": false
 }

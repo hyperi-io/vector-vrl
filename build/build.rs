@@ -18,10 +18,27 @@ fn main() {
 }
 
 fn update_vector_version() {
+    // Check if smart-build script already determined a working version
+    if let Ok(build_info) = fs::read_to_string(".vector-build-info") {
+        if build_info.contains("BUILD_SUCCESS=true") {
+            for line in build_info.lines() {
+                if line.starts_with("VECTOR_VERSION=") {
+                    let version = line.split('=').nth(1).unwrap_or("");
+                    if !version.is_empty() {
+                        println!("cargo:warning=Using previously validated Vector version: {}", version);
+                        return update_cargo_toml_version(version);
+                    }
+                }
+            }
+        }
+    }
+    
     let latest_version = get_latest_compatible_vector_version();
     println!("cargo:warning=Using Vector version: {}", latest_version);
-    
-    // Read current Cargo.toml
+    update_cargo_toml_version(&latest_version);
+}
+
+fn update_cargo_toml_version(version: &str) {
     let cargo_toml_path = "Cargo.toml";
     if let Ok(content) = fs::read_to_string(cargo_toml_path) {
         let mut updated = false;
@@ -36,9 +53,9 @@ fn update_vector_version() {
                     let after_parts: Vec<_> = line.split(", ").skip(2).collect();
                     let after = after_parts.join(", ");
                     let new_line = if after.is_empty() {
-                        format!("{}, tag = \"{}\"", before, latest_version)
+                        format!("{}, tag = \"{}\"", before, version)
                     } else {
-                        format!("{}, tag = \"{}\", {}", before, latest_version, after)
+                        format!("{}, tag = \"{}\", {}", before, version, after)
                     };
                     new_content.push_str(&new_line);
                     updated = true;
@@ -46,7 +63,7 @@ fn update_vector_version() {
                     // Add tag specification
                     let new_line = line.replace(
                         "git = \"https://github.com/vectordotdev/vector.git\"",
-                        &format!("git = \"https://github.com/vectordotdev/vector.git\", tag = \"{}\"", latest_version)
+                        &format!("git = \"https://github.com/vectordotdev/vector.git\", tag = \"{}\"", version)
                     );
                     new_content.push_str(&new_line);
                     updated = true;
@@ -62,7 +79,7 @@ fn update_vector_version() {
             if let Err(e) = fs::write(cargo_toml_path, new_content.trim_end()) {
                 println!("cargo:warning=Failed to update Cargo.toml: {}", e);
             } else {
-                println!("cargo:warning=Updated Cargo.toml with Vector version {}", latest_version);
+                println!("cargo:warning=Updated Cargo.toml with Vector version {}", version);
             }
         }
     }

@@ -262,7 +262,7 @@ fn create_config_from_string(config_content: &str, opts: &VectorCliOptions) -> P
         .map_err(|e| PyValueError::new_err(format!("Config error: {}", e)))?;
     
     let config = builder.build()
-        .map_err(|e| PyValueError::new_err(format!("Failed to build config: {}", e)))?;
+        .map_err(|e| PyValueError::new_err(format!("Failed to build config: {:?}", e)))?;
     
     // Validate config if not allowing empty
     if !opts.allow_empty_config && config.is_empty() {
@@ -308,13 +308,13 @@ fn create_config_from_dir(config_dir: &str, opts: &VectorCliOptions) -> PyResult
             
             builder
                 .append(load(processed_content.as_bytes(), Format::Toml)
-                    .map_err(|e| PyValueError::new_err(format!("Invalid config in {:?}: {}", path, e)))?)
-                .map_err(|e| PyValueError::new_err(format!("Config error in {:?}: {}", path, e)))?;
+                    .map_err(|e| PyValueError::new_err(format!("Invalid config in {:?}: {:?}", path, e)))?)
+                .map_err(|e| PyValueError::new_err(format!("Config error in {:?}: {:?}", path, e)))?;
         }
     }
     
     let config = builder.build()
-        .map_err(|e| PyValueError::new_err(format!("Failed to build config: {}", e)))?;
+        .map_err(|e| PyValueError::new_err(format!("Failed to build config: {:?}", e)))?;
     
     if !opts.allow_empty_config && config.is_empty() {
         return Err(PyValueError::new_err("No valid config files found in directory"));
@@ -360,7 +360,7 @@ fn init_vector_cli(opts: &VectorCliOptions) -> PyResult<()> {
     };
     
     // Initialize Vector logging (similar to CLI)
-    vector::app::init_logging(opts.quiet, log_format, log_level, opts.internal_log_rate_limit.unwrap_or(10));
+    vector::app::init_logging(opts.quiet, log_format, log_level, opts.internal_log_rate_limit.unwrap_or(10) as u64);
     
     Ok(())
 }

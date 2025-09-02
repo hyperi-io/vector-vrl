@@ -1,6 +1,66 @@
-/target
+# Rust build artifacts (most excluded, some cached via LFS)
+/target/debug/
+/target/release/incremental/
+/target/release/.fingerprint/
+/target/.rustc_info.json.bak
+/target/CACHEDIR.TAG
+
+# Python environments
 .venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/dist/
+*.egg-info/
+
+# IDE and editor files
 .idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Task and temporary files
 .task/
 test_outputs/
 integration.toml
+
+# Temporary files (controlled via LFS for important ones)
+.tmp/*.tmp
+.tmp/*.temp
+.tmp/debug-*
+
+# OS and system files
+Thumbs.db
+.Trash-*
+*.log.backup
+
+# Package manager files
+Cargo.lock.backup
+uv.lock.backup
+node_modules/
+npm-debug.log*
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*.p12
+
+# Build system internal files
+build/.cache/
+build/logs/
+build/*.backup
+
+# Large files that should be in LFS instead
+*.tar.gz
+*.zip
+*.dmg
+*.pkg
+*.deb
+*.rpm

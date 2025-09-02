@@ -1,0 +1,50 @@
+build_system:
+  max_fallbacks: 3
+  build_timeout_minutes: 30
+  stall_timeout_minutes: 5
+
+vector:
+  # Vector feature configurations for different build profiles
+  minimal_features:
+    - "transforms-logs"
+    - "transforms-metrics"
+    - "sinks-logs" 
+    - "sinks-metrics"
+
+  safe_features:
+    - "api"
+    - "api-client"
+    - "enrichment-tables"
+    - "sinks"
+    - "sources"
+    - "transforms"
+    - "unix"
+    - "secrets"
+
+  full_features:
+    - "default"
+
+  # Default profile to use
+  profile: "safe"
+
+paths:
+  temp_dir: ".tmp"
+  log_retention_days: 7
+
+fixes:
+  enable_auto_fixes: true
+  max_fix_attempts: 2
+
+monitoring:
+  progress_check_interval: 2
+  enable_rich_output: true
+
+caching:
+  enabled: false  # Enable in CI via PYVECTOR_CACHING_ENABLED=true
+  retention_days: 7
+  compress_level: 6
+  
+git_lfs:
+  track_build_caches: true
+  track_wheels: true
+  auto_pull: true

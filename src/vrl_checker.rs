@@ -2,6 +2,9 @@ use pyo3::prelude::*;
 use pyo3::exceptions::{PyValueError, PySyntaxError};
 use std::collections::HashMap;
 
+// Import VRL from Vector
+use vector::vrl::{compiler, stdlib};
+
 #[pyclass]
 #[derive(Clone)]
 pub struct VrlResult {
@@ -46,7 +49,7 @@ impl VrlResult {
 #[pyfunction]
 pub fn check_vrl_syntax(vrl_code: &str) -> PyResult<VrlResult> {
     // Fast VRL syntax validation using Vector's VRL parser
-    match vrl::compiler::compile(vrl_code, &vrl::compiler::CompileConfig::default()) {
+    match compiler::compile(vrl_code, &compiler::CompileConfig::default()) {
         Ok(_) => Ok(VrlResult {
             valid: true,
             error: None,
@@ -131,7 +134,7 @@ pub fn validate_vrl_transform(transform_config: &str) -> PyResult<VrlResult> {
 #[pyfunction]
 pub fn get_vrl_functions() -> PyResult<Vec<String>> {
     // Get list of available VRL functions
-    let functions = vrl::stdlib::all();
+    let functions = stdlib::all();
     let function_names: Vec<String> = functions
         .iter()
         .map(|f| f.identifier().to_string())
@@ -143,7 +146,7 @@ pub fn get_vrl_functions() -> PyResult<Vec<String>> {
 #[pyfunction]  
 pub fn explain_vrl_function(function_name: &str) -> PyResult<Option<String>> {
     // Get documentation for a specific VRL function
-    let functions = vrl::stdlib::all();
+    let functions = stdlib::all();
     
     for function in functions {
         if function.identifier() == function_name {

@@ -6,7 +6,7 @@ mod vector_cli;
 
 use crate::vector_app::VectorApp;
 use crate::vector_context::VectorContext;
-use crate::vrl_checker::{check_vrl_syntax, check_vrl_batch, validate_vrl_transform, get_vrl_functions, explain_vrl_function, VrlResult};
+// use crate::vrl_checker::{check_vrl_syntax, check_vrl_batch, validate_vrl_transform, get_vrl_functions, explain_vrl_function, VrlResult};
 use crate::vector_cli::{VectorCli, VectorCliOptions, vector_from_cli_args, parse_cli_args, validate_config_file, check_config_syntax};
 use bytes::Bytes;
 use pyo3::prelude::*;
@@ -82,13 +82,13 @@ fn pyvector(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<VectorCli>()?;
     m.add_class::<VectorCliOptions>()?;
     
-    // VRL syntax validation
-    m.add_class::<VrlResult>()?;
-    m.add_function(wrap_pyfunction!(check_vrl_syntax, m)?)?;
-    m.add_function(wrap_pyfunction!(check_vrl_batch, m)?)?;
-    m.add_function(wrap_pyfunction!(validate_vrl_transform, m)?)?;
-    m.add_function(wrap_pyfunction!(get_vrl_functions, m)?)?;
-    m.add_function(wrap_pyfunction!(explain_vrl_function, m)?)?;
+    // VRL syntax validation - temporarily disabled
+    // m.add_class::<VrlResult>()?;
+    // m.add_function(wrap_pyfunction!(check_vrl_syntax, m)?)?;
+    // m.add_function(wrap_pyfunction!(check_vrl_batch, m)?)?;
+    // m.add_function(wrap_pyfunction!(validate_vrl_transform, m)?)?;
+    // m.add_function(wrap_pyfunction!(get_vrl_functions, m)?)?;
+    // m.add_function(wrap_pyfunction!(explain_vrl_function, m)?)?;
     
     // CLI argument parsing and config validation
     m.add_function(wrap_pyfunction!(vector_from_cli_args, m)?)?;

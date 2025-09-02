@@ -29,9 +29,8 @@ test_outputs/
 integration.toml
 
 # Temporary files (controlled via LFS for important ones)
-.tmp/*.tmp
-.tmp/*.temp
-.tmp/debug-*
+.tmp/
+!.tmp/.gitkeep
 
 # OS and system files
 Thumbs.db

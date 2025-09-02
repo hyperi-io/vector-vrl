@@ -6,14 +6,16 @@ PROJECT_DIR="$SCRIPT_DIR"
 
 cd "$PROJECT_DIR"
 
-# Ensure build environment exists
-if [ ! -d "build/.venv" ]; then
-    echo "[INFO] Creating build environment..."
-    uv venv build/.venv --python 3.11
+# Ensure Python build environment exists
+if [ ! -d "src/.venv" ]; then
+    echo "[INFO] Creating Python build environment..."
+    uv venv src/.venv --python 3.11
     
-    # Install dependencies for build system (including dynaconf for config policy)
-    uv pip install --python build/.venv requests click rich typer gitpython dynaconf
+    # Install dependencies using Python project configuration
+    cd src
+    uv pip install --python .venv -e .
+    cd ..
 fi
 
 # Run Python smart build system  
-exec "$PROJECT_DIR/build/.venv/bin/python" "$PROJECT_DIR/build/smart_build_system.py" "$@"
+exec "$PROJECT_DIR/src/.venv/bin/python" "$PROJECT_DIR/src/build_system/smart_build_system.py" "$@"

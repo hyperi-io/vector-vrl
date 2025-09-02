@@ -9,6 +9,7 @@ repository = "https://github.com/hypersec-io/pyvector-rs"
 [lib]
 name = "pyvector"
 crate-type = ["cdylib"]
+path = "vector/lib.rs"
 
 [dependencies]
 pyo3 = { version = ">=0.21.2", features = ["extension-module", "experimental-async"] }

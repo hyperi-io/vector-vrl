@@ -1,9 +1,7 @@
 # Rust build artifacts (most excluded, some cached via LFS)
-/target/debug/
-/target/release/incremental/
-/target/release/.fingerprint/
-/target/.rustc_info.json.bak
-/target/CACHEDIR.TAG
+/target/
+.cargo/
+Cargo.lock
 
 # Python environments
 .venv/

@@ -6,17 +6,27 @@ Cargo.lock
 # Vector upstream (large external codebase - not our code)
 vector-upstream/
 
-# Python environments
+# Python environments (NEVER track these - causes 10K+ git changes)
 .venv/
 */.venv/
+**/.venv/
 build/.venv/
+src/.venv/
+vector/.venv/
+vector-bindings/.venv/
 __pycache__/
+*/__pycache__/
+**/__pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
 build/dist/
 *.egg-info/
+# Python binary extensions (should not be tracked)
+*.so
+*.dylib
+*.pyd
 
 # IDE and editor files
 .idea/

@@ -1,4 +1,4 @@
-# pyvector-rs
+# vector-bindings-rs
 
 **High-performance Python bindings for Vector data processing pipelines**
 

@@ -1,25 +1,12 @@
-# Git LFS Configuration for Build Caching
-# Rust build artifacts and caches
-target/release/deps/*.rlib filter=lfs diff=lfs merge=lfs -text
-target/release/build/*/out/*.a filter=lfs diff=lfs merge=lfs -text
-target/.rustc_info.json filter=lfs diff=lfs merge=lfs -text
-# Cargo caches
-.cargo/registry/cache/**/*.crate filter=lfs diff=lfs merge=lfs -text
-.cargo/git/checkouts/**/*.pack filter=lfs diff=lfs merge=lfs -text
-# Python build caches
-build/.venv/lib/**/*.so filter=lfs diff=lfs merge=lfs -text
-build/.venv/lib/**/*.dylib filter=lfs diff=lfs merge=lfs -text
-# Vector dependency caches
-.tmp/vector-*.tar.gz filter=lfs diff=lfs merge=lfs -text
-.tmp/cargo-cache-*.tar.gz filter=lfs diff=lfs merge=lfs -text
-# Build logs and artifacts (for CI analysis)
-.tmp/build_vector_*.log filter=lfs diff=lfs merge=lfs -text
-target/wheels/*.whl filter=lfs diff=lfs merge=lfs -text
-# Large dependency downloads
-*.so filter=lfs diff=lfs merge=lfs -text
-*.dylib filter=lfs diff=lfs merge=lfs -text
-*.a filter=lfs diff=lfs merge=lfs -text
+# Git LFS Configuration - MINIMAL tracking to avoid 10K+ git changes
+# Only track specific large build artifacts, NOT venv or general binary files
+
+# Specific Vector build caches only
+.tmp/vector-cache-*.tar.gz filter=lfs diff=lfs merge=lfs -text
 .tmp/build-cache-*.tar.gz filter=lfs diff=lfs merge=lfs -text
-**/*.so filter=lfs diff=lfs merge=lfs -text
-**/*.dylib filter=lfs diff=lfs merge=lfs -text
-**/*.a filter=lfs diff=lfs merge=lfs -text
+
+# Build logs for CI analysis only
+.tmp/build_vector_*.log filter=lfs diff=lfs merge=lfs -text
+
+# Python wheels from maturin builds only
+target/wheels/*.whl filter=lfs diff=lfs merge=lfs -text

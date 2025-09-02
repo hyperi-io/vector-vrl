@@ -3,6 +3,9 @@
 .cargo/
 Cargo.lock
 
+# Vector upstream (large external codebase - not our code)
+vector-upstream/
+
 # Python environments
 .venv/
 */.venv/

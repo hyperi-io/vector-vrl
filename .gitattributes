@@ -1,12 +1,2 @@
-# Git LFS Configuration - MINIMAL tracking to avoid 10K+ git changes
-# Only track specific large build artifacts, NOT venv or general binary files
-
-# Specific Vector build caches only
-.tmp/vector-cache-*.tar.gz filter=lfs diff=lfs merge=lfs -text
-.tmp/build-cache-*.tar.gz filter=lfs diff=lfs merge=lfs -text
-
-# Build logs for CI analysis only
-.tmp/build_vector_*.log filter=lfs diff=lfs merge=lfs -text
-
-# Python wheels from maturin builds only
-target/wheels/*.whl filter=lfs diff=lfs merge=lfs -text
+# No Git LFS needed - /vector build artifacts are now gitignored
+# All large build artifacts are temporary and ignored

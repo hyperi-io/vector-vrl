@@ -13,10 +13,6 @@
 .venv/
 */.venv/
 **/.venv/
-build/.venv/
-vectordotdev/.venv/
-vector/.venv/
-vector-bindings/.venv/
 __pycache__/
 */__pycache__/
 **/__pycache__/
@@ -70,11 +66,8 @@ npm-debug.log*
 build/.cache/
 build/logs/
 build/*.backup
-build/target/
-build/dist/
 vectordotdev/target/
 vectordotdev/dist/
-vector/target/
 vector-bindings/target/
 
 # Cargo registry and git checkouts (major source of 10K+ changes)
@@ -87,7 +80,7 @@ vector-bindings/target/
 */incremental/
 **/incremental/
 
-# Large files that should be in LFS instead
+# Large files (no longer using LFS since /vector is ignored)
 *.tar.gz
 *.zip
 *.dmg

@@ -1,0 +1,33 @@
+{
+    "files.exclude": {
+        "**/.tmp": true,
+        "**/target": true,
+        "**/.cargo": true,
+        "**/build/.venv": true,
+        "**/__pycache__": true,
+        "**/.mypy_cache": true,
+        "**/node_modules": true,
+        "**/*.pyc": true,
+        "**/.DS_Store": true
+    },
+    "files.watcherExclude": {
+        "**/.tmp/**": true,
+        "**/target/**": true,
+        "**/.cargo/**": true,
+        "**/build/.venv/**": true,
+        "**/__pycache__/**": true,
+        "**/.mypy_cache/**": true,
+        "**/node_modules/**": true
+    },
+    "search.exclude": {
+        "**/.tmp": true,
+        "**/target": true,
+        "**/.cargo": true,
+        "**/build/.venv": true,
+        "**/__pycache__": true,
+        "**/.mypy_cache": true,
+        "**/node_modules": true
+    },
+    "git.ignoreLimitWarning": true,
+    "git.useEditorAsCommitInput": false
+}

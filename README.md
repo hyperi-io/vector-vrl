@@ -1,11 +1,11 @@
-# vector-bindings-rs
+# vectordotdev
 
 **High-performance Python bindings for Vector data processing pipelines**
 
 [![License](https://img.shields.io/badge/License-HyperSec%20EULA-blue.svg)](https://hypersec.io/eula)
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
 
-pyvector-rs integrates the power of [Vector](https://vector.dev/) data processing pipelines directly into Python applications with minimal overhead. Built with Rust and PyO3 for maximum performance.
+vectordotdev integrates the power of [Vector](https://vector.dev/) data processing pipelines directly into Python applications with minimal overhead. Built with Rust and PyO3 for maximum performance.
 
 ## 🚀 Features
 
@@ -21,14 +21,14 @@ pyvector-rs integrates the power of [Vector](https://vector.dev/) data processin
 
 ### From PyPI (when published)
 ```bash
-pip install pyvector-rs
+pip install vectordotdev
 ```
 
 ### From Source
 ```bash
 # Clone the repository
-git clone https://github.com/vectordotdev/pyvector-rs.git
-cd pyvector-rs
+git clone https://github.com/vectordotdev/vectordotdev.git
+cd vectordotdev
 
 # Install system dependencies (Linux/macOS)
 ./scripts/bootstrap.sh
@@ -42,7 +42,7 @@ uv run maturin develop
 ```python
 import asyncio
 import json
-import pyvector
+import vectordotdev
 
 # Configure Vector pipeline
 config = """
@@ -58,7 +58,7 @@ encoding.codec = "json"
 
 async def main():
     # Create Vector instance
-    vector = pyvector.Vector(config)
+    vector = vectordotdev.Vector(config)
     
     # Start the pipeline
     await vector.start()
@@ -82,10 +82,10 @@ asyncio.run(main())
 ### VRL Syntax Checking
 
 ```python
-import pyvector
+import vectordotdev
 
 # Fast VRL syntax validation
-result = pyvector.check_vrl_syntax('''
+result = vectordotdev.check_vrl_syntax('''
 . = parse_json!(.message)
 .timestamp = now()
 .level = upcase(.level)
@@ -105,7 +105,7 @@ scripts = {
     "invalid": 'bad syntax'
 }
 
-results = pyvector.check_vrl_batch(scripts)
+results = vectordotdev.check_vrl_batch(scripts)
 for name, result in results.items():
     status = "✓" if result.valid else "✗"
     print(f"{status} {name}: {result.message}")
@@ -143,7 +143,7 @@ queue_url = "https://sqs.us-east-1.amazonaws.com/123456789012/my-queue"
 encoding.codec = "json"
 """
 
-vector = pyvector.Vector(config)
+vector = vectordotdev.Vector(config)
 await vector.start()
 
 # Data automatically goes to S3, Elasticsearch, and SQS
@@ -157,7 +157,7 @@ import asyncio
 import uuid
 
 async def high_throughput_example():
-    vector = pyvector.Vector(config)
+    vector = vectordotdev.Vector(config)
     await vector.start()
     
     # Send 1 million events efficiently
@@ -214,7 +214,7 @@ encoding.codec = "json"
 ## 🏗️ Project Structure
 
 ```
-pyvector-rs/
+vectordotdev/
 ├── src/                    # Rust source code
 │   ├── lib.rs             # Main Python module entry point
 │   ├── vector_app.rs      # Vector application lifecycle management  
@@ -278,7 +278,7 @@ uv run pytest tests/test_performance.py -v
 uv run pytest tests/ -m "not slow" -v
 
 # Run with coverage
-uv run pytest tests/ --cov=pyvector
+uv run pytest tests/ --cov=vectordotdev
 
 # Performance tests only
 uv run pytest tests/ -m performance -v
@@ -336,7 +336,7 @@ The project uses **automatic dependency management**:
 
 ## 🌟 API Reference
 
-### `pyvector.Vector`
+### `vectordotdev.Vector`
 
 The main class for Vector pipeline management.
 
@@ -368,15 +368,15 @@ Fast VRL syntax checking functions - no Vector instance required:
 Check VRL syntax as fast as possible with full error details:
 
 ```python
-import pyvector
+import vectordotdev
 
 # Valid VRL
-result = pyvector.check_vrl_syntax('. = parse_json!(.message)')
+result = vectordotdev.check_vrl_syntax('. = parse_json!(.message)')
 print(result.valid)      # True
 print(result.error_code) # 0
 
 # Invalid VRL
-result = pyvector.check_vrl_syntax('invalid syntax')
+result = vectordotdev.check_vrl_syntax('invalid syntax')
 print(result.valid)      # False  
 print(result.error_code) # 1
 print(result.error)      # Error message
@@ -395,7 +395,7 @@ scripts = {
     "invalid": 'bad syntax here'
 }
 
-results = pyvector.check_vrl_batch(scripts)
+results = vectordotdev.check_vrl_batch(scripts)
 for name, result in results.items():
     print(f"{name}: {'✓' if result.valid else '✗'}")
 ```
@@ -414,7 +414,7 @@ source = '''
 '''
 """
 
-result = pyvector.validate_vrl_transform(transform_config)
+result = vectordotdev.validate_vrl_transform(transform_config)
 print(f"Transform valid: {result.valid}")
 ```
 
@@ -423,7 +423,7 @@ print(f"Transform valid: {result.valid}")
 Get list of all available VRL functions:
 
 ```python
-functions = pyvector.get_vrl_functions()
+functions = vectordotdev.get_vrl_functions()
 print(f"Available VRL functions: {len(functions)}")
 print(functions[:10])  # First 10 functions
 ```
@@ -433,7 +433,7 @@ print(functions[:10])  # First 10 functions
 Get documentation for a VRL function:
 
 ```python
-doc = pyvector.explain_vrl_function("parse_json")
+doc = vectordotdev.explain_vrl_function("parse_json")
 if doc:
     print(doc)  # Function description and examples
 ```
@@ -458,10 +458,10 @@ Start Vector instances with CLI-like parameters and switches:
 Create Vector instance with CLI-compatible options:
 
 ```python
-import pyvector
+import vectordotdev
 
 # Create CLI options (same as Vector CLI switches)
-opts = pyvector.VectorCliOptions(
+opts = vectordotdev.VectorCliOptions(
     config_path="/path/to/vector.toml",    # --config
     verbose=2,                             # -vv  
     log_format="json",                     # --log-format json
@@ -472,7 +472,7 @@ opts = pyvector.VectorCliOptions(
 )
 
 # Create Vector with CLI options
-vector = pyvector.VectorCli(config_string, opts)
+vector = vectordotdev.VectorCli(config_string, opts)
 await vector.start()
 ```
 
@@ -492,7 +492,7 @@ args = [
     "--config-var", "LOG_LEVEL=debug"
 ]
 
-vector = pyvector.vector_from_cli_args(args)
+vector = vectordotdev.vector_from_cli_args(args)
 await vector.start()
 ```
 
@@ -517,17 +517,17 @@ All Vector CLI switches supported:
 
 ```python
 # Fast config syntax checking
-valid = pyvector.check_config_syntax(config_string)
+valid = vectordotdev.check_config_syntax(config_string)
 print(f"Config valid: {valid}")
 
 # Validate config file
-valid = pyvector.validate_config_file("/path/to/vector.toml")
+valid = vectordotdev.validate_config_file("/path/to/vector.toml")
 print(f"File valid: {valid}")
 ```
 
 ## 📊 Performance
 
-pyvector-rs is designed for high-throughput scenarios:
+vectordotdev is designed for high-throughput scenarios:
 
 - **1M+ messages/second**: Efficient async processing
 - **Low latency**: Minimal overhead between Python and Vector

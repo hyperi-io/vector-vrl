@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""
+Main Build Script for vectordotdev
+Dedicated build environment launcher
+"""
+
+import os
+import sys
+import subprocess
+from pathlib import Path
+
+def main():
+    """Launch build system from dedicated /build environment"""
+    
+    build_dir = Path(__file__).parent  # We're now IN the build directory
+    project_root = build_dir.parent
+    
+    # Check build environment
+    build_venv = build_dir / ".venv"
+    if not build_venv.exists():
+        print("📦 Setting up dedicated build environment...")
+        try:
+            subprocess.run(['uv', 'venv'], cwd=build_dir, check=True, capture_output=True)
+            subprocess.run(['uv', 'sync'], cwd=build_dir, check=True, capture_output=True)
+            print("✅ Build environment ready")
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Failed to setup build environment: {e}")
+            sys.exit(1)
+    
+    # Launch build system
+    build_python = build_venv / "bin" / "python"
+    build_script = build_dir / "build_system.py"
+    
+    print("🚀 Launching 3-stage build system...")
+    print("=" * 40)
+    
+    try:
+        subprocess.run([str(build_python), str(build_script)] + sys.argv[1:], 
+                      cwd=project_root, check=True)
+        print("\n🎉 Build completed successfully!")
+    except subprocess.CalledProcessError as e:
+        sys.exit(e.returncode)
+    except KeyboardInterrupt:
+        print("\n⏹️ Build interrupted")
+        sys.exit(130)
+
+if __name__ == "__main__":
+    main()

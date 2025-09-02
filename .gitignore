@@ -6,7 +6,8 @@
 */Cargo.lock
 **/Cargo.lock
 
-# Vector upstream removed to prevent 10K+ file issues
+# Vector source directory (build artifact - ignore entirely)
+/vector/
 
 # Python environments (NEVER track these - causes 10K+ git changes)
 .venv/

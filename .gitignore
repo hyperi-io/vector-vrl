@@ -5,6 +5,8 @@ Cargo.lock
 
 # Python environments
 .venv/
+*/.venv/
+build/.venv/
 __pycache__/
 *.pyc
 *.pyo

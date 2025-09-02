@@ -104,17 +104,32 @@ uv run ruff check tests/ example.py
 ```
 
 ## Project Structure
-- `src/lib.rs` - Main Python module entry point and Vector class
-- `src/vector_app.rs` - Vector application lifecycle management
-- `src/python_source.rs` - Custom Python source implementation for Vector
-- `src/vector_context.rs` - Global Vector runtime context
-- `tests/` - Python test files
-- `example.py` - Usage example
-- `Cargo.toml` - Rust dependencies and configuration (auto-updates Vector version)
-- `pyproject.toml` - Python package configuration
-- `build.rs` - Build script for automatic Vector version detection
-- `scripts/update-deps.sh` - Comprehensive dependency update management
-- `LICENSE` - HyperSec EULA license
+
+### Clear Language Separation
+```
+/src/                    # Python code ONLY
+├── build_system/        # Python build automation
+├── tests/              # Python test suite  
+├── examples/           # Python usage examples
+└── pyproject.toml     # Python dependencies
+
+/vector/                # Vector/Rust code ONLY  
+├── lib.rs             # PyO3 bindings entry point
+├── vector_app.rs      # Vector application lifecycle
+├── python_source.rs   # Python-Vector bridge
+├── vector_cli.rs      # CLI compatibility layer
+├── vector_context.rs  # Global Vector runtime
+└── vrl_checker.rs     # VRL syntax validation
+
+/build/                 # Build configuration
+├── build.rs           # Rust build script
+└── workflows/         # CI/CD automation
+```
+
+### Linting and Formatting Scope
+- **Python linting**: Only applies to `/src/` directory
+- **Rust formatting**: Manual only for `/vector/` directory  
+- **VS Code**: Configured to respect language boundaries
 
 ## Dependencies
 - **Rust**: PyO3 for Python bindings, Vector for data processing (auto-updated to latest release)

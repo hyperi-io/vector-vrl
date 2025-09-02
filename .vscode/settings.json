@@ -9,7 +9,8 @@
         "**/node_modules": true,
         "**/*.pyc": true,
         "**/.DS_Store": true,
-        "vector-upstream": true
+        "vector-upstream": true,
+        "vector-upstream/**": true
     },
     "files.watcherExclude": {
         "**/.tmp/**": true,
@@ -18,7 +19,8 @@
         "**/build/.venv/**": true,
         "**/__pycache__/**": true,
         "**/.mypy_cache/**": true,
-        "**/node_modules/**": true
+        "**/node_modules/**": true,
+        "vector-upstream/**": true
     },
     "search.exclude": {
         "**/.tmp": true,
@@ -27,7 +29,8 @@
         "**/build/.venv": true,
         "**/__pycache__": true,
         "**/.mypy_cache": true,
-        "**/node_modules": true
+        "**/node_modules": true,
+        "vector-upstream/**": true
     },
     "git.ignoreLimitWarning": true,
     "git.useEditorAsCommitInput": false,

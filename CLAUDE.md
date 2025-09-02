@@ -1,7 +1,7 @@
-# Claude Code Development Guide for pyvector-rs
+# Claude Code Development Guide for vectordotdev
 
 ## Project Overview
-pyvector-rs is a Python extension written in Rust that integrates Vector data processing pipelines with Python applications. It uses PyO3 for Python bindings and maturin for building. Licensed under Apache-2.0.
+vectordotdev is a Python extension written in Rust that integrates Vector data processing pipelines with Python applications. It uses PyO3 for Python bindings and maturin for building. Licensed under Apache-2.0.
 
 ## Quick Start
 
@@ -194,7 +194,7 @@ Use `SKIP_VECTOR_UPDATE=1` environment variable to skip version updates for fast
 - 🧹 **Cleanup**: Include `.tmp/` in `.gitignore` and ensure automatic cleanup
 - ⚙️ **Configuration**: Temp file location must be configurable via environment variable or config file
 
-**Environment Variable**: `PYVECTOR_TEMP_DIR` (defaults to `./.tmp/`)
+**Environment Variable**: `VECTORDOTDEV_TEMP_DIR` (defaults to `./.tmp/`)
 
 **For Projects**: Ensure temp file location is a config or ENV setting, never hardcoded.
 
@@ -216,7 +216,7 @@ settings = Dynaconf(envvar_prefix="APP", settings_files=['settings.toml'], load_
 
 **Implementation Requirements:**
 - ✅ All configurable values must support environment variables
-- ✅ Use `PYVECTOR_` prefix for environment variables
+- ✅ Use `VECTORDOTDEV_` prefix for environment variables
 - ✅ Support `.env` files for local development
 - ✅ Provide sensible defaults in code
 - ✅ CLI arguments override all other sources

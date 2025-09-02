@@ -1,0 +1,30 @@
+# Default Configuration for vectordotdev Build System
+# Following config policy: CLI → ENV → .env → config file → code default
+
+build_system:
+  stall_timeout_minutes: 10        # Minutes of no log growth = stall
+  max_fallbacks: 2                 # Max Vector version fallbacks
+  enable_verbose: false            # Default verbose mode
+  
+  # Phase timeouts (minutes)
+  downloading_timeout: 15          # Dependency downloading
+  compiling_timeout: 30            # Vector compilation  
+  linking_timeout: 10              # Final linking
+
+download:
+  method: "auto"                   # auto, tarball, git
+  git_timeout_seconds: 120         # Git clone timeout
+  tarball_timeout_seconds: 60      # Tar.gz download timeout
+
+paths:
+  temp_dir: ".tmp"                 # Temporary files location
+  vector_dir: "vector"             # Vector core directory
+  bindings_dir: "vector-bindings"  # Vector bindings directory
+  python_dir: "vectordotdev"       # Python package directory
+
+vector:
+  features:
+    - "sources-file"
+    - "sinks-file" 
+    - "sinks-console"
+    - "transforms-remap"

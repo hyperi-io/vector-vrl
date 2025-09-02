@@ -1,7 +1,10 @@
-# Rust build artifacts (most excluded, some cached via LFS)
+# Rust build artifacts (ALL excluded to prevent 10K+ changes)
 /target/
+*/target/
+**/target/
 .cargo/
-Cargo.lock
+*/Cargo.lock
+**/Cargo.lock
 
 # Vector upstream removed to prevent 10K+ file issues
 
@@ -10,7 +13,7 @@ Cargo.lock
 */.venv/
 **/.venv/
 build/.venv/
-src/.venv/
+vectordotdev/.venv/
 vector/.venv/
 vector-bindings/.venv/
 __pycache__/
@@ -62,10 +65,26 @@ npm-debug.log*
 *.pem
 *.p12
 
-# Build system internal files
+# Build system internal files (prevent 10K+ changes)
 build/.cache/
 build/logs/
 build/*.backup
+build/target/
+build/dist/
+vectordotdev/target/
+vectordotdev/dist/
+vector/target/
+vector-bindings/target/
+
+# Cargo registry and git checkouts (major source of 10K+ changes)
+.cargo/registry/
+.cargo/git/
+*/.cargo/
+**/.cargo/
+
+# Rust incremental compilation data
+*/incremental/
+**/incremental/
 
 # Large files that should be in LFS instead
 *.tar.gz

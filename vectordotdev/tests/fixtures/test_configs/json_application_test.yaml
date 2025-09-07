@@ -1,0 +1,104 @@
+# Test configuration for JSON application logs using regex2vrl
+data_dir: ".tmp/test_data"
+
+sources:
+  json_logs:
+    type: generator
+    format: shuffle
+    interval: 0.1
+    count: 8
+    lines:
+      - '{"timestamp":"2024-01-15T10:30:45.123Z","level":"INFO","message":"User login successful","user_id":"12345","ip":"192.168.1.100"}'
+      - '{"timestamp":"2024-01-15T10:30:46.456Z","level":"ERROR","message":"Database connection failed","error":"timeout after 30s","retry_count":3}'
+      - '{"timestamp":"2024-01-15T10:30:47.789Z","level":"WARNING","message":"High memory usage detected","memory_percent":85.7}'
+      - '{"timestamp":"2024-01-15T10:30:48.012Z","level":"DEBUG","message":"Cache hit","key":"user:12345","ttl":300}'
+
+transforms:
+  parse_json_logs:
+    type: remap
+    inputs: ["json_logs"]
+    source: |
+      # JSON application logs - regex2vrl generated for 350+ THG performance
+      message_str = string!(.message)
+      
+      # JSON format detected - using built-in parser for optimal performance
+      if starts_with(message_str, "{") && ends_with(message_str, "}") {
+        parsed = parse_json!(message_str)
+        . = merge(., parsed)
+        
+        # Common JSON log field standardization
+        if exists(.timestamp) {
+          .@timestamp = parse_timestamp!(to_string!(.timestamp), format: "%+")
+        }
+        
+        if exists(.level) {
+          .log_level = upcase(to_string!(.level))
+          
+          # Convert to syslog severity for standardization
+          level_str = downcase(to_string!(.level))
+          if level_str == "debug" {
+            .severity = 7
+            .severity_label = "debug"
+          } else if level_str == "info" {
+            .severity = 6
+            .severity_label = "info"  
+          } else if level_str == "warning" || level_str == "warn" {
+            .severity = 4
+            .severity_label = "warning"
+          } else if level_str == "error" {
+            .severity = 3
+            .severity_label = "error"
+          } else if level_str == "fatal" || level_str == "critical" {
+            .severity = 2
+            .severity_label = "critical"
+          }
+        }
+        
+        # Type conversion for numeric fields
+        if exists(.memory_percent) && is_string(.memory_percent) {
+          .memory_percent = to_float!(.memory_percent)
+        }
+        
+        if exists(.retry_count) && is_string(.retry_count) {
+          .retry_count = to_int!(.retry_count)
+        }
+        
+        if exists(.ttl) && is_string(.ttl) {
+          .ttl = to_int!(.ttl)
+        }
+        
+        # Add parsing metadata
+        .parser_name = "regex2vrl_json"
+        .parsing_success = true
+      } else {
+        .parsing_success = false
+        .parser_error = "Not valid JSON format"
+      }
+
+sinks:
+  test_output:
+    type: file
+    inputs: ["parse_json_logs"]
+    path: ".tmp/test_output/json_parsed.jsonl"
+    encoding:
+      codec: json
+
+tests:
+  - name: json_log_parsing
+    input:
+      insert_at: parse_json_logs
+      type: raw
+      value: '{"timestamp":"2024-01-15T10:30:45.123Z","level":"INFO","message":"Test message","user_id":"12345"}'
+    outputs:
+      - extract_from: parse_json_logs
+        conditions:
+          - type: vrl
+            source: '.log_level == "INFO"'
+          - type: vrl
+            source: '.user_id == "12345"'
+          - type: vrl
+            source: '.severity == 6'
+          - type: vrl
+            source: 'exists(.@timestamp)'
+          - type: vrl
+            source: '.parsing_success == true'

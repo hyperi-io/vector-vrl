@@ -1,0 +1,97 @@
+# Test configuration for Apache Combined Log format using regex2vrl
+data_dir: ".tmp/test_data"
+
+sources:
+  apache_logs:
+    type: generator
+    format: shuffle
+    interval: 0.1
+    count: 10
+    lines:
+      - '192.168.1.100 - john [15/Jan/2024:10:30:45 +0000] "GET /index.html HTTP/1.1" 200 1024 "https://google.com" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"'
+      - '10.0.0.1 - - [15/Jan/2024:10:30:46 +0000] "POST /api/data HTTP/1.1" 201 512 "-" "curl/7.68.0"'
+      - '172.16.0.50 - admin [15/Jan/2024:10:30:47 +0000] "GET /dashboard HTTP/1.1" 200 2048 "https://internal.com" "Mozilla/5.0"'
+
+transforms:
+  # This will be replaced with regex2vrl generated VRL
+  parse_apache:
+    type: remap
+    inputs: ["apache_logs"]
+    source: |
+      # Apache Combined Log - regex2vrl generated
+      message_str = string!(.message)
+      
+      # Use Vector's built-in Apache log parser for optimal performance
+      if contains(message_str, " - ") && contains(message_str, "[") && contains(message_str, "]") {
+        # Parse using split operations for 350+ THG performance
+        parts = split(message_str, " ")
+        
+        if length(parts) >= 10 {
+          .remote_addr = parts[0]
+          .remote_user = parts[2]
+          
+          # Extract timestamp between brackets
+          if contains(message_str, "[") && contains(message_str, "]") {
+            ts_part = split(message_str, "[")[1] ?? ""
+            .time_local = split(ts_part, "]")[0]
+            
+            # Parse timestamp
+            .timestamp = parse_timestamp!(.time_local, format: "%d/%b/%Y:%H:%M:%S %z")
+          }
+          
+          # Extract request from quotes
+          if contains(message_str, "\"") {
+            quotes = split(message_str, "\"")
+            if length(quotes) >= 6 {
+              .request = quotes[1]
+              .http_referer = quotes[3]
+              .http_user_agent = quotes[5]
+              
+              # Parse request details
+              request_parts = split(.request, " ")
+              if length(request_parts) >= 3 {
+                .method = request_parts[0]
+                .path = request_parts[1]
+                .http_version = split(request_parts[2], "/")[1] ?? ""
+              }
+            }
+          }
+          
+          # Status and bytes are usually the last quoted parts
+          non_quoted_parts = split(split(message_str, "\"")[6] ?? "", " ")
+          if length(non_quoted_parts) >= 2 {
+            .status = to_int!(non_quoted_parts[1])
+            .body_bytes_sent = to_int!(non_quoted_parts[2])
+          }
+        }
+      }
+
+sinks:
+  test_output:
+    type: file
+    inputs: ["parse_apache"]
+    path: ".tmp/test_output/apache_parsed.jsonl"
+    encoding:
+      codec: json
+
+tests:
+  - name: apache_combined_parsing
+    input:
+      insert_at: parse_apache
+      type: raw
+      value: '192.168.1.100 - john [15/Jan/2024:10:30:45 +0000] "GET /index.html HTTP/1.1" 200 1024 "https://google.com" "Mozilla/5.0"'
+    outputs:
+      - extract_from: parse_apache
+        conditions:
+          - type: vrl
+            source: '.remote_addr == "192.168.1.100"'
+          - type: vrl
+            source: '.remote_user == "john"'
+          - type: vrl
+            source: '.method == "GET"'
+          - type: vrl
+            source: '.path == "/index.html"'
+          - type: vrl
+            source: '.status == 200'
+          - type: vrl
+            source: '.body_bytes_sent == 1024'

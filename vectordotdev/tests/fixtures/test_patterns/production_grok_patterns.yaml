@@ -1,0 +1,149 @@
+# Production-tested grok patterns for log parsing
+# Based on research of most common ELK stack patterns used in production 2025
+
+httpd_combinedlog:
+  name: "Apache Combined Log Format (Grok)"
+  description: "Standard Apache combined log format using built-in grok pattern"
+  pattern: "%{COMBINEDAPACHELOG}"
+  expected_fields:
+    - clientip
+    - ident
+    - auth
+    - timestamp
+    - verb
+    - request
+    - httpversion
+    - response
+    - bytes
+    - referrer
+    - agent
+
+httpd_commonlog:
+  name: "Apache Common Log Format (Grok)"
+  description: "Apache common log format without referrer and user agent"
+  pattern: "%{COMMONAPACHELOG}"
+  expected_fields:
+    - clientip
+    - ident
+    - auth
+    - timestamp
+    - verb
+    - request
+    - httpversion
+    - response
+    - bytes
+
+syslogbase:
+  name: "Syslog Base Format (Grok)"
+  description: "Basic syslog structure with program and message"
+  pattern: "%{SYSLOGBASE} %{GREEDYDATA:message}"
+  expected_fields:
+    - timestamp
+    - logsource
+    - program
+    - pid
+    - message
+
+syslog5424pri:
+  name: "RFC5424 Syslog with Priority (Grok)"
+  description: "RFC5424 syslog format with priority field"
+  pattern: "%{SYSLOG5424PRI:priority}%{NONNEGINT:version} %{TIMESTAMP_ISO8601:timestamp} %{HOSTNAME:hostname} %{WORD:program}(?:\\[%{POSINT:pid}\\])? %{GREEDYDATA:message}"
+  expected_fields:
+    - priority
+    - version
+    - timestamp
+    - hostname
+    - program
+    - pid
+    - message
+
+timestamp_iso8601:
+  name: "ISO 8601 Timestamp (Grok)"
+  description: "ISO 8601 timestamp with timezone"
+  pattern: "%{TIMESTAMP_ISO8601:timestamp} %{LOGLEVEL:level} %{GREEDYDATA:message}"
+  expected_fields:
+    - timestamp
+    - level
+    - message
+
+nginx_access:
+  name: "Nginx Access Log (Grok)"
+  description: "Nginx access log with detailed parsing"
+  pattern: '%{IPORHOST:clientip} %{USER:ident} %{USER:auth} \\[%{HTTPDATE:timestamp}\\] "(?:%{WORD:verb} %{NOTSPACE:request}(?: HTTP/%{NUMBER:httpversion})?|%{DATA:rawrequest})" %{NUMBER:response} (?:%{NUMBER:bytes}|-) %{QS:referrer} %{QS:agent}'
+  expected_fields:
+    - clientip
+    - ident
+    - auth
+    - timestamp
+    - verb
+    - request
+    - httpversion
+    - response
+    - bytes
+    - referrer
+    - agent
+
+haproxy_http:
+  name: "HAProxy HTTP Log (Grok)"
+  description: "HAProxy HTTP mode log format"
+  pattern: '%{SYSLOGTIMESTAMP:timestamp} %{IPORHOST:server} %{PROG:process}\\[%{POSINT:pid}\\]: %{IP:client_ip}:%{INT:client_port} \\[%{GREEDYDATA:accept_date}\\] %{NOTSPACE:frontend_name} %{NOTSPACE:backend_name}/%{NOTSPACE:server_name} %{INT:time_request}/%{INT:time_queue}/%{INT:time_connect}/%{INT:time_response}/%{INT:total_time} %{INT:http_status_code} %{INT:bytes_read} - - ---- %{NOTSPACE:termination_state} %{INT:actconn}/%{INT:feconn}/%{INT:beconn}/%{INT:srv_conn}/%{INT:retries} %{INT:srv_queue}/%{INT:backend_queue} "(%{WORD:http_verb} %{URIPATHPARAM:http_request}( HTTP/%{NUMBER:http_version})?|.*)?"'
+  expected_fields:
+    - timestamp
+    - server
+    - process
+    - pid
+    - client_ip
+    - client_port
+    - frontend_name
+    - backend_name
+    - server_name
+    - http_status_code
+    - http_verb
+    - http_request
+
+postfix_smtp:
+  name: "Postfix SMTP Log (Grok)"
+  description: "Postfix SMTP daemon log entries"
+  pattern: "%{SYSLOGBASE} %{POSTFIX_QUEUEID:queue_id}: %{GREEDYDATA:message}"
+  expected_fields:
+    - timestamp
+    - logsource
+    - program
+    - pid
+    - queue_id
+    - message
+
+mysql_error:
+  name: "MySQL Error Log (Grok)"
+  description: "MySQL error log format"
+  pattern: "%{TIMESTAMP_ISO8601:timestamp} %{NUMBER:thread_id} \\[%{WORD:level}\\] %{GREEDYDATA:message}"
+  expected_fields:
+    - timestamp
+    - thread_id
+    - level
+    - message
+
+aws_elb:
+  name: "AWS ELB Access Log (Grok)"
+  description: "Amazon Elastic Load Balancer access log format"
+  pattern: '%{TIMESTAMP_ISO8601:timestamp} %{NOTSPACE:elb_name} %{IP:client_ip}:%{INT:client_port} (?:%{IP:backend_ip}:%{INT:backend_port}|-) %{NUMBER:request_processing_time} %{NUMBER:backend_processing_time} %{NUMBER:response_processing_time} %{INT:elb_status_code} %{INT:backend_status_code} %{INT:received_bytes} %{INT:sent_bytes} "%{WORD:verb} %{URIPATHPARAM:request} HTTP/%{NUMBER:httpversion}" "%{DATA:user_agent}" %{NOTSPACE:ssl_cipher} %{NOTSPACE:ssl_protocol}'
+  expected_fields:
+    - timestamp
+    - elb_name
+    - client_ip
+    - client_port
+    - backend_ip
+    - backend_port
+    - request_processing_time
+    - backend_processing_time
+    - response_processing_time
+    - elb_status_code
+    - backend_status_code
+    - received_bytes
+    - sent_bytes
+    - verb
+    - request
+    - httpversion
+    - user_agent
+    - ssl_cipher
+    - ssl_protocol

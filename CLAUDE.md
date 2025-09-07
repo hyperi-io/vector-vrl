@@ -78,15 +78,47 @@ The build system automatically:
 
 ### Testing
 ```bash
-# Run Python tests
-uv run pytest tests/
+# Run all vectordotdev tests (unit, integration, e2e)
+cd vectordotdev/tests && python run_tests.py
 
-# Run specific test
-uv run pytest tests/test_basic.py -v
+# Run unit tests only (Vector subprocess calls - no mocks)
+python run_tests.py --category unit --verbose
 
-# Run example
-uv run python example.py
+# Run integration tests only (vectordotdev bindings)  
+python run_tests.py --category integration --verbose
+
+# Run individual test categories directly
+cd vectordotdev/tests
+python unit/test_regex2vrl_subprocess.py --verbose        # Unit tests (subprocess)
+python integration/bindings.py --verbose                 # Integration tests (bindings)
+python e2e/production_patterns.py --verbose              # E2E tests (full patterns)
+
+# Legacy tests
+uv run pytest tests/ -v                                  # Original pytest tests
+uv run python example.py                                 # Basic example
 ```
+
+### Test Structure
+```
+vectordotdev/tests/
+├── run_tests.py              # Main test runner
+├── unit/                     # Unit tests (isolated, subprocess Vector)
+│   ├── test_regex2vrl_subprocess.py  # regex2vrl → Vector subprocess
+│   └── test_vrl_*.py         # VRL function tests
+├── integration/              # Integration tests (vectordotdev bindings)  
+│   └── bindings.py           # Direct Python bindings tests
+├── e2e/                      # End-to-end production tests
+│   └── production_patterns.py # Real production pattern testing
+└── fixtures/                 # Test data (no hardcoding)
+    ├── test_patterns/        # Top 10 regex + grok patterns (2025 research)
+    ├── test_data/            # Real production log samples
+    └── test_configs/         # Test configuration mappings
+```
+
+**Test Types:**
+- **Unit**: Isolated component testing using Vector subprocess (no mocks)
+- **Integration**: Component interaction testing using vectordotdev Python bindings
+- **E2E**: Full production scenarios with performance validation
 
 ### Linting and Formatting
 ```bash

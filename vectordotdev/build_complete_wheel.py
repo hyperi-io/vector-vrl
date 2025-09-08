@@ -24,7 +24,7 @@ class CompleteWheelBuilder:
         
         # Wheel metadata
         self.package_name = "vectordotdev"
-        self.version = "1.0.0"
+        self.version = "1.0.1"
         self.python_version = f"cp{sys.version_info.major}{sys.version_info.minor}"
         self.abi_tag = self.python_version  # cp313
         self.platform_tag = self._get_platform_tag()

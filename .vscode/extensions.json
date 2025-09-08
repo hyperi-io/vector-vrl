@@ -1,0 +1,36 @@
+{
+    "recommendations": [
+        // Rust Development
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb",
+        "serayuzgur.crates",
+        
+        // Python Development  
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "ms-python.mypy-type-checker",
+        
+        // Build & DevOps
+        "ms-vscode.makefile-tools",
+        "redhat.vscode-yaml", 
+        "tamasfe.even-better-toml",
+        
+        // Git & Collaboration
+        "eamodio.gitlens",
+        "github.vscode-pull-request-github",
+        
+        // Documentation & Markdown
+        "yzhang.markdown-all-in-one",
+        "davidanson.vscode-markdownlint",
+        
+        // General Productivity
+        "ms-vscode.vscode-json",
+        "editorconfig.editorconfig",
+        "ms-vscode.vscode-typescript-next"
+    ],
+    "unwantedRecommendations": [
+        "ms-python.pylint",
+        "ms-python.flake8",
+        "ms-python.black-formatter"
+    ]
+}

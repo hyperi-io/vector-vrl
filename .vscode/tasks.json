@@ -1,0 +1,137 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build: Complete from scratch",
+            "type": "shell",
+            "command": "./build/build",
+            "args": ["--clean", "--verbose"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build: Deploy to JFrog",
+            "type": "shell", 
+            "command": "./build/build",
+            "args": ["--clean", "--deploy", "--verbose"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build: Quick (skip Vector)",
+            "type": "shell",
+            "command": "./build/build", 
+            "args": ["--skip-vector", "--verbose"],
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Test: All vectordotdev tests",
+            "type": "shell",
+            "command": "python",
+            "args": ["run_tests.py", "--verbose"],
+            "options": {
+                "cwd": "${workspaceFolder}/vectordotdev/tests"
+            },
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always"
+            }
+        },
+        {
+            "label": "Test: Unit tests only", 
+            "type": "shell",
+            "command": "python",
+            "args": ["run_tests.py", "--category", "unit", "--verbose"],
+            "options": {
+                "cwd": "${workspaceFolder}/vectordotdev/tests"
+            },
+            "group": "test"
+        },
+        {
+            "label": "Test: Integration tests",
+            "type": "shell", 
+            "command": "python",
+            "args": ["run_tests.py", "--category", "integration", "--verbose"],
+            "options": {
+                "cwd": "${workspaceFolder}/vectordotdev/tests"
+            },
+            "group": "test"
+        },
+        {
+            "label": "Test: Production patterns E2E",
+            "type": "shell",
+            "command": "python", 
+            "args": ["e2e/production_patterns.py", "--verbose"],
+            "options": {
+                "cwd": "${workspaceFolder}/vectordotdev/tests"
+            },
+            "group": "test"
+        },
+        {
+            "label": "Lint: Python (ruff)",
+            "type": "shell",
+            "command": "uv",
+            "args": ["run", "ruff", "check", "tests/", "examples/", "regex2vrl/"],
+            "options": {
+                "cwd": "${workspaceFolder}/vectordotdev"
+            },
+            "group": "build"
+        },
+        {
+            "label": "Format: Python (ruff)",
+            "type": "shell",
+            "command": "uv", 
+            "args": ["run", "ruff", "format", "tests/", "examples/", "regex2vrl/"],
+            "options": {
+                "cwd": "${workspaceFolder}/vectordotdev"
+            },
+            "group": "build"
+        },
+        {
+            "label": "Lint: Rust (clippy)",
+            "type": "shell",
+            "command": "cargo",
+            "args": ["clippy"],
+            "options": {
+                "cwd": "${workspaceFolder}/vector-bindings"
+            },
+            "group": "build"
+        },
+        {
+            "label": "Format: Rust (rustfmt)",
+            "type": "shell",
+            "command": "cargo", 
+            "args": ["fmt"],
+            "options": {
+                "cwd": "${workspaceFolder}/vector-bindings"
+            },
+            "group": "build"
+        }
+    ]
+}

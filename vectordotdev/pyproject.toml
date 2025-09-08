@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel", "build"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "vectordotdev"
-version = "0.2.2"
+version = "1.0.0"
 requires-python = ">=3.7"
 description = "Pure Python package for Vector data processing pipelines with regex2vrl conversion"
 readme = "README.md"
@@ -62,7 +62,7 @@ test = ["pytest>=7.0", "pytest-asyncio>=0.21.0"]
 "License" = "https://hypersec.io/eula"
 
 [tool.maturin]
-manifest-path = "Cargo.toml"
+manifest-path = "../vector-bindings/Cargo.toml"
 
 [tool.maturin.environment]
 RUSTFLAGS = "-C linker=gcc"

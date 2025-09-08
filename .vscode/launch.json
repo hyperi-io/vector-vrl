@@ -1,0 +1,61 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Debug vectordotdev tests",
+            "type": "python",
+            "request": "launch", 
+            "program": "${workspaceFolder}/vectordotdev/tests/run_tests.py",
+            "args": ["--category", "unit", "--verbose"],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/vectordotdev/tests",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/vectordotdev:${workspaceFolder}/build",
+                "VECTORDOTDEV_TEMP_DIR": "${workspaceFolder}/.tmp"
+            }
+        },
+        {
+            "name": "Python: Debug regex2vrl conversion",
+            "type": "python", 
+            "request": "launch",
+            "program": "${workspaceFolder}/vectordotdev/regex2vrl/main.py",
+            "args": ["--pattern", "your_test_pattern_here"],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/vectordotdev",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/vectordotdev",
+                "VECTORDOTDEV_TEMP_DIR": "${workspaceFolder}/.tmp"
+            }
+        },
+        {
+            "name": "Python: Debug build system",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/build_system.py", 
+            "args": ["--verbose", "--test-flow"],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "VECTORDOTDEV_VERBOSE": "true",
+                "VECTORDOTDEV_TEMP_DIR": "${workspaceFolder}/.tmp"
+            }
+        },
+        {
+            "name": "Rust: Debug vector-bindings",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/vector-bindings/target/debug/vector_bindings",
+            "args": [],
+            "cwd": "${workspaceFolder}/vector-bindings",
+            "sourceLanguages": ["rust"]
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Debug: Full test suite",
+            "configurations": [
+                "Python: Debug vectordotdev tests"
+            ]
+        }
+    ]
+}

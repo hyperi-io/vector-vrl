@@ -1,12 +1,113 @@
 {
+    // Git Configuration
     "git.ignoredRepositories": [],
     "git.autorefresh": true,
     "git.autofetch": false,
+    "git.confirmSync": false,
+    "git.enableSmartCommit": true,
+    "git.suggestSmartCommit": false,
+    
+    // File Watching & Performance
     "files.watcherExclude": {
         "**/vector/**": true,
         "**/target/**": true,
         "**/.tmp/**": true,
         "**/.venv/**": true,
-        "**/__pycache__/**": true
+        "**/__pycache__/**": true,
+        "**/.cargo/**": true,
+        "**/node_modules/**": true,
+        "**/*.pyc": true,
+        "**/*.pyo": true,
+        "**/*.so": true,
+        "**/*.dylib": true,
+        "**/*.rlib": true
+    },
+    "search.exclude": {
+        "**/vector/**": true,
+        "**/target/**": true,
+        "**/.tmp/**": true,
+        "**/.venv/**": true,
+        "**/__pycache__/**": true,
+        "**/.cargo/**": true
+    },
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/*.pyo": true
+    },
+    
+    // Python Configuration
+    "python.defaultInterpreterPath": "./vectordotdev/.venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": false,
+    "python.linting.ruffEnabled": true,
+    "python.formatting.provider": "none",
+    "python.analysis.autoSearchPaths": true,
+    "python.analysis.extraPaths": [
+        "./vectordotdev",
+        "./build"
+    ],
+    
+    // Rust Configuration
+    "rust-analyzer.linkedProjects": [
+        "./vector-bindings/Cargo.toml"
+    ],
+    "rust-analyzer.cargo.buildScripts.enable": true,
+    "rust-analyzer.check.command": "clippy",
+    "rust-analyzer.checkOnSave.command": "clippy",
+    "rust-analyzer.cargo.features": "all",
+    "rust-analyzer.files.excludeDirs": [
+        "vector",
+        "target",
+        ".tmp",
+        ".venv"
+    ],
+    
+    // File Associations
+    "files.associations": {
+        "*.toml": "toml",
+        "*.yaml": "yaml",
+        "*.yml": "yaml",
+        "CLAUDE.md": "markdown",
+        "BUILD.md": "markdown",
+        "VECTOR*.md": "markdown"
+    },
+    
+    // Editor Configuration
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit",
+        "source.organizeImports": "explicit"
+    },
+    "editor.rulers": [88, 120],
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    
+    // Language Specific
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.tabSize": 4,
+        "editor.formatOnSave": true
+    },
+    "[rust]": {
+        "editor.defaultFormatter": "rust-lang.rust-analyzer",
+        "editor.tabSize": 4,
+        "editor.formatOnSave": true
+    },
+    "[toml]": {
+        "editor.tabSize": 4
+    },
+    "[yaml]": {
+        "editor.tabSize": 2
+    },
+    "[json]": {
+        "editor.tabSize": 2
+    },
+    
+    // Terminal Configuration
+    "terminal.integrated.cwd": "${workspaceFolder}",
+    "terminal.integrated.env.linux": {
+        "VECTORDOTDEV_TEMP_DIR": "${workspaceFolder}/.tmp"
     }
 }

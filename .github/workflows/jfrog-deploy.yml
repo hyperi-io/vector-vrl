@@ -16,8 +16,8 @@ jobs:
     name: Deploy vectordotdev to JFrog Artifactory
     runs-on: ubuntu-latest
     # Skip GitHub deployment if local ENV/credentials are configured
-    if: secrets.DISABLE_GITHUB_JFROG != 'true'
-    
+    if: ${{ secrets.DISABLE_GITHUB_JFROG != 'true' }}
+
     steps:
     - name: Check deployment mode
       run: |
@@ -115,8 +115,8 @@ jobs:
     
     - name: Deploy to JFrog Artifactory
       env:
-        TWINE_USERNAME: ${{ secrets.ARTIFACTORY_TENANT_USERNAME || secrets.ARTIFACTORY_USERNAME }}
-        TWINE_PASSWORD: ${{ secrets.ARTIFACTORY_TENANT_PASSWORD || secrets.ARTIFACTORY_PASSWORD }}
+        TWINE_USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.ARTIFACTORY_PASSWORD }}
         JFROG_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
         TWINE_REPOSITORY_URL: "https://hypersec.jfrog.io/artifactory/api/pypi/hypersec-pypi-local/"
       run: |

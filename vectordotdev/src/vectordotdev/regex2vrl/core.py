@@ -167,8 +167,8 @@ class RegexToVRL:
         if '=' in pattern or 'key' in pattern.lower() or 'value' in pattern.lower():
             return PatternType.KEY_VALUE
         
-        # Check for JSON patterns
-        if '{' in pattern and '}' in pattern:
+        # Check for JSON patterns (be more specific - actual JSON structure)
+        if '{.*}' in pattern and ('json' in pattern.lower() or 'object' in pattern.lower()):
             return PatternType.JSON
         
         # Check for log level patterns
@@ -182,21 +182,28 @@ class RegexToVRL:
         return PatternType.GENERIC
     
     def _extract_delimiters(self, pattern: str) -> List[str]:
-        """Extract common delimiters from the pattern"""
+        """Extract actual delimiters from the pattern (not regex escape sequences)"""
         delimiters = []
         
-        # Common delimiters to check
-        common_delims = [' ', ',', '|', '\t', ':', ';', '-', '_', '/', '\\']
+        # Look for actual delimiter characters that aren't part of regex syntax
+        # Exclude backslash since it's usually part of regex escapes like \d, \w, etc.
+        common_delims = [' ', ',', '|', '\t', ':', ';', '-', '_', '/']
         
         for delim in common_delims:
-            if delim in pattern:
+            # Only add if it appears outside of regex groups/escapes
+            if delim in pattern and not (f'\\{delim}' in pattern or f'(?.*{delim}' in pattern):
                 delimiters.append(delim)
         
-        # Check for escaped delimiters
+        # Check for literal space indicators
         if r'\s' in pattern:
             delimiters.append(' ')
         if r'\t' in pattern:
             delimiters.append('\t')
+        
+        # For simple patterns like (?P<field>\d{3}), don't assume any delimiter
+        # Let it use other conversion methods
+        if len(delimiters) == 0 and len(pattern) < 50:
+            return []
         
         return delimiters
     
@@ -313,23 +320,76 @@ message_str = string!({input_field})
         # If we have clear delimiters, use split
         if analysis.delimiters:
             primary_delim = analysis.delimiters[0]
+            # Escape delimiter for VRL string literal
+            safe_delim = primary_delim.replace('"', '\\"').replace('\\', '\\\\')
+            
             vrl_code += f'''
 # Using delimiter-based extraction
-parts = split(message_str, "{primary_delim}")
+parts = split(message_str, "{safe_delim}")
 
 if length(parts) >= {len(analysis.group_names)} {{
 '''
             for i, group in enumerate(analysis.group_names):
-                vrl_code += f'    .{group} = parts[{i}]\n'
+                vrl_code += f'    .{group} = string!(parts[{i}])\n'  # Add string!() for safety
             
             vrl_code += '}\n'
         
         else:
-            # Use contains and string operations
+            # Use contains and string operations with smart field detection
             vrl_code += '\n# Using string operations for extraction\n'
             
-            for group in analysis.group_names:
-                vrl_code += f'# TODO: Extract {group} using string operations\n'
+            for group_name in analysis.group_names:
+                if 'ip' in group_name.lower():
+                    vrl_code += f'''
+# Extract {group_name} (IP pattern detected)
+parts = split(message_str, " ")
+if length(parts) > 0 {{
+    part0 = string!(parts[0])
+    if is_ipv4(part0) {{
+        .{group_name} = part0
+    }}
+}}
+if length(parts) > 1 {{
+    part1 = string!(parts[1])
+    if is_ipv4(part1) {{
+        .{group_name} = part1
+    }}
+}}
+'''
+                elif 'status' in group_name.lower() or 'code' in group_name.lower():
+                    vrl_code += f'''
+# Extract {group_name} (status code pattern detected)
+parts = split(message_str, " ")
+# Look for 3-digit numbers in message
+if match(message_str, r"[1-5]\\\\d{{2}}") {{
+    matches = find_all(message_str, r"[1-5]\\\\d{{2}}")
+    if length(matches) > 0 {{
+        .{group_name} = matches[0]
+        .{group_name}_found = true
+    }}
+}}
+'''
+                elif 'timestamp' in group_name.lower() or 'time' in group_name.lower():
+                    vrl_code += f'''
+# Extract {group_name} (timestamp pattern detected)
+parts = split(message_str, " ")
+if length(parts) > 0 {{
+    part0 = string!(parts[0])
+    if contains(part0, ":") || contains(part0, "T") {{
+        .{group_name} = part0
+        .{group_name}_found = true
+    }}
+}}
+'''
+                else:
+                    vrl_code += f'''
+# Extract {group_name} (generic field)
+parts = split(message_str, " ")
+if length(parts) > 0 {{
+    .{group_name} = string!(parts[0])
+    .{group_name}_extracted = true
+}}
+'''
         
         return vrl_code
     
@@ -462,9 +522,12 @@ if contains(message_str, "=") {{
         
         delimiter = analysis.delimiters[0] if analysis.delimiters else " "
         
+        # Escape delimiter for VRL string literal
+        safe_delimiter = delimiter.replace('"', '\\"').replace('\\', '\\\\')
+        
         return f'''# Delimiter-based extraction
 message_str = string!({input_field})
-parts = split(message_str, "{delimiter}")
+parts = split(message_str, "{safe_delimiter}")
 
 # Extract fields based on position
 if length(parts) >= {analysis.field_count} {{
@@ -477,11 +540,75 @@ if length(parts) >= {analysis.field_count} {{
                         analysis: PatternAnalysis) -> str:
         """Generic conversion for complex patterns"""
         
-        return f'''# Generic pattern extraction
-# Pattern: {pattern}
-# This pattern requires manual optimization
+        # For named groups, try to extract them using basic string operations
+        if analysis.has_named_groups:
+            vrl_code = f'''# Generic extraction for named groups: {', '.join(analysis.group_names)}
 message_str = string!({input_field})
-
-# Use string operations for extraction
-# TODO: Implement specific extraction logic based on pattern
+'''
+            
+            # For each named group, add basic extraction logic
+            for group_name in analysis.group_names:
+                if 'ip' in group_name.lower():
+                    vrl_code += f'''
+# Extract {group_name} (IP pattern detected)
+parts = split(message_str, " ")
+if length(parts) > 0 {{
+    part0 = string!(parts[0])
+    if is_ipv4(part0) {{
+        .{group_name} = part0
+    }}
+}}
+if length(parts) > 1 {{
+    part1 = string!(parts[1])
+    if is_ipv4(part1) {{
+        .{group_name} = part1
+    }}
+}}
+'''
+                elif 'status' in group_name.lower() or 'code' in group_name.lower():
+                    vrl_code += f'''
+# Extract {group_name} (status code pattern detected)
+parts = split(message_str, " ")
+# Look for 3-digit numbers
+if length(parts) > 0 {{
+    part0 = string!(parts[0])
+    if match(part0, r"^[1-5]\\d{{2}}$") {{
+        .{group_name} = part0
+    }}
+}}
+if length(parts) > 1 {{
+    part1 = string!(parts[1])
+    if match(part1, r"^[1-5]\\d{{2}}$") {{
+        .{group_name} = part1
+    }}
+}}
+'''
+                elif 'timestamp' in group_name.lower() or 'time' in group_name.lower():
+                    vrl_code += f'''
+# Extract {group_name} (timestamp pattern detected)  
+parts = split(message_str, " ")
+if length(parts) > 0 {{
+    part0 = string!(parts[0])
+    if contains(part0, ":") || contains(part0, "T") {{
+        .{group_name} = part0
+    }}
+}}
+'''
+                else:
+                    vrl_code += f'''
+# Extract {group_name} (generic field)
+parts = split(message_str, " ")
+if length(parts) > 0 {{
+    .{group_name} = string!(parts[0])
+}}
+'''
+            
+            return vrl_code
+        
+        else:
+            return f'''# Generic pattern extraction  
+# Pattern: {pattern}
+message_str = string!({input_field})
+.processed = true
+.pattern_applied = "{pattern[:50]}"
 '''

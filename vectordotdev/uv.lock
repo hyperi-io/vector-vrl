@@ -26,31 +26,6 @@ wheels = [
 ]
 
 [[package]]
-name = "dynaconf"
-version = "3.1.11"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version < '3.8'",
-]
-sdist = { url = "https://files.pythonhosted.org/packages/54/6f/09c3ca2943314e0cae5cb2eeca1b77f5968855e13d6fdaae32c8e055eb7c/dynaconf-3.1.11.tar.gz", hash = "sha256:d9cfb50fd4a71a543fd23845d4f585b620b6ff6d9d3cc1825c614f7b2097cb39", size = 207613, upload-time = "2022-09-22T17:01:38.932Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e7/67/0600b5fbd27928c112a11a5018b3e9ebf3d7f896d510c3c231f8d09886ae/dynaconf-3.1.11-py2.py3-none-any.whl", hash = "sha256:87e0b3b12b5db9e8fb465e1f8c7fdb926cd2ec5b6d88aa7f821f316df93fb165", size = 211411, upload-time = "2022-09-22T17:01:36.924Z" },
-]
-
-[[package]]
-name = "dynaconf"
-version = "3.2.11"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.9'",
-    "python_full_version == '3.8.*'",
-]
-sdist = { url = "https://files.pythonhosted.org/packages/62/eb/e9d1249ff56b11e63fd8c7d0fcc1f94704e21693c16862bf0ebfb07bd61a/dynaconf-3.2.11.tar.gz", hash = "sha256:4cfc6a730c533bf1a1d0bf266ae202133a22236bb3227d23eff4b8542d4034a5", size = 234694, upload-time = "2025-05-06T15:44:59.16Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/36/64/580c74003a356c5662e7b1da43ecd7cbda6e8f970c87b30c5a654c8ccb53/dynaconf-3.2.11-py2.py3-none-any.whl", hash = "sha256:660de90879d4da236f79195692a7d197957224d7acf922bcc6899187dc7b4a27", size = 236536, upload-time = "2025-05-06T15:44:56.18Z" },
-]
-
-[[package]]
 name = "exceptiongroup"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -404,12 +379,8 @@ wheels = [
 
 [[package]]
 name = "vectordotdev"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "." }
-dependencies = [
-    { name = "dynaconf", version = "3.1.11", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.8'" },
-    { name = "dynaconf", version = "3.2.11", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.8'" },
-]
 
 [package.optional-dependencies]
 dev = [
@@ -432,7 +403,6 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "dynaconf", specifier = ">=3.1.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21.0" },

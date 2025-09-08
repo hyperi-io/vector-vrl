@@ -17,8 +17,11 @@ from typing import Dict, List, Any, Tuple
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 try:
-    import vector
-    import vectordotdev
+    # Import vectordotdev bindings - use the correct path  
+    import sys
+    sys.path.insert(0, '/projects/vectordotdev/vectordotdev/.venv/lib/python3.13/site-packages')
+    import vector  # This imports the compiled vector module
+    
     from vectordotdev.regex2vrl.core import RegexToVRL
     from vectordotdev.regex2vrl.grok_converter import GrokToVRL
     HAS_VECTORDOTDEV = True
@@ -101,11 +104,10 @@ class VectorDotDevTestRunner:
                 print(f"Estimated THG: {analysis.estimated_thg}")
                 print(f"Built-in parser: {analysis.suggested_parser}")
             
-            # Create Vector config with generated VRL
+            # Create Vector config with generated VRL (TOML format)
             output_file = self.temp_dir / f"{test_name}_output.jsonl"
             
-            vector_config = f"""
-[sources.test_input]
+            vector_config = f"""[sources.test_input]
 type = "python"
 
 [transforms.regex2vrl_transform]
@@ -126,27 +128,27 @@ encoding.codec = "json"
                 print("Vector config created")
                 print("Starting Vector instance...")
             
-            # Create Vector instance using vectordotdev bindings
+            # Create Vector instance using vectordotdev bindings (synchronous API)
             vector_instance = vector.Vector(vector_config)
-            await vector_instance.start()
+            vector_instance.start()  # Synchronous call
             
             if self.verbose:
-                print(f"Sending {len(test_logs)} log entries...")
+                print(f"Vector started, sending {len(test_logs)} log entries...")
             
             # Send test logs directly through Python bindings
             for i, log_line in enumerate(test_logs):
                 log_data = {"message": log_line, "timestamp": "2025-01-15T10:30:45.123Z"}
                 json_data = json.dumps(log_data).encode('utf-8')
-                await vector_instance.send("test_input", json_data)
+                vector_instance.send("test_input", json_data)  # Synchronous call
                 
                 if self.verbose and i < 3:
                     print(f"  Sent: {log_line}")
             
             # Give Vector time to process
-            await asyncio.sleep(1)
+            await asyncio.sleep(2)
             
             # Stop Vector
-            await vector_instance.stop()
+            vector_instance.stop()  # Synchronous call
             
             if self.verbose:
                 print("Vector stopped, reading output...")

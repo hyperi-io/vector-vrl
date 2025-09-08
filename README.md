@@ -1,11 +1,10 @@
-# vectordotdev
+# vectordotdev - Python Vector Data Processing Integration
 
-**High-performance Python bindings for Vector data processing pipelines**
+[![Version](https://img.shields.io/badge/version-0.2.0-blue)](CHANGELOG.md)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
+[![Build Status](https://img.shields.io/badge/build-3--stage-brightgreen)](#build-process)
 
-[![License](https://img.shields.io/badge/License-HyperSec%20EULA-blue.svg)](https://hypersec.io/eula)
-[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
-
-vectordotdev integrates the power of [Vector](https://vector.dev/) data processing pipelines directly into Python applications with minimal overhead. Built with Rust and PyO3 for maximum performance.
+Python bindings for Vector data processing pipelines with high-performance regex2vrl conversion tool and comprehensive testing infrastructure.
 
 ## 🚀 Features
 

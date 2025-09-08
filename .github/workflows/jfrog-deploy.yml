@@ -11,16 +11,12 @@ on:
     tags:
       - 'v*.*.*'
 
-env:
-  # Check if local deployment is configured
-  LOCAL_JFROG_DEPLOYMENT: ${{ secrets.DISABLE_GITHUB_JFROG || 'false' }}
-
 jobs:
   deploy-to-jfrog:
     name: Deploy vectordotdev to JFrog Artifactory
     runs-on: ubuntu-latest
     # Skip GitHub deployment if local ENV/credentials are configured
-    if: env.LOCAL_JFROG_DEPLOYMENT != 'true'
+    if: secrets.DISABLE_GITHUB_JFROG != 'true'
     
     steps:
     - name: Check deployment mode

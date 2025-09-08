@@ -22,28 +22,40 @@ def create_test_vector_config(vrl_code: str, input_logs: list, temp_dir: Path) -
         for log in input_logs:
             f.write(log + '\n')
     
-    # Create Vector config (TOML format)
-    config_content = f"""
-[sources.file_input]
-type = "file"
-include = ["{input_file}"]
-read_from = "beginning"
+    # Create Vector config (YAML format)
+    # Properly indent VRL code for YAML literal block
+    indented_vrl = '\n'.join(f'      {line}' for line in vrl_code.split('\n'))
+    
+    config_content = f"""sources:
+  file_input:
+    type: file
+    include:
+      - "{input_file}"
+    read_from: beginning
 
-[transforms.test_transform]
-type = "remap"
-inputs = ["file_input"]
-source = '''
-{vrl_code}
-'''
+transforms:
+  test_transform:
+    type: remap
+    inputs:
+      - file_input
+    source: |
+{indented_vrl}
 
-[sinks.file_output]
-type = "file"
-inputs = ["test_transform"]
-path = "{output_file}"
-encoding.codec = "json"
+sinks:
+  file_output:
+    type: file
+    inputs:
+      - test_transform
+    path: "{output_file}"
+    encoding:
+      codec: json
+    buffer:
+      type: memory
+      max_events: 500
+      when_full: block
 """
     
-    config_file = temp_dir / "config.toml"
+    config_file = temp_dir / "config.yaml"
     with open(config_file, 'w') as f:
         f.write(config_content)
     

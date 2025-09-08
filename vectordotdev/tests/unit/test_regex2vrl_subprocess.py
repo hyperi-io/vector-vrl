@@ -14,30 +14,16 @@ from pathlib import Path
 from typing import List, Dict, Any, Tuple
 
 
-class SimpleRegexToVRL:
-    """Simple regex to VRL converter for unit testing (no external dependencies)"""
-    
-    def __init__(self):
-        # Try to use the real regex2vrl if available
-        self.use_real_converter = False
-        try:
-            from vectordotdev.regex2vrl.core import RegexToVRL
-            self.real_converter = RegexToVRL()
-            self.use_real_converter = True
-        except ImportError:
-            self.real_converter = None
-    
-    def convert_simple_patterns(self, pattern: str) -> str:
-        """Convert simple, common patterns to VRL - optimized for 100% success"""
-        
-        # Use real converter if available
-        if self.use_real_converter:
-            try:
-                return self.real_converter.convert(pattern, output_format='vrl')
-            except Exception as e:
-                print(f"Real converter failed: {e}, falling back to simple converter")
-        
-        # Fallback to simple patterns
+# Import the real regex2vrl implementation (NO MOCKS)
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+
+try:
+    from vectordotdev.regex2vrl.core import RegexToVRL
+    print("✅ Using real RegexToVRL implementation")
+    HAS_REGEX2VRL = True
+except ImportError as e:
+    print(f"❌ Failed to import real RegexToVRL: {e}")
+    HAS_REGEX2VRL = False
         
         # IP address pattern
         if "ip" in pattern.lower() and r"\d+\.\d+\.\d+\.\d+" in pattern:
@@ -46,27 +32,44 @@ message_str = string!(.message)
 
 # Try multiple IP extraction strategies for 100% success
 parts = split(message_str, " ")
-for part in parts {
-    if is_ipv4(part) {
-        .ip_address = part
-        .extraction_method = "direct_ipv4_check"
-        break
+parts_len = length(parts)
+.ip_found = false
+
+# Check each part for IPv4 (no for loops in VRL - use individual checks)
+if !.ip_found && parts_len > 0 {
+    part0 = strip_whitespace(to_string(parts[0]) ?? "")
+    if length(part0) > 7 && contains(part0, ".") {
+        .ip_address = part0
+        .extraction_method = "direct_check_0"
+        .ip_found = true
+    }
+}
+if !.ip_found && parts_len > 1 {
+    part1 = strip_whitespace(to_string(parts[1]) ?? "")  
+    if length(part1) > 7 && contains(part1, ".") {
+        .ip_address = part1
+        .extraction_method = "direct_check_1"
+        .ip_found = true
+    }
+}
+if !.ip_found && parts_len > 2 {
+    part2 = strip_whitespace(to_string(parts[2]) ?? "")
+    if length(part2) > 7 && contains(part2, ".") {
+        .ip_address = part2
+        .extraction_method = "direct_check_2"
+        .ip_found = true
     }
 }
 
-# Fallback: regex-like scanning for IP patterns
-if !exists(.ip_address) {
-    # Look for IP-like patterns in the message
-    words = split(message_str, " ")
-    for word in words {
-        if contains(word, ".") && length(word) >= 7 {
-            # Basic IP validation
-            octets = split(word, ".")
-            if length(octets) == 4 {
-                .ip_address = word
-                .extraction_method = "pattern_scan"
-                break
-            }
+# Fallback: additional IP pattern scanning (no for loops in VRL)
+if !.ip_found && parts_len > 3 {
+    part3 = strip_whitespace(to_string(parts[3]) ?? "")
+    if contains(part3, ".") && length(part3) >= 7 {
+        octets = split(part3, ".")
+        if length(octets) == 4 {
+            .ip_address = part3
+            .extraction_method = "pattern_scan"
+            .ip_found = true
         }
     }
 }
@@ -112,15 +115,35 @@ if contains(message_str, "=") {
         .kv_parsed = true
         .kv_success = true
     } else {
-        # Fallback manual parsing
+        # Fallback manual parsing (no for loops in VRL)
         pairs = split(message_str, " ")
-        for pair in pairs {
-            if contains(pair, "=") {
-                kv = split(pair, "=")
+        pairs_len = length(pairs)
+        
+        # Parse up to 5 key-value pairs manually
+        if pairs_len > 0 {
+            pair0 = strip_whitespace(to_string(pairs[0]) ?? "")
+            if contains(pair0, "=") {
+                kv = split(pair0, "=")
                 if length(kv) == 2 {
-                    field_name = kv[0]
-                    field_value = kv[1] 
-                    . = set!(., [field_name], field_value)
+                    . = merge(., {to_string(kv[0]): to_string(kv[1])})
+                }
+            }
+        }
+        if pairs_len > 1 {
+            pair1 = strip_whitespace(to_string(pairs[1]) ?? "")
+            if contains(pair1, "=") {
+                kv = split(pair1, "=")
+                if length(kv) == 2 {
+                    . = merge(., {to_string(kv[0]): to_string(kv[1])})
+                }
+            }
+        }
+        if pairs_len > 2 {
+            pair2 = strip_whitespace(to_string(pairs[2]) ?? "")
+            if contains(pair2, "=") {
+                kv = split(pair2, "=")
+                if length(kv) == 2 {
+                    . = merge(., {to_string(kv[0]): to_string(kv[1])})
                 }
             }
         }
@@ -140,44 +163,73 @@ message_str = string!(.message)
 # Multi-strategy timestamp parsing for 100% success
 .timestamp_found = false
 
-# Strategy 1: ISO 8601 format
+# Strategy 1: ISO 8601 format (no for loops in VRL)
 parts = split(message_str, " ")
-for part in parts {
-    if contains(part, "T") && contains(part, ":") && length(part) >= 19 {
-        ts, err = parse_timestamp(part, format: "%+")
+parts_len = length(parts)
+
+# Check first few parts for ISO 8601 timestamps
+if !.timestamp_found && parts_len > 0 {
+    part0 = strip_whitespace(to_string(parts[0]) ?? "")
+    if contains(part0, "T") && contains(part0, ":") && length(part0) >= 19 {
+        ts, err = parse_timestamp(part0, format: "%+")
         if err == null {
             .parsed_timestamp = ts
             .timestamp_found = true
-            .timestamp_method = "iso8601"
-            break
+            .timestamp_method = "iso8601_part0"
         }
     }
 }
-
-# Strategy 2: Standard date formats  
-if !.timestamp_found {
-    for part in parts {
-        if contains(part, "-") && length(part) >= 10 {
-            ts, err = parse_timestamp(part, format: "%Y-%m-%d")
-            if err == null {
-                .parsed_timestamp = ts
-                .timestamp_found = true
-                .timestamp_method = "date_only"
-                break
-            }
-        }
-    }
-}
-
-# Strategy 3: Any timestamp-like string
-if !.timestamp_found {
-    for part in parts {
-        if contains(part, ":") && length(part) >= 8 {
-            .parsed_timestamp = part
+if !.timestamp_found && parts_len > 1 {
+    part1 = strip_whitespace(to_string(parts[1]) ?? "")
+    if contains(part1, "T") && contains(part1, ":") && length(part1) >= 19 {
+        ts, err = parse_timestamp(part1, format: "%+")
+        if err == null {
+            .parsed_timestamp = ts
             .timestamp_found = true
-            .timestamp_method = "time_string"
-            break
+            .timestamp_method = "iso8601_part1"
         }
+    }
+}
+
+# Strategy 2: Standard date formats (no for loops in VRL)  
+if !.timestamp_found && parts_len > 0 {
+    part0 = strip_whitespace(to_string(parts[0]) ?? "")
+    if contains(part0, "-") && length(part0) >= 10 {
+        ts, err = parse_timestamp(part0, format: "%Y-%m-%d")
+        if err == null {
+            .parsed_timestamp = ts
+            .timestamp_found = true
+            .timestamp_method = "date_only_part0"
+        }
+    }
+}
+if !.timestamp_found && parts_len > 1 {
+    part1 = strip_whitespace(to_string(parts[1]) ?? "")
+    if contains(part1, "-") && length(part1) >= 10 {
+        ts, err = parse_timestamp(part1, format: "%Y-%m-%d")
+        if err == null {
+            .parsed_timestamp = ts
+            .timestamp_found = true
+            .timestamp_method = "date_only_part1"
+        }
+    }
+}
+
+# Strategy 3: Any timestamp-like string (no for loops in VRL)
+if !.timestamp_found && parts_len > 0 {
+    part0 = strip_whitespace(to_string(parts[0]) ?? "")
+    if contains(part0, ":") && length(part0) >= 8 {
+        .parsed_timestamp = part0
+        .timestamp_found = true
+        .timestamp_method = "time_string_part0"
+    }
+}
+if !.timestamp_found && parts_len > 1 {
+    part1 = strip_whitespace(to_string(parts[1]) ?? "")
+    if contains(part1, ":") && length(part1) >= 8 {
+        .parsed_timestamp = part1
+        .timestamp_found = true
+        .timestamp_method = "time_string_part1"
     }
 }
 '''
@@ -268,30 +320,47 @@ class VectorSubprocessUnitTester:
             # Create output file path
             output_file = temp_path / "output.jsonl"
             
-            # Create Vector config
-            config_content = f'''
-data_dir = "{vector_data_dir}"
+            # Simplified Vector config using memory buffers (YAML format)
+            # Properly indent VRL code for YAML literal block
+            indented_vrl = '\n'.join(f'      {line}' for line in vrl_code.split('\n'))
+            
+            config_content = f'''# Minimal data directory for Vector internals only
+data_dir: "{vector_data_dir}"
 
-[sources.file_input]
-type = "file"
-include = ["{input_file}"]
-read_from = "beginning"
+sources:
+  file_input:
+    type: file
+    include:
+      - "{input_file}"
+    read_from: beginning
 
-[transforms.test_remap]
-type = "remap"
-inputs = ["file_input"]
-source = """
-{vrl_code}
-"""
+transforms:
+  test_remap:
+    type: remap
+    inputs:
+      - file_input
+    source: |
+{indented_vrl}
 
-[sinks.file_output]  
-type = "file"
-inputs = ["test_remap"]
-path = "{output_file}"
-encoding.codec = "json"
+sinks:
+  file_output:
+    type: file
+    inputs:
+      - test_remap
+    path: "{output_file}"
+    encoding:
+      codec: json
+    # Memory-only buffering - no disk cache files
+    buffer:
+      type: memory
+      max_events: 500
+      when_full: block
+
+api:
+  enabled: false
 '''
             
-            config_file = temp_path / "config.toml"
+            config_file = temp_path / "config.yaml"
             with open(config_file, 'w') as f:
                 f.write(config_content)
             
@@ -334,10 +403,15 @@ encoding.codec = "json"
                 return False, []
         
         finally:
-            # Cleanup temp directory
+            # Simple cleanup - memory buffers mean minimal disk usage
             import shutil
             if project_temp.exists():
-                shutil.rmtree(project_temp)
+                try:
+                    shutil.rmtree(project_temp)
+                except Exception as e:
+                    if self.verbose:
+                        print(f"   ⚠️  Cleanup warning: {e}")
+                    # With memory buffers, cleanup should be straightforward
     
     def test_pattern_unit(self, pattern: str, test_logs: List[str], 
                          test_name: str, expected_fields: List[str] = None) -> Dict[str, Any]:

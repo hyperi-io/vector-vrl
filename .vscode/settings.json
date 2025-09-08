@@ -1,0 +1,12 @@
+{
+    "git.ignoredRepositories": [],
+    "git.autorefresh": true,
+    "git.autofetch": false,
+    "files.watcherExclude": {
+        "**/vector/**": true,
+        "**/target/**": true,
+        "**/.tmp/**": true,
+        "**/.venv/**": true,
+        "**/__pycache__/**": true
+    }
+}

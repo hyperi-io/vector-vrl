@@ -27,52 +27,34 @@ jobs:
       with:
         python-version: "3.12"
     
-    - name: Install system dependencies
+    - name: Install deployment tools only
       run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential pkg-config libssl-dev protobuf-compiler
+        python -m pip install --upgrade pip twine
     
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        override: true
-    
-    - name: Install Python build tools
+    - name: Check for pre-built wheel
       run: |
-        python -m pip install --upgrade pip
-        pip install --upgrade build twine uv
+        echo "🔍 Checking for locally-built wheel..."
+        if [ ! -d "vectordotdev/dist" ] || [ -z "$(ls vectordotdev/dist/*.whl 2>/dev/null)" ]; then
+          echo "❌ ERROR: No locally-built wheel found!"
+          echo ""
+          echo "Please build locally first:"
+          echo "1. Run: ./build/build --verbose"  
+          echo "2. Run: cd vectordotdev && python build_wheel.py"
+          echo "3. Commit wheel: git add vectordotdev/dist/*.whl && git commit"
+          echo "4. Push: git push"
+          exit 1
+        fi
+        echo "✅ Locally-built wheel found:"
+        ls -la vectordotdev/dist/
     
-    - name: Run 3-stage build system
-      env:
-        ENABLE_JFROG_DEPLOYMENT: "ON"
-        VECTORDOTDEV_WHEEL_BUILD: "ON"
-      run: |
-        echo "🚀 Running 3-stage build: Vector → vector-bindings → vectordotdev"
-        
-        # Run the build system to ensure everything is built
-        build/build --verbose
-        
-        # Build the complete PyPI wheel
-        cd vectordotdev
-        python build_wheel.py
-    
-    - name: Get package version
+    - name: Get package version from wheel
       id: version
       run: |
-        cd vectordotdev
-        if [ -n "${{ github.event.inputs.version }}" ]; then
-          VERSION="${{ github.event.inputs.version }}"
-        else
-          VERSION=$(python -c "
-import sys
-sys.path.insert(0, 'src')
-import vectordotdev
-print(vectordotdev.__version__)
-")
-        fi
+        cd vectordotdev/dist
+        WHEEL_FILE=$(ls *.whl | head -1)
+        VERSION=$(echo "$WHEEL_FILE" | sed 's/.*-\([0-9][^-]*\)-.*/\1/')
         echo "version=$VERSION" >> $GITHUB_OUTPUT
-        echo "Deploying vectordotdev version: $VERSION"
+        echo "Deploying pre-built wheel: $WHEEL_FILE (version: $VERSION)"
     
     - name: Check JFrog credentials
       run: |

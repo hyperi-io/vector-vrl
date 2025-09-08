@@ -1,0 +1,149 @@
+name: Deploy to JFrog PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (leave empty to use current)'
+        required: false
+        type: string
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  deploy-to-jfrog:
+    name: Deploy vectordotdev to JFrog Artifactory
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.12"
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential pkg-config libssl-dev protobuf-compiler
+    
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+    
+    - name: Install Python build tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install --upgrade build twine uv
+    
+    - name: Run 3-stage build system
+      env:
+        ENABLE_JFROG_DEPLOYMENT: "ON"
+        VECTORDOTDEV_WHEEL_BUILD: "ON"
+      run: |
+        echo "🚀 Running 3-stage build: Vector → vector-bindings → vectordotdev"
+        
+        # Run the build system to ensure everything is built
+        build/build --verbose
+        
+        # Build the complete PyPI wheel
+        cd vectordotdev
+        python build_wheel.py
+    
+    - name: Get package version
+      id: version
+      run: |
+        cd vectordotdev
+        if [ -n "${{ github.event.inputs.version }}" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION=$(python -c "
+import sys
+sys.path.insert(0, 'src')
+import vectordotdev
+print(vectordotdev.__version__)
+")
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Deploying vectordotdev version: $VERSION"
+    
+    - name: Check JFrog credentials
+      run: |
+        if [ -z "${{ secrets.ARTIFACTORY_TENANT_USERNAME }}" ] || [ -z "${{ secrets.ARTIFACTORY_TENANT_PASSWORD }}" ]; then
+          echo "❌ ERROR: Missing JFrog credentials!"
+          echo ""
+          echo "Please add these secrets to your repository:"
+          echo "1. Go to: Settings → Secrets and variables → Actions"
+          echo "2. Add ARTIFACTORY_TENANT_USERNAME"
+          echo "3. Add ARTIFACTORY_TENANT_PASSWORD"
+          exit 1
+        fi
+        echo "✅ JFrog credentials configured"
+    
+    - name: Deploy to JFrog Artifactory
+      env:
+        TWINE_USERNAME: ${{ secrets.ARTIFACTORY_TENANT_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.ARTIFACTORY_TENANT_PASSWORD }}
+        TWINE_REPOSITORY_URL: "https://hypersec.jfrog.io/artifactory/api/pypi/hypersec-pypi-local/"
+      run: |
+        cd vectordotdev
+        echo "📦 Deploying vectordotdev to JFrog Artifactory..."
+        echo "Repository: $TWINE_REPOSITORY_URL"
+        echo "Version: ${{ steps.version.outputs.version }}"
+        echo ""
+        echo "Package contents:"
+        ls -la dist/
+        echo ""
+        
+        # Upload packages using twine
+        twine upload --verbose dist/*
+        
+        echo ""
+        echo "✅ SUCCESS: vectordotdev deployed to JFrog Artifactory!"
+        echo ""
+        echo "To install:"
+        echo "  pip install vectordotdev==${{ steps.version.outputs.version }} \\"
+        echo "    --index-url $TWINE_REPOSITORY_URL"
+    
+    - name: Create deployment summary
+      if: always()
+      run: |
+        cd vectordotdev
+        cat >> $GITHUB_STEP_SUMMARY << EOF
+        # JFrog vectordotdev Deployment Summary
+        
+        ## Package Information
+        - **Package**: vectordotdev
+        - **Version**: ${{ steps.version.outputs.version }}
+        - **Repository**: hypersec-pypi-local
+        - **Time**: $(date)
+        
+        ## Artifacts Deployed
+        \`\`\`
+        $(ls -lh dist/)
+        \`\`\`
+        
+        ## Installation Command
+        \`\`\`bash
+        pip install vectordotdev==${{ steps.version.outputs.version }} \\
+          --index-url https://hypersec.jfrog.io/artifactory/api/pypi/hypersec-pypi-local/simple
+        \`\`\`
+        
+        ## Package Contents
+        - 🐍 Pure Python package in /vectordotdev/src
+        - 🦀 Bundled Rust bindings from /vector-bindings  
+        - ⚡ Complete Vector integration (all modules)
+        - 🔄 regex2vrl conversion tool
+        - 🛑 Auto-stop functionality
+        - 📊 Comprehensive testing suite
+        
+        ## View in JFrog
+        [Open JFrog Artifactory](https://hypersec.jfrog.io)
+        EOF

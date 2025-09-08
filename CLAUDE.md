@@ -139,29 +139,38 @@ uv run ruff check tests/ example.py
 
 ### Clear Language Separation
 ```
-/src/                    # Python code ONLY
-├── build_system/        # Python build automation
-├── tests/              # Python test suite  
-├── examples/           # Python usage examples
-└── pyproject.toml     # Python dependencies
+/vectordotdev/          # Python code ONLY
+├── regex2vrl/         # Python regex→VRL conversion tool
+├── tests/             # Python test suite (unit/integration/e2e)
+├── examples/          # Python usage examples  
+├── pyproject.toml     # Python package configuration
+└── config.py          # Python configuration utilities
 
-/vector/                # Vector/Rust code ONLY  
-├── lib.rs             # PyO3 bindings entry point
-├── vector_app.rs      # Vector application lifecycle
-├── python_source.rs   # Python-Vector bridge
-├── vector_cli.rs      # CLI compatibility layer
-├── vector_context.rs  # Global Vector runtime
-└── vrl_checker.rs     # VRL syntax validation
+/vector-bindings/      # Rust code ONLY (PyO3 bindings)
+├── src/
+│   └── lib.rs         # PyO3 bindings entry point
+├── vector_deps.toml   # Auto-detection configuration (no hardcoded versions)
+├── build.rs           # Build-time Vector version detection
+├── Cargo.toml         # Rust dependencies (auto-managed)
+└── Cargo.lock         # Dependency lock (auto-generated)
 
-/build/                 # Build configuration
-├── build.rs           # Rust build script
-└── workflows/         # CI/CD automation
+/vector/               # Upstream Vector (Read-Only)
+├── src/               # Vector Rust source code
+├── target/            # Vector build artifacts  
+└── Cargo.toml         # Vector dependencies
+
+/build/                # Build System (Python orchestration)
+├── build_system.py    # 3-stage build orchestrator
+├── vector_detection.py # Version auto-detection with web fetch
+├── core_build.py      # Stage execution engine
+└── dependency_sync.py # Cross-component dependency sync
 ```
 
 ### Linting and Formatting Scope
-- **Python linting**: Only applies to `/src/` directory
-- **Rust formatting**: Manual only for `/vector/` directory  
-- **VS Code**: Configured to respect language boundaries
+- **Python linting**: Only applies to `/vectordotdev/` directory (pure Python)
+- **Rust formatting**: Only for `/vector-bindings/` directory (PyO3 bindings)
+- **Vector source**: Read-only, no formatting applied
+- **Build system**: Python formatting for `/build/` directory
 
 ## Dependencies
 - **Rust**: PyO3 for Python bindings, Vector for data processing (auto-updated to latest release)
@@ -192,12 +201,26 @@ Automatically detects and handles:
 
 Use `SKIP_VECTOR_UPDATE=1` environment variable to skip version updates for faster rebuilds.
 
+## Component Documentation
+
+**IMPORTANT**: Keep these documentation files updated as the project evolves:
+
+- **[README.md](README.md)** - Main project overview and quick start
+- **[VECTOR.md](VECTOR.md)** - Vector core data processing engine (Stage 1)
+- **[VECTOR-BINDINGS.md](VECTOR-BINDINGS.md)** - Rust bindings intermediate layer (Stage 2)  
+- **[VECTORDOTDEV.md](VECTORDOTDEV.md)** - Python integration and regex2vrl (Stage 3)
+- **[BUILD.md](BUILD.md)** - Build automation and orchestration system
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and changes
+
+**Documentation Maintenance**: When making changes to any component, update the corresponding .md file to reflect current status, capabilities, and any limitations discovered.
+
 ## Common Development Tasks
 1. **Adding new Vector features**: Vector features auto-detected via build system 
-2. **Testing changes**: Use `maturin develop` then run Python tests
-3. **Performance testing**: Use example.py with large data sets
+2. **Testing changes**: Use comprehensive test suite in `vectordotdev/tests/`
+3. **Performance testing**: Use regex2vrl with Vector integration tests
 4. **Manual dependency update**: Run `./scripts/update-deps.sh` for latest versions
-5. **CI/CD**: GitHub Actions in `.github/workflows/ci.yaml`
+5. **Build system**: Use `./build/build --verbose` for all compilation
+6. **Documentation**: Update component .md files when making changes
 
 ## Emoji Policy
 

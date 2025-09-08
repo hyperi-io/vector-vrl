@@ -16,7 +16,7 @@ jobs:
     name: Deploy vectordotdev to JFrog Artifactory
     runs-on: ubuntu-latest
     # Skip GitHub deployment if local ENV/credentials are configured
-    if: "${{ secrets.DISABLE_GITHUB_JFROG }}" != 'true'
+    if: ${{ secrets.DISABLE_GITHUB_JFROG != 'true' }}
 
     steps:
     - name: Check deployment mode

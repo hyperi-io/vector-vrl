@@ -58,21 +58,50 @@ jobs:
     
     - name: Check JFrog credentials
       run: |
-        if [ -z "${{ secrets.ARTIFACTORY_TENANT_USERNAME }}" ] || [ -z "${{ secrets.ARTIFACTORY_TENANT_PASSWORD }}" ]; then
-          echo "❌ ERROR: Missing JFrog credentials!"
+        echo "🔍 Checking JFrog credential availability..."
+        
+        # Check if organization secrets are accessible
+        if [ -n "${{ secrets.ARTIFACTORY_TENANT_USERNAME }}" ]; then
+          echo "✅ ARTIFACTORY_TENANT_USERNAME: Available"
+        else
+          echo "❌ ARTIFACTORY_TENANT_USERNAME: Not available"
+        fi
+        
+        if [ -n "${{ secrets.ARTIFACTORY_TENANT_PASSWORD }}" ]; then
+          echo "✅ ARTIFACTORY_TENANT_PASSWORD: Available"  
+        else
+          echo "❌ ARTIFACTORY_TENANT_PASSWORD: Not available"
+        fi
+        
+        # Try alternative secret names in case they're named differently
+        if [ -n "${{ secrets.ARTIFACTORY_USERNAME }}" ]; then
+          echo "ℹ️ ARTIFACTORY_USERNAME also available (alternative)"
+        fi
+        
+        if [ -n "${{ secrets.ARTIFACTORY_PASSWORD }}" ]; then
+          echo "ℹ️ ARTIFACTORY_PASSWORD also available (alternative)"
+        fi
+        
+        if [ -n "${{ secrets.JFROG_ACCESS_TOKEN }}" ]; then
+          echo "ℹ️ JFROG_ACCESS_TOKEN available (token-based auth)"
+        fi
+        
+        # Fail only if no JFrog credentials found
+        if [ -z "${{ secrets.ARTIFACTORY_TENANT_USERNAME }}" ] && [ -z "${{ secrets.ARTIFACTORY_USERNAME }}" ] && [ -z "${{ secrets.JFROG_ACCESS_TOKEN }}" ]; then
           echo ""
-          echo "Please add these secrets to your repository:"
-          echo "1. Go to: Settings → Secrets and variables → Actions"
-          echo "2. Add ARTIFACTORY_TENANT_USERNAME"
-          echo "3. Add ARTIFACTORY_TENANT_PASSWORD"
+          echo "❌ ERROR: No JFrog credentials accessible!"
+          echo "Organization secrets exist but may not be accessible to this repository."
+          echo "Check: Repository Settings → Secrets and variables → Actions → Organization secrets"
           exit 1
         fi
-        echo "✅ JFrog credentials configured"
+        
+        echo "✅ JFrog credentials found"
     
     - name: Deploy to JFrog Artifactory
       env:
-        TWINE_USERNAME: ${{ secrets.ARTIFACTORY_TENANT_USERNAME }}
-        TWINE_PASSWORD: ${{ secrets.ARTIFACTORY_TENANT_PASSWORD }}
+        TWINE_USERNAME: ${{ secrets.ARTIFACTORY_TENANT_USERNAME || secrets.ARTIFACTORY_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.ARTIFACTORY_TENANT_PASSWORD || secrets.ARTIFACTORY_PASSWORD }}
+        JFROG_TOKEN: ${{ secrets.JFROG_ACCESS_TOKEN }}
         TWINE_REPOSITORY_URL: "https://hypersec.jfrog.io/artifactory/api/pypi/hypersec-pypi-local/"
       run: |
         cd vectordotdev

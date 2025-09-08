@@ -1,0 +1,28 @@
+# Vector dependency configuration for auto-detection
+# This file is used by the build system to determine compatible Vector versions
+
+[vector_integration]
+# Auto-detection settings (all values auto-detected or configurable)
+auto_detect_version = true
+auto_detect_fallback_count = 3  # How many versions to try on failure
+github_api_url = "https://api.github.com/repos/vectordotdev/vector/releases"
+vector_repo_url = "https://github.com/vectordotdev/vector.git"
+vrl_repo_url = "https://github.com/vectordotdev/vrl.git"
+vrl_branch = "main"  # Could be made configurable via env var
+
+# Build features required for bindings (configurable)
+required_features = [
+    "transforms-remap",
+    "sinks-file", 
+    "sources-internal_logs"
+]
+
+# Compatibility constraints (configurable via env vars)
+# VECTORDOTDEV_MIN_VERSION, VECTORDOTDEV_MAX_VERSION can override
+use_version_constraints = true
+
+[build_system]
+# Build system integration
+use_dependency_sync = true
+sync_with_main_project = true
+dependency_source_relative = "../vectordotdev/Cargo.toml"

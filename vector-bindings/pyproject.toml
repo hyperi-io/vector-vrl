@@ -1,0 +1,16 @@
+[build-system]
+requires = ["maturin>=1,<2"]
+build-backend = "maturin"
+
+[project]
+name = "vector-bindings"
+version = "0.1.0"
+description = "Rust bindings for Vector with PyO3 integration"
+requires-python = ">=3.7"
+authors = [
+    {name = "vectordotdev", email = "info@vectordotdev.io"}
+]
+
+[tool.maturin]
+module-name = "vector_bindings"
+bindings = "pyo3"

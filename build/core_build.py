@@ -157,14 +157,18 @@ class CoreBuildSystem:
         
         env = os.environ.copy()
         env['RUSTFLAGS'] = '-C linker=gcc'
-        # Use system OpenSSL instead of building from source (fixes GCC 15+ compatibility)
+        # Use system libraries instead of building from source (fixes GCC 15+ compatibility)
         env['OPENSSL_NO_VENDOR'] = '1'
         env['OPENSSL_STATIC'] = '0'
+        # Disable Kerberos to avoid krb5-src GCC 15+ compatibility issues
+        env['CARGO_FEATURE_GSSAPI'] = '0'
+        env['LIBZ_SYS_STATIC'] = '0'
         
         with open(log_file, 'w') as f:
             process = subprocess.Popen([
                 'cargo', 'build', '--release', '--lib',
-                '--features', 'sources-file,sinks-file,sinks-console,transforms-remap'
+                '--features', 'sources-file,sinks-file,sinks-console,transforms-remap',
+                '--no-default-features'  # Disable default features that include Kerberos
             ], stdout=f, stderr=subprocess.STDOUT, 
                env=env, cwd=self.vector_dir)
         

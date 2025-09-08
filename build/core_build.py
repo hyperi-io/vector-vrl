@@ -157,6 +157,9 @@ class CoreBuildSystem:
         
         env = os.environ.copy()
         env['RUSTFLAGS'] = '-C linker=gcc'
+        # Use system OpenSSL instead of building from source (fixes GCC 15+ compatibility)
+        env['OPENSSL_NO_VENDOR'] = '1'
+        env['OPENSSL_STATIC'] = '0'
         
         with open(log_file, 'w') as f:
             process = subprocess.Popen([

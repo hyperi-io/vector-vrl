@@ -94,7 +94,7 @@ class RobustBuildSystem:
                         log_message("⚠️ JFrog deployment failed (build still successful)")
                 
                 return BuildResult(True, version, total_time, stage_results)
-            elif python_result.error_type == self.core_builder.monitor.ErrorType.UPSTREAM_COMPILE:
+            elif python_result.error_type == ErrorType.UPSTREAM_COMPILE:
                 continue  # Try older version
             else:
                 break  # Code issue
@@ -185,7 +185,7 @@ def main():
     
     if args.clean:
         log_message("🧹 Cleaning...")
-        for cleanup in ['target', '.tmp', 'vector', 'vector-bindings']:
+        for cleanup in ['target', '.tmp', 'vector']:
             path = build_system.project_root / cleanup
             if path.exists():
                 shutil.rmtree(path)

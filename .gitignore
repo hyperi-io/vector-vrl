@@ -69,6 +69,7 @@ build/*.backup
 vectordotdev/target/
 # vectordotdev/dist/ - Allow for deployment wheels
 vector-bindings/target/
+vector-bindings/Cargo.lock
 
 # Cargo registry and git checkouts (major source of 10K+ changes)
 .cargo/registry/

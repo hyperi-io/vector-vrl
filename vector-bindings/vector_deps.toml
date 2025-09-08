@@ -1,0 +1,10 @@
+# Vector dependency tracking for vector-bindings
+# Auto-managed by build system - do not edit manually
+
+[detection]
+auto_sync = true
+vector_path = "../vector"
+
+[dependencies]
+# Synced automatically from Vector's Cargo.toml
+# This file is updated by dependency_sync.py

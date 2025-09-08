@@ -11,12 +11,32 @@ on:
     tags:
       - 'v*.*.*'
 
+env:
+  # Check if local deployment is configured
+  LOCAL_JFROG_DEPLOYMENT: ${{ secrets.DISABLE_GITHUB_JFROG || 'false' }}
+
 jobs:
   deploy-to-jfrog:
     name: Deploy vectordotdev to JFrog Artifactory
     runs-on: ubuntu-latest
+    # Skip GitHub deployment if local ENV/credentials are configured
+    if: env.LOCAL_JFROG_DEPLOYMENT != 'true'
     
     steps:
+    - name: Check deployment mode
+      run: |
+        echo "🔍 JFrog Deployment Mode Check"
+        echo "================================"
+        echo "GitHub Actions deployment: ENABLED"
+        echo "Local ENV deployment: Not configured"
+        echo ""
+        echo "ℹ️ To disable GitHub Actions and use local deployment:"
+        echo "1. Add ARTIFACTORY_TENANT_USERNAME/PASSWORD to local ENV or build/.env"
+        echo "2. Add DISABLE_GITHUB_JFROG=true to repository secrets"
+        echo "3. Use: ./build/build --deploy for local deployment"
+        echo ""
+        echo "Proceeding with GitHub Actions deployment..."
+    
     - name: Checkout code
       uses: actions/checkout@v4
       with:

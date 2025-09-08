@@ -43,27 +43,41 @@ class JFrogPyPIDeployer:
         self.enable_deployment = os.getenv("ENABLE_JFROG_DEPLOYMENT", "OFF").upper() == "ON"
         self.verbose_twine = os.getenv("VERBOSE_TWINE", "ON").upper() == "ON"
     
-    def check_credentials(self) -> bool:
-        """Check if JFrog credentials are available"""
+    def check_credentials(self) -> tuple:
+        """Check if JFrog credentials are available and determine deployment mode"""
         
-        username = os.getenv("ARTIFACTORY_TENANT_USERNAME") or os.getenv("TWINE_USERNAME")
-        password = os.getenv("ARTIFACTORY_TENANT_PASSWORD") or os.getenv("TWINE_PASSWORD") 
+        # Check local credentials first
+        local_username = (os.getenv("ARTIFACTORY_TENANT_USERNAME") or 
+                         os.getenv("ARTIFACTORY_USERNAME") or
+                         os.getenv("TWINE_USERNAME"))
+        local_password = (os.getenv("ARTIFACTORY_TENANT_PASSWORD") or 
+                         os.getenv("ARTIFACTORY_PASSWORD") or
+                         os.getenv("TWINE_PASSWORD"))
+        local_token = os.getenv("JFROG_ACCESS_TOKEN")
         
-        if not username or not password:
-            print("❌ ERROR: Missing JFrog credentials!")
-            print("")
-            print("Please set environment variables:")
-            print("  ARTIFACTORY_TENANT_USERNAME=<your_username>")
-            print("  ARTIFACTORY_TENANT_PASSWORD=<your_password>")
-            print("")
-            print("Or for GitHub Actions:")
-            print("1. Go to: Settings → Secrets and variables → Actions")
-            print("2. Add ARTIFACTORY_TENANT_USERNAME")
-            print("3. Add ARTIFACTORY_TENANT_PASSWORD")
-            return False
+        has_local_creds = (local_username and local_password) or local_token
         
-        print("✅ JFrog credentials configured")
-        return True
+        if has_local_creds:
+            print("✅ Local JFrog credentials configured")
+            print("🔧 GitHub Actions deployment will be DISABLED for this project")
+            print("   Use local deployment: ./build/build --deploy")
+            
+            # Set flag to disable GitHub Actions
+            os.environ["DISABLE_GITHUB_JFROG_DEPLOYMENT"] = "ON"
+            
+            return True, "local"
+        
+        # No local credentials - expect GitHub Actions deployment
+        print("ℹ️ No local JFrog credentials found")
+        print("🌐 Deployment will use GitHub Actions with organization secrets")
+        print("")
+        print("To use local deployment instead:")
+        print("1. Add credentials to build/.env:")
+        print("   ARTIFACTORY_TENANT_USERNAME=<your_username>")
+        print("   ARTIFACTORY_TENANT_PASSWORD=<your_password>")
+        print("2. Run: ./build/build --deploy")
+        
+        return False, "github"
     
     def get_package_version(self) -> str:
         """Get current package version from pyproject.toml"""
@@ -120,7 +134,13 @@ class JFrogPyPIDeployer:
             print("⏭️ JFrog deployment disabled (ENABLE_JFROG_DEPLOYMENT=OFF)")
             return True
         
-        if not self.check_credentials():
+        has_creds, deploy_mode = self.check_credentials()
+        
+        if not has_creds and deploy_mode == "github":
+            print("ℹ️ Local deployment skipped - will use GitHub Actions")
+            return True
+        elif not has_creds and deploy_mode == "local":
+            print("❌ Local deployment enabled but credentials missing")
             return False
         
         # Get version

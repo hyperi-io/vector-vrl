@@ -1,13 +1,14 @@
 """
 regex2vrl - Convert regex and grok patterns to performant VRL code
-Core conversion module
-Version: 1.1.0
+Core conversion module with high-performance engine
+Version: 2.0.0 - High Performance Focus
 """
 
 import re
 from typing import List, Dict, Tuple, Optional, Union
 from dataclasses import dataclass
 from enum import Enum
+from .working_vrl_engine import WorkingVRLEngine
 
 
 class PatternType(Enum):
@@ -38,37 +39,33 @@ class PatternAnalysis:
 
 
 class RegexToVRL:
-    """Convert regex patterns to performant VRL code"""
+    """Convert regex patterns to performant VRL code using high-performance engine"""
     
     def __init__(self):
-        self.builtin_patterns = {
-            # Timestamp patterns
-            r'\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}': 'parse_timestamp',
-            r'\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}': 'parse_timestamp',
-            r'\w{3} \d{1,2} \d{2}:\d{2}:\d{2}': 'parse_timestamp',
-            
-            # IP patterns
-            r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}': 'ip_detection',
-            r'(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}': 'ipv6_detection',
-            
-            # Email patterns
-            r'[\w\.-]+@[\w\.-]+\.\w+': 'email_detection',
-            
-            # URL patterns
-            r'https?://[^\s]+': 'url_detection',
-            
-            # Log level patterns
-            r'(ERROR|WARN|WARNING|INFO|DEBUG|TRACE|FATAL)': 'log_level',
-        }
+        # Initialize the WORKING VRL generator (verified with real Vector)
+        self.working_engine = WorkingVRLEngine()
         
-        self.vrl_templates = {
-            'parse_timestamp': '''parse_timestamp!({field}, format: "{format}")''',
-            'parse_json': '''parse_json!({field})''',
-            'parse_key_value': '''parse_key_value!({field})''',
-            'parse_syslog': '''parse_syslog!({field})''',
-            'parse_apache_log': '''parse_apache_log!({field}, format: "{format}")''',
-            'parse_nginx_log': '''parse_nginx_log!({field}, format: "{format}")''',
-            'parse_csv': '''parse_csv!({field})''',
+        # Legacy pattern analysis for backward compatibility
+        self.builtin_patterns = {
+            # JSON patterns
+            r'^\s*\{.*\}\s*$': 'parse_json',
+            r'json': 'parse_json',
+            
+            # Key-value patterns  
+            r'\w+=\w+': 'parse_key_value',
+            r'key.*=.*value': 'parse_key_value',
+            
+            # Apache patterns
+            r'HTTPD_COMBINEDLOG': 'parse_apache_log',
+            r'HTTPD_COMMONLOG': 'parse_apache_log',
+            
+            # Syslog patterns
+            r'SYSLOG': 'parse_syslog',
+            r'\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}': 'parse_syslog',
+            
+            # CSV patterns
+            r'csv': 'parse_csv',
+            r'(?:[^,]*,){2,}': 'parse_csv',
         }
     
     def analyze_pattern(self, pattern: str) -> PatternAnalysis:
@@ -105,44 +102,36 @@ class RegexToVRL:
         )
     
     def convert(self, pattern: str, input_field: str = '.message', 
-                output_format: str = 'vrl') -> str:
+                output_format: str = 'vrl', sample_logs: List[str] = None) -> str:
         """
-        Convert a regex pattern to VRL code
+        Convert a regex pattern to high-performance VRL code (350+ THG target)
         
         Args:
             pattern: The regex pattern to convert
             input_field: The VRL field to parse (default: .message)
             output_format: Output format ('vrl' or 'commented')
+            sample_logs: Optional sample logs to improve conversion accuracy
         
         Returns:
-            Generated VRL code
+            Generated high-performance VRL code
         """
-        analysis = self.analyze_pattern(pattern)
-        
-        # Generate header comment if requested
-        header = ""
-        if output_format == 'commented':
-            header = self._generate_header(pattern, analysis)
-        
-        # Choose conversion strategy based on analysis
-        if analysis.can_use_builtin and analysis.suggested_parser:
-            vrl_code = self._generate_builtin_parser(
-                analysis.suggested_parser, input_field, analysis
-            )
-        elif analysis.pattern_type == PatternType.TIMESTAMP:
-            vrl_code = self._convert_timestamp(pattern, input_field, analysis)
-        elif analysis.pattern_type == PatternType.IP_ADDRESS:
-            vrl_code = self._convert_ip_extraction(pattern, input_field, analysis)
-        elif analysis.pattern_type == PatternType.KEY_VALUE:
-            vrl_code = self._convert_key_value(pattern, input_field, analysis)
-        elif analysis.has_named_groups:
-            vrl_code = self._convert_named_groups(pattern, input_field, analysis)
-        elif analysis.delimiters:
-            vrl_code = self._convert_delimiter_based(pattern, input_field, analysis)
+        # Use the WORKING VRL generator (verified with real Vector execution)
+        if sample_logs is not None:
+            vrl_code = self.working_engine.generate_working_vrl(pattern, sample_logs)
         else:
-            vrl_code = self._convert_generic(pattern, input_field, analysis)
+            vrl_code = self.working_engine.generate_working_vrl(pattern)
         
-        return header + vrl_code
+        # Adjust input field if not default
+        if input_field != '.message':
+            vrl_code = vrl_code.replace('string!(.message)', f'string!({input_field})')
+            vrl_code = vrl_code.replace('.message)', f'{input_field})')
+        
+        # Add header comment if requested
+        if output_format == 'commented':
+            header = self._generate_header_v2(pattern, input_field)
+            return header + vrl_code
+        
+        return vrl_code
     
     def _detect_pattern_type(self, pattern: str) -> PatternType:
         """Detect the type of pattern"""
@@ -258,8 +247,18 @@ class RegexToVRL:
         else:
             return 350  # Simple
     
+    def _generate_header_v2(self, pattern: str, input_field: str) -> str:
+        """Generate high-performance focused header comment"""
+        return f'''# High-Performance VRL Parser (Generated by regex2vrl v2.0.0)
+# Original pattern: {pattern[:80]}{"..." if len(pattern) > 80 else ""}
+# Input field: {input_field}
+# Performance target: 350+ THG (no regex functions used)
+# Method: Built-in parsers + string operations only
+
+'''
+
     def _generate_header(self, pattern: str, analysis: PatternAnalysis) -> str:
-        """Generate informative header comment"""
+        """Legacy header generation for backward compatibility"""
         return f'''# Generated VRL code from regex pattern
 # Original pattern: {pattern}
 # Pattern type: {analysis.pattern_type.value}
@@ -360,11 +359,19 @@ if length(parts) > 1 {{
                     vrl_code += f'''
 # Extract {group_name} (status code pattern detected)
 parts = split(message_str, " ")
-# Look for 3-digit numbers in message
-if match(message_str, r"[1-5]\\\\d{{2}}") {{
-    matches = find_all(message_str, r"[1-5]\\\\d{{2}}")
-    if length(matches) > 0 {{
-        .{group_name} = matches[0]
+# Look for 3-digit status codes using string operations (NO REGEX per HyperSec policy)
+parts_len = length(parts)
+if parts_len > 0 {{
+    part0 = strip_whitespace(to_string(parts[0]) ?? "")
+    if length(part0) == 3 && starts_with(part0, "1") || starts_with(part0, "2") || starts_with(part0, "3") || starts_with(part0, "4") || starts_with(part0, "5") {{
+        .{group_name} = part0
+        .{group_name}_found = true
+    }}
+}}
+if !exists(.{group_name}) && parts_len > 1 {{
+    part1 = strip_whitespace(to_string(parts[1]) ?? "")
+    if length(part1) == 3 && starts_with(part1, "1") || starts_with(part1, "2") || starts_with(part1, "3") || starts_with(part1, "4") || starts_with(part1, "5") {{
+        .{group_name} = part1
         .{group_name}_found = true
     }}
 }}
@@ -525,16 +532,129 @@ if contains(message_str, "=") {{
         # Escape delimiter for VRL string literal
         safe_delimiter = delimiter.replace('"', '\\"').replace('\\', '\\\\')
         
-        return f'''# Delimiter-based extraction
+        # Map parts to specific fields based on pattern structure
+        field_mappings = self._analyze_delimiter_field_mapping(pattern, analysis)
+        
+        vrl_code = f'''# Delimiter-based extraction
 message_str = string!({input_field})
 parts = split(message_str, "{safe_delimiter}")
 
-# Extract fields based on position
-if length(parts) >= {analysis.field_count} {{
-    # Assign fields based on pattern structure
-    # TODO: Map parts to specific fields based on pattern
+# Extract fields based on pattern analysis
+'''
+        
+        # Add field assignments based on analysis
+        if field_mappings:
+            vrl_code += f"if length(parts) >= {len(field_mappings)} {{\n"
+            
+            for i, (field_name, field_type) in enumerate(field_mappings):
+                # Add type-specific handling
+                if field_type == 'timestamp':
+                    vrl_code += f'''    # Parse timestamp field
+    if length(parts) > {i} {{
+        ts, err = parse_timestamp(parts[{i}], format: "%+")
+        if err == null {{
+            .{field_name} = ts
+        }} else {{
+            .{field_name} = parts[{i}]
+        }}
+    }}
+'''
+                elif field_type == 'ip':
+                    vrl_code += f'''    # Parse IP field
+    if length(parts) > {i} {{
+        part = string!(parts[{i}])
+        if is_ipv4(part) {{
+            .{field_name} = part
+        }} else {{
+            .{field_name} = part
+        }}
+    }}
+'''
+                elif field_type == 'number':
+                    vrl_code += f'''    # Parse numeric field
+    if length(parts) > {i} {{
+        num, err = to_int(parts[{i}])
+        if err == null {{
+            .{field_name} = num
+        }} else {{
+            .{field_name} = parts[{i}]
+        }}
+    }}
+'''
+                else:
+                    vrl_code += f'''    # Parse string field
+    if length(parts) > {i} {{
+        .{field_name} = string!(parts[{i}])
+    }}
+'''
+            
+            vrl_code += "}\n"
+        else:
+            # Fallback to generic field assignment
+            vrl_code += f'''if length(parts) >= 1 {{
+    # Generic field assignment using VRL syntax (no range function)
+    if length(parts) >= 1 {{
+        .field_0 = strip_whitespace(to_string(parts[0]) ?? "")
+    }}
+    if length(parts) >= 2 {{
+        .field_1 = strip_whitespace(to_string(parts[1]) ?? "")
+    }}
+    if length(parts) >= 3 {{
+        .field_2 = strip_whitespace(to_string(parts[2]) ?? "")
+    }}
 }}
 '''
+        
+        return vrl_code
+    
+    def _analyze_delimiter_field_mapping(self, pattern: str, analysis: PatternAnalysis) -> List[Tuple[str, str]]:
+        """Analyze pattern to determine field names and types for delimiter-based parsing"""
+        mappings = []
+        
+        # Extract named groups and infer their types
+        for group_name in analysis.group_names:
+            field_type = 'string'  # default
+            
+            # Infer type from field name
+            name_lower = group_name.lower()
+            if any(ts in name_lower for ts in ['timestamp', 'time', 'date']):
+                field_type = 'timestamp'
+            elif any(ip in name_lower for ip in ['ip', 'addr', 'host']):
+                field_type = 'ip'
+            elif any(num in name_lower for num in ['status', 'code', 'port', 'size', 'bytes']):
+                field_type = 'number'
+                
+            mappings.append((group_name, field_type))
+        
+        # If no named groups, try to infer from pattern structure
+        if not mappings and analysis.delimiters:
+            # Look for common patterns in the regex
+            import re
+            
+            # Find pattern segments between delimiters
+            delimiter = analysis.delimiters[0]
+            pattern_parts = re.split(re.escape(delimiter), pattern)
+            
+            for i, part in enumerate(pattern_parts):
+                field_name = f"field_{i}"
+                field_type = 'string'
+                
+                # Analyze pattern part to infer type
+                if r'\d{4}-\d{2}-\d{2}' in part or 'timestamp' in part.lower():
+                    field_type = 'timestamp'
+                    field_name = 'timestamp'
+                elif r'\d+\.\d+\.\d+\.\d+' in part or 'ip' in part.lower():
+                    field_type = 'ip'  
+                    field_name = 'ip_address'
+                elif r'\d{3}' in part and 'status' in part.lower():
+                    field_type = 'number'
+                    field_name = 'status_code'
+                elif r'\d+' in part and any(x in part.lower() for x in ['size', 'bytes', 'port']):
+                    field_type = 'number'
+                    
+                mappings.append((field_name, field_type))
+        
+        return mappings
     
     def _convert_generic(self, pattern: str, input_field: str, 
                         analysis: PatternAnalysis) -> str:
@@ -572,13 +692,13 @@ parts = split(message_str, " ")
 # Look for 3-digit numbers
 if length(parts) > 0 {{
     part0 = string!(parts[0])
-    if match(part0, r"^[1-5]\\d{{2}}$") {{
+    if length(part0) == 3 && (starts_with(part0, "1") || starts_with(part0, "2") || starts_with(part0, "3") || starts_with(part0, "4") || starts_with(part0, "5")) {{
         .{group_name} = part0
     }}
 }}
 if length(parts) > 1 {{
     part1 = string!(parts[1])
-    if match(part1, r"^[1-5]\\d{{2}}$") {{
+    if length(part1) == 3 && (starts_with(part1, "1") || starts_with(part1, "2") || starts_with(part1, "3") || starts_with(part1, "4") || starts_with(part1, "5")) {{
         .{group_name} = part1
     }}
 }}

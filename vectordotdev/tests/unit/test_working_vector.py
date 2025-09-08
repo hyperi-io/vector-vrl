@@ -28,31 +28,40 @@ def test_vector_basic():
         # Create output file path  
         output_file = temp_path / "output.jsonl"
         
-        # Create Vector config
-        config_content = f'''
-data_dir = "{vector_data_dir}"
+        # Create Vector config (YAML format)
+        config_content = f'''data_dir: "{vector_data_dir}"
 
-[sources.file_input]
-type = "file"
-include = ["{input_file}"]
-read_from = "beginning"
+sources:
+  file_input:
+    type: file
+    include:
+      - "{input_file}"
+    read_from: beginning
 
-[transforms.test_remap]
-type = "remap"
-inputs = ["file_input"]
-source = """
-.processed = true
-.original_message = .message
-"""
+transforms:
+  test_remap:
+    type: remap
+    inputs:
+      - file_input
+    source: |
+      .processed = true
+      .original_message = .message
 
-[sinks.file_output]
-type = "file"
-inputs = ["test_remap"]
-path = "{output_file}"
-encoding.codec = "json"
+sinks:
+  file_output:
+    type: file
+    inputs:
+      - test_remap
+    path: "{output_file}"
+    encoding:
+      codec: json
+    buffer:
+      type: memory
+      max_events: 500
+      when_full: block
 '''
         
-        config_file = temp_path / "config.toml"
+        config_file = temp_path / "config.yaml"
         with open(config_file, 'w') as f:
             f.write(config_content)
         

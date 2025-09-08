@@ -36,7 +36,9 @@ class VectorDotDevTestRunner:
     
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
-        self.temp_dir = Path(tempfile.mkdtemp(prefix="vectordotdev_test_"))
+        # Use project-relative temp directory per CLAUDE.md policy
+        self.temp_dir = Path(".tmp") / f"vectordotdev_test_{int(__import__('time').time())}"
+        self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.results = {"passed": 0, "failed": 0, "tests": []}
         
         # Load test configurations
@@ -104,24 +106,36 @@ class VectorDotDevTestRunner:
                 print(f"Estimated THG: {analysis.estimated_thg}")
                 print(f"Built-in parser: {analysis.suggested_parser}")
             
-            # Create Vector config with generated VRL (TOML format)
+            # Create Vector config with generated VRL (YAML format)
             output_file = self.temp_dir / f"{test_name}_output.jsonl"
             
-            vector_config = f"""[sources.test_input]
-type = "python"
+            # Properly indent VRL code for YAML literal block
+            indented_vrl = '\n'.join(f'      {line}' for line in vrl_code.split('\n'))
+            
+            vector_config = f"""sources:
+  test_input:
+    type: python
 
-[transforms.regex2vrl_transform]
-type = "remap"
-inputs = ["test_input"]
-source = '''
-{vrl_code}
-'''
+transforms:
+  regex2vrl_transform:
+    type: remap
+    inputs:
+      - test_input
+    source: |
+{indented_vrl}
 
-[sinks.test_output]
-type = "file"
-inputs = ["regex2vrl_transform"]
-path = "{output_file}"
-encoding.codec = "json"
+sinks:
+  test_output:
+    type: file
+    inputs:
+      - regex2vrl_transform
+    path: "{output_file}"
+    encoding:
+      codec: json
+    buffer:
+      type: memory
+      max_events: 500
+      when_full: block
 """
             
             if self.verbose:

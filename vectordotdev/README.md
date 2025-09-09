@@ -85,6 +85,50 @@ print(f"Throughput: {thg_result['events_per_second']} eps")
 print(f"Recommendations: {thg_result['recommendations']}")  # Optimization tips
 ```
 
+## Production Patterns
+
+vectordotdev includes **pre-provisioned production patterns** for common log formats, optimized for native execution:
+
+```python
+# Apache Combined Logs (350+ THG)
+apache_config = vectordotdev.get_apache_combined()
+vector = vectordotdev.Vector(apache_config)
+vector.initialize()
+
+apache_logs = ['192.168.1.1 - user [08/Sep/2023:12:00:00 +0000] "GET /api HTTP/1.1" 200 1234']
+results = vector.process_logs(apache_logs)  # Native 10-field extraction
+
+# JSON Application Logs (500+ THG with built-in parsers)  
+json_config = vectordotdev.get_json_application()
+json_logs = ['{"level": "INFO", "service": "api", "request_id": "123"}']
+
+# Kubernetes Pod Logs (300+ THG with metadata extraction)
+k8s_config = vectordotdev.get_kubernetes_pods() 
+k8s_logs = ["2023-09-08T12:00:00Z INFO [api-gateway] Server started"]
+
+# Docker Container Logs (400+ THG with container parsing)
+docker_config = vectordotdev.get_docker_container()
+docker_logs = ["2023-09-08T12:00:00Z container_123[app]: Application ready"]
+
+# Available patterns
+patterns = vectordotdev.ProductionPatterns.list_available_patterns()
+print(f"Available patterns: {patterns}")
+```
+
+### Supported Production Patterns
+
+| Pattern | THG Target | Fields Extracted | Use Case |
+|---------|------------|------------------|----------|
+| **Apache Combined** | 350+ EPS | 10 fields | Web server access logs |
+| **JSON Application** | 500+ EPS | 8+ fields | Structured app logs |  
+| **Nginx Access** | 400+ EPS | 9 fields | Nginx web server logs |
+| **Kubernetes Pods** | 300+ EPS | 6 fields | K8s orchestration logs |
+| **Docker Container** | 400+ EPS | 4 fields | Container runtime logs |
+| **Syslog Standard** | 250+ EPS | 7 fields | System/infrastructure logs |
+
+All patterns are optimized for **native in-process execution** with comprehensive THG performance assessment.
+```
+
 ## Native Error Handling
 
 ```python

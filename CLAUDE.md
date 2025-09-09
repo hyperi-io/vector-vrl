@@ -66,6 +66,40 @@ errors = vector.get_errors()                 # Native error collection
 thg = vectordotdev.assess_vrl_performance(vrl, test_data)  # THG benchmarking
 ```
 
+### **Production Pattern Library**
+vectordotdev includes **pre-provisioned production patterns** for common log formats with native execution and THG optimization:
+
+#### **✅ Supported Production Patterns (v1.0.1)**
+- **Apache Combined Logs**: HTTP access logs with full field extraction (10 fields)
+- **Nginx Access Logs**: Web server logs with performance optimization (9 fields)
+- **Docker Container Logs**: Container runtime logs with structured parsing (4 fields)
+- **Kubernetes Pod Logs**: K8s orchestration logs with namespace extraction (4 fields)
+- **JSON Application Logs**: Structured application logs with built-in parsers
+- **Syslog Standard**: System logs with RFC3164/RFC5424 support
+- **AWS ELB Logs**: Load balancer logs with complex multi-field parsing
+- **MySQL Error Logs**: Database logs with error categorization
+
+#### **Pattern Usage with Native Execution**
+```python
+# Use production patterns with native Vector execution
+from vectordotdev import production_patterns
+
+# Get pre-optimized Apache pattern (350+ THG score)
+apache_config = production_patterns.get_apache_combined()
+vector = vectordotdev.Vector(apache_config)
+vector.initialize()
+
+# Process Apache logs natively in-process
+apache_logs = [
+    '192.168.1.1 - user [08/Sep/2023:12:00:00 +0000] "GET /api HTTP/1.1" 200 1234'
+]
+results = vector.process_logs(apache_logs)  # Native parsing, no subprocess
+
+# THG assessment of production pattern
+thg = vectordotdev.assess_pattern_performance("apache_combined", apache_logs)
+print(f"Production pattern THG: {thg['thg_score']} ({thg['performance_grade']})")
+```
+
 ## Quick Start
 
 ### Prerequisites

@@ -63,13 +63,18 @@ def get_bindings_info():
     }
 
 
-# Import THG performance assessment
+# Import THG performance assessment and production patterns
 try:
     from .thg_performance import (
         THGPerformanceAssessor, THGMetrics, THGResult,
         quick_thg_assessment, assess_vrl_performance, execute_vector_pipeline
     )
     from .vector_test_utils import VectorTestRunner
+    from .production_patterns import (
+        ProductionPatterns, production_patterns,
+        get_apache_combined, get_nginx_access, get_json_application,
+        get_kubernetes_pods, get_docker_container
+    )
     _performance_available = True
 except ImportError:
     _performance_available = False
@@ -99,7 +104,15 @@ __all__ = [
     "quick_thg_assessment",
     "assess_vrl_performance",
     "execute_vector_pipeline",
-    "VectorTestRunner"
+    "VectorTestRunner",
+    # Production Patterns
+    "ProductionPatterns",
+    "production_patterns",
+    "get_apache_combined",
+    "get_nginx_access", 
+    "get_json_application",
+    "get_kubernetes_pods",
+    "get_docker_container"
 ]
 
 

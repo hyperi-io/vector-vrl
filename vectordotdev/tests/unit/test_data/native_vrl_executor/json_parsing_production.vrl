@@ -1,0 +1,10 @@
+# VRL for JSON parsing with error handling - Production style
+structured, err = parse_json(.message)
+if err == null {
+    . = merge(., structured)
+    .parser_type = "json"
+    .processed_at = now()
+} else {
+    .parse_error = "invalid_json"
+    .original_message = .message
+}

@@ -1,0 +1,31 @@
+# VRL for Apache Combined Log Format parsing with field enrichment
+message_str = to_string(.message) ?? ""
+
+# Use regex for Apache combined format
+apache_pattern = r'^(?P<ip>\S+) (?P<ident>\S+) (?P<userid>\S+) \[(?P<timestamp>[^\]]+)\] "(?P<method>\S+) (?P<path>\S+) (?P<version>\S+)" (?P<status>\d+) (?P<size>\S+)( "(?P<referer>[^"]*)" "(?P<user_agent>[^"]*)")?'
+
+parsed, err = parse_regex(message_str, apache_pattern)
+if err == null {
+    .client_ip = parsed.ip
+    .user_identifier = parsed.ident
+    .user_id = parsed.userid
+    .timestamp_str = parsed.timestamp
+    .method = parsed.method
+    .path = parsed.path
+    .http_version = parsed.version
+    .status_code = to_int(parsed.status) ?? 0
+    .response_size = if parsed.size == "-" { 0 } else { to_int(parsed.size) ?? 0 }
+    .referer = parsed.referer
+    .user_agent = parsed.user_agent
+    
+    # Enrich with additional fields
+    .log_type = "apache_access"
+    .status_category = if .status_code >= 500 { "server_error" }
+                     else if .status_code >= 400 { "client_error" }
+                     else if .status_code >= 300 { "redirect" }
+                     else if .status_code >= 200 { "success" }
+                     else { "informational" }
+} else {
+    .parse_error = "invalid_apache_format"
+    .original_message = .message
+}

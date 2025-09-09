@@ -1,0 +1,5 @@
+{"timestamp": "2023-09-08T12:00:00Z", "level": "INFO", "service": "api", "request_id": "req_123", "user_id": 456}
+<34>1 2023-09-08T12:00:01Z web-server nginx 1234 - - User session started
+timestamp=2023-09-08T12:00:02Z level=ERROR service=database error=connection_timeout
+2023-09-08 12:00:03 [WARNING] Cache miss for key user_profile_789
+timestamp=2023-09-08T12:00:04Z container_id=abc123 container_name=api-service status=healthy

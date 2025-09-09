@@ -1,0 +1,5 @@
+192.168.1.100 - user1 [08/Sep/2023:12:00:00 +0000] "GET /api/v1/users HTTP/1.1" 200 1234 "https://example.com/app" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+192.168.1.101 - - [08/Sep/2023:12:00:01 +0000] "POST /api/v2/login HTTP/1.1" 401 567 "-" "curl/7.68.0"
+10.0.0.50 - admin [08/Sep/2023:12:00:02 +0000] "GET /api/v1/data HTTP/1.1" 200 8901 "https://example.com/dashboard" "Googlebot/2.1 (+http://www.google.com/bot.html)"
+203.0.113.1 - - [08/Sep/2023:12:00:03 +0000] "DELETE /api/v1/item/123 HTTP/1.1" 204 - "-" "PostmanRuntime/7.28.0"
+192.168.1.200 - guest [08/Sep/2023:12:00:04 +0000] "GET /health HTTP/1.1" 500 2048 "-" "Mozilla/5.0 (compatible; monitoring-bot/1.0)"

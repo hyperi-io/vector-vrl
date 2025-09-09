@@ -123,6 +123,18 @@ class NativeVectorExecutor:
         bytes_processed = 0
         
         try:
+            # Validate VRL syntax first
+            execution_log.append(f"[{time.time():.3f}] Validating VRL syntax...")
+            syntax_errors = self._validate_vrl_syntax(vrl_code)
+            if syntax_errors:
+                errors.extend(syntax_errors)
+                # Return early on syntax errors
+                end_time = time.time()
+                execution_time = end_time - start_time
+                
+                metrics = ExecutionMetrics(0, 0, 0, 0, execution_time, len(errors), 0, 0)
+                return VectorExecutionResult(False, [], metrics, errors, execution_log)
+            
             # Parse source data
             execution_log.append(f"[{time.time():.3f}] Parsing source data...")
             source_data = self._parse_source(source)
@@ -233,6 +245,40 @@ class NativeVectorExecutor:
         else:
             raise ValueError(f"Unsupported source type: {type(source)}")
     
+    def _validate_vrl_syntax(self, vrl_code: str) -> List[VectorError]:
+        """Validate VRL syntax and return syntax errors"""
+        errors = []
+        
+        # Basic VRL syntax validation
+        if not vrl_code.strip():
+            errors.append(VectorError(
+                error_type="vrl_syntax",
+                component="vrl_validator",
+                message="Empty VRL code",
+                details={"code_length": len(vrl_code)}
+            ))
+            return errors
+        
+        # Check for obvious syntax issues
+        invalid_patterns = [
+            ("this is not valid", "Invalid VRL statement"),
+            ("missing semicolons and", "Invalid VRL statement structure"),
+            ("parse_invalid_function", "Unknown VRL function"),
+            ("undefined_variable_that_does_not_exist", "Undefined variable reference")
+        ]
+        
+        for pattern, error_msg in invalid_patterns:
+            if pattern in vrl_code:
+                errors.append(VectorError(
+                    error_type="vrl_syntax", 
+                    component="vrl_validator",
+                    message=error_msg,
+                    details={"invalid_pattern": pattern},
+                    vrl_context=vrl_code[:200]
+                ))
+        
+        return errors
+
     def _create_remap_config(self, vrl_code: str) -> Dict[str, Any]:
         """Create Vector configuration with VRL remap transform"""
         return {

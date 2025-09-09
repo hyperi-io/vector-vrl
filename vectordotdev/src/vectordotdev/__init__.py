@@ -67,7 +67,7 @@ def get_bindings_info():
 try:
     from .thg_performance import (
         THGPerformanceAssessor, THGMetrics, THGResult,
-        quick_thg_assessment, assess_vrl_performance, execute_vector_pipeline
+        quick_thg_assessment
     )
     from .vector_test_utils import VectorTestRunner
     from .production_patterns import (

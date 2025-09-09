@@ -1,0 +1,17 @@
+# VRL that will cause runtime errors during execution
+message_str = to_string(.message) ?? ""
+
+# Try to parse non-JSON as JSON (should fail)
+if !starts_with(message_str, "{") {
+    structured, err = parse_json(message_str)
+    if err != null {
+        .parse_error = err
+        .error_type = "runtime_json_parse_failure"
+    }
+}
+
+# Try to convert non-numeric string to int (should fail gracefully)  
+.invalid_conversion = to_int("not_a_number")
+
+# Access undefined field (should handle gracefully)
+.undefined_field_access = .does_not_exist.nested_field

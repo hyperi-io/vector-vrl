@@ -271,6 +271,52 @@ class TestNativeVRLExecutorClean(unittest.TestCase):
         if result.metrics.events_per_second >= self.params["performance_thresholds"]["excellent_eps"]:
             self.assertEqual(result.metrics.performance_grade, "A+")
 
+    def test_vrl_syntax_errors(self):
+        """Test VRL syntax error handling with external error VRL"""
+        vrl_code = self.loader.load_vrl("vrl_syntax_errors") 
+        test_data = self.loader.load_test_data("vrl_syntax_errors")
+        scenario_config = self.loader.get_scenario_config("vrl_syntax_errors")
+
+        result = execute_vrl_remap(test_data, vrl_code, timeout_seconds=5)
+
+        # Should fail due to syntax errors (as configured)
+        expected_success = scenario_config.get("expected_success", False)
+        self.assertEqual(result.success, expected_success)
+        
+        if not expected_success:
+            # Should have structured errors for automation
+            self.assertGreater(len(result.errors), 0)
+            
+            # Validate error types from config
+            expected_error_types = scenario_config.get("expected_error_types", [])
+            error_types = [error.error_type for error in result.errors]
+            
+            for expected_type in expected_error_types:
+                self.assertTrue(any(expected_type in error_type for error_type in error_types),
+                               f"Expected error type {expected_type} not found in {error_types}")
+
+    def test_vrl_runtime_errors(self):
+        """Test VRL runtime error handling during execution"""
+        vrl_code = self.loader.load_vrl("vrl_runtime_errors")
+        test_data = self.loader.load_test_data("vrl_runtime_errors")
+        scenario_config = self.loader.get_scenario_config("vrl_runtime_errors")
+
+        result = execute_vrl_remap(test_data, vrl_code, timeout_seconds=10)
+
+        # Should succeed overall (graceful error handling)
+        self.assertTrue(result.success)
+        
+        expected_events = scenario_config.get("expected_events", len(test_data))
+        self.assertEqual(result.metrics.events_processed, expected_events)
+        
+        # Should process events despite internal VRL errors
+        min_processed = scenario_config.get("min_processed_events", 1)
+        self.assertGreaterEqual(len(result.output_data), min_processed)
+        
+        # Runtime errors should be handled gracefully (no execution failure)
+        max_errors = scenario_config.get("expected_errors_count", 0)
+        self.assertLessEqual(result.metrics.errors_count, max_errors)
+
 
 class TestDataIntegrity(unittest.TestCase):
     """Test the integrity and availability of external test data"""

@@ -1,6 +1,6 @@
 [package]
 name = "vector-bindings"
-version = "1.0.3"
+version = "1.0.4"
 edition = "2021"
 description = "PyO3 bindings for Vector data processing"
 authors = ["vectordotdev team"]

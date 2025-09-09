@@ -1,0 +1,15 @@
+# VRL for syslog parsing with severity enrichment
+structured, err = parse_syslog(.message)
+if err == null {
+    . = merge(., structured)
+    .parser_type = "syslog"
+    .severity_text = if .severity == "emerg" { "emergency" } 
+                   else if .severity == "crit" { "critical" }
+                   else if .severity == "err" { "error" }
+                   else if .severity == "warning" { "warning" }
+                   else if .severity == "info" { "information" }
+                   else { .severity }
+} else {
+    .parse_error = "invalid_syslog"
+    .original_message = .message
+}

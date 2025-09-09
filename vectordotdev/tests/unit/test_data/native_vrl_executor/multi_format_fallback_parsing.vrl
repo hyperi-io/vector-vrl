@@ -1,0 +1,30 @@
+# VRL for multi-format parsing with fallback strategy
+message_str = to_string(.message) ?? ""
+
+# Smart parsing: try JSON first, then syslog, then key-value
+if starts_with(message_str, "{") {
+    structured, err = parse_json(message_str)
+    if err == null {
+        . = merge(., structured)
+        .parser_used = "json"
+    }
+} else if starts_with(message_str, "<") {
+    structured, err = parse_syslog(message_str)
+    if err == null {
+        . = merge(., structured)
+        .parser_used = "syslog"
+    }
+} else if contains(message_str, "=") {
+    structured, err = parse_key_value(message_str, key_value_delimiter: "=", field_delimiter: " ")
+    if err == null {
+        . = merge(., structured)
+        .parser_used = "key_value"
+    }
+} else {
+    .parser_used = "plain_text"
+    .log_message = message_str
+}
+
+# Add universal fields
+.processed_at = now()
+.processing_version = "1.0.1"

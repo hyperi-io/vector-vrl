@@ -1,262 +1,75 @@
 """
 Pre-provisioned production patterns for common log formats
 Optimized for native Vector execution with 350+ THG performance
+Loads patterns from YAML configuration files
 """
 
+import yaml
+from pathlib import Path
 from typing import Dict, List, Any
 
 
 class ProductionPatterns:
     """
-    Library of production-ready Vector configurations for common log formats
+    Library of production-ready Vector configurations loaded from YAML files
     All patterns optimized for native in-process execution with high THG scores
     """
     
-    @staticmethod
-    def get_apache_combined() -> Dict[str, Any]:
+    def __init__(self):
+        self.patterns_dir = Path(__file__).parent / "patterns" / "configs"
+        self.pattern_cache = {}
+    
+    def _load_yaml_config(self, pattern_name: str) -> Dict[str, Any]:
+        """Load Vector configuration from YAML file"""
+        if pattern_name in self.pattern_cache:
+            return self.pattern_cache[pattern_name]
+            
+        yaml_file = self.patterns_dir / f"{pattern_name}.yaml"
+        if not yaml_file.exists():
+            raise FileNotFoundError(f"Pattern not found: {pattern_name} ({yaml_file})")
+        
+        try:
+            with open(yaml_file, 'r') as f:
+                config = yaml.safe_load(f)
+                self.pattern_cache[pattern_name] = config
+                return config
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid YAML in {pattern_name}: {e}")
+    
+    def get_apache_combined(self) -> Dict[str, Any]:
         """
-        Apache Combined Log Format with native execution
+        Apache Combined Log Format from YAML config
         Expected THG: 350+ EPS with full field extraction (10 fields)
         """
-        return {
-            "sources": {
-                "apache_logs": {
-                    "type": "demo_logs",
-                    "format": "text"
-                }
-            },
-            "transforms": {
-                "parse_apache": {
-                    "type": "remap",
-                    "source": '''
-                    message_str = to_string(.message) ?? ""
-                    parts = split(message_str, " ")
-                    
-                    if length(parts) >= 10 {
-                        .client_ip = strip_whitespace(to_string(parts[0]))
-                        .user_identifier = strip_whitespace(to_string(parts[1]))
-                        .user_id = strip_whitespace(to_string(parts[2]))
-                        
-                        # Parse timestamp [08/Sep/2023:12:00:00 +0000]
-                        .timestamp_raw = strip_whitespace(to_string(parts[3]) + " " + to_string(parts[4]))
-                        
-                        # Parse request "GET /api/v1/users HTTP/1.1"
-                        .method = strip_whitespace(to_string(parts[5]))
-                        .path = strip_whitespace(to_string(parts[6]))
-                        .http_version = strip_whitespace(to_string(parts[7]))
-                        
-                        # Response details
-                        .status_code = to_int(parts[8]) ?? 0
-                        .response_size = to_int(parts[9]) ?? 0
-                        
-                        # Optional fields if available
-                        if length(parts) > 10 {
-                            .referer = strip_whitespace(to_string(parts[10]))
-                        }
-                        if length(parts) > 11 {
-                            .user_agent = strip_whitespace(to_string(parts[11]))
-                        }
-                    }
-                    '''
-                }
-            },
-            "sinks": {
-                "parsed_output": {
-                    "type": "console",
-                    "encoding": {"codec": "json"}
-                }
-            }
-        }
+        return self._load_yaml_config("apache_combined")
     
-    @staticmethod
-    def get_nginx_access() -> Dict[str, Any]:
+    def get_nginx_access(self) -> Dict[str, Any]:
         """
-        Nginx Access Log Format optimized for native execution  
+        Nginx Access Log Format from YAML config
         Expected THG: 400+ EPS with 9 field extraction
         """
-        return {
-            "sources": {
-                "nginx_logs": {
-                    "type": "demo_logs",
-                    "format": "text"
-                }
-            },
-            "transforms": {
-                "parse_nginx": {
-                    "type": "remap",
-                    "source": '''
-                    message_str = to_string(.message) ?? ""
-                    parts = split(message_str, " ")
-                    
-                    if length(parts) >= 9 {
-                        .remote_addr = strip_whitespace(to_string(parts[0]))
-                        .remote_user = strip_whitespace(to_string(parts[1]))
-                        .time_local = strip_whitespace(to_string(parts[2]) + " " + to_string(parts[3]))
-                        .request = strip_whitespace(to_string(parts[4]) + " " + to_string(parts[5]) + " " + to_string(parts[6]))
-                        .status = to_int(parts[7]) ?? 0
-                        .body_bytes_sent = to_int(parts[8]) ?? 0
-                        
-                        # Extract method and path from request
-                        request_parts = split(to_string(parts[4]) + " " + to_string(parts[5]) + " " + to_string(parts[6]), " ")
-                        if length(request_parts) >= 2 {
-                            .method = strip_whitespace(to_string(request_parts[0]))
-                            .path = strip_whitespace(to_string(request_parts[1]))
-                        }
-                    }
-                    '''
-                }
-            },
-            "sinks": {
-                "parsed_output": {
-                    "type": "console", 
-                    "encoding": {"codec": "json"}
-                }
-            }
-        }
+        return self._load_yaml_config("nginx_access")
     
-    @staticmethod
-    def get_json_application() -> Dict[str, Any]:
+    def get_json_application(self) -> Dict[str, Any]:
         """
-        JSON Application Logs with built-in parser (highest performance)
+        JSON Application Logs from YAML config (highest performance)
         Expected THG: 500+ EPS using parse_json built-in
         """
-        return {
-            "sources": {
-                "app_logs": {
-                    "type": "demo_logs",
-                    "format": "json"
-                }
-            },
-            "transforms": {
-                "parse_json_app": {
-                    "type": "remap",
-                    "source": '''
-                    message_str = to_string(.message) ?? ""
-                    parsed, err = parse_json(message_str)
-                    if err == null {
-                        .timestamp = parsed.timestamp
-                        .level = parsed.level
-                        .service = parsed.service
-                        .request_id = parsed.request_id
-                        .duration_ms = to_int(parsed.duration) ?? 0
-                        .user_id = parsed.user_id
-                        .component = parsed.component
-                        .message_text = parsed.message
-                        
-                        # Performance optimization: cache frequently accessed fields
-                        .log_level = parsed.level
-                        .service_name = parsed.service
-                    }
-                    '''
-                }
-            },
-            "sinks": {
-                "parsed_output": {
-                    "type": "console",
-                    "encoding": {"codec": "json"}
-                }
-            }
-        }
+        return self._load_yaml_config("json_application")
     
-    @staticmethod
-    def get_kubernetes_pods() -> Dict[str, Any]:
+    def get_kubernetes_pods(self) -> Dict[str, Any]:
         """
-        Kubernetes Pod Logs with namespace and container parsing
+        Kubernetes Pod Logs from YAML config
         Expected THG: 300+ EPS with K8s metadata extraction
         """
-        return {
-            "sources": {
-                "k8s_logs": {
-                    "type": "demo_logs",
-                    "format": "text"
-                }
-            },
-            "transforms": {
-                "parse_k8s": {
-                    "type": "remap", 
-                    "source": '''
-                    message_str = to_string(.message) ?? ""
-                    
-                    # K8s log format: timestamp level [component] message
-                    parts = split(message_str, " ")
-                    if length(parts) >= 4 {
-                        .timestamp = strip_whitespace(to_string(parts[0]))
-                        .level = strip_whitespace(to_string(parts[1]))
-                        
-                        # Extract component from [component] format
-                        component_raw = strip_whitespace(to_string(parts[2]))
-                        .component = replace(replace(component_raw, "[", ""), "]", "")
-                        
-                        # Join remaining parts as message
-                        message_parts = slice!(parts, 3)
-                        .log_message = join!(message_parts, " ")
-                        
-                        # K8s specific fields  
-                        .kubernetes_namespace = "default"  # Would be extracted from context
-                        .container_name = .component
-                        .pod_name = .component + "-pod"
-                    }
-                    '''
-                }
-            },
-            "sinks": {
-                "parsed_output": {
-                    "type": "console",
-                    "encoding": {"codec": "json"}
-                }
-            }
-        }
+        return self._load_yaml_config("kubernetes_pods")
     
-    @staticmethod
-    def get_docker_container() -> Dict[str, Any]:
+    def get_docker_container(self) -> Dict[str, Any]:
         """
-        Docker Container Logs with container ID and name extraction
+        Docker Container Logs from YAML config
         Expected THG: 400+ EPS with optimized container parsing
         """
-        return {
-            "sources": {
-                "docker_logs": {
-                    "type": "demo_logs",
-                    "format": "text"
-                }
-            },
-            "transforms": {
-                "parse_docker": {
-                    "type": "remap",
-                    "source": '''
-                    message_str = to_string(.message) ?? ""
-                    
-                    # Docker log format: timestamp container_id[container_name]: message
-                    # Extract container info and message efficiently
-                    if contains(message_str, "[") && contains(message_str, "]:") {
-                        # Split on container delimiter
-                        before_bracket = split(message_str, "[")[0] ?? ""
-                        after_bracket = split(message_str, "]: ")[1] ?? ""
-                        container_part = split(split(message_str, "[")[1] ?? "", "]")[0] ?? ""
-                        
-                        # Parse timestamp and container ID from before bracket
-                        timestamp_parts = split(before_bracket, " ")
-                        .timestamp = strip_whitespace(to_string(timestamp_parts[0]))
-                        .container_id = strip_whitespace(to_string(timestamp_parts[1]))
-                        
-                        # Container name from bracket content
-                        .container_name = strip_whitespace(container_part)
-                        
-                        # Log message after ]: 
-                        .log_message = strip_whitespace(after_bracket)
-                        
-                        .source_type = "docker"
-                    }
-                    '''
-                }
-            },
-            "sinks": {
-                "parsed_output": {
-                    "type": "console",
-                    "encoding": {"codec": "json"}
-                }
-            }
-        }
+        return self._load_yaml_config("docker_container")
     
     @staticmethod
     def list_available_patterns() -> List[str]:
@@ -318,18 +131,18 @@ class ProductionPatterns:
 # Convenience exports for easy access
 production_patterns = ProductionPatterns()
 
-# Direct pattern access
+# Direct pattern access (instance methods)
 def get_apache_combined():
-    return ProductionPatterns.get_apache_combined()
+    return production_patterns.get_apache_combined()
 
 def get_nginx_access():
-    return ProductionPatterns.get_nginx_access()
+    return production_patterns.get_nginx_access()
 
 def get_json_application():
-    return ProductionPatterns.get_json_application()
+    return production_patterns.get_json_application()
 
 def get_kubernetes_pods():
-    return ProductionPatterns.get_kubernetes_pods()
+    return production_patterns.get_kubernetes_pods()
 
 def get_docker_container():
-    return ProductionPatterns.get_docker_container()
+    return production_patterns.get_docker_container()

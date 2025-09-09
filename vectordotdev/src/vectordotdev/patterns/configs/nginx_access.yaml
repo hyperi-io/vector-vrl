@@ -1,0 +1,41 @@
+# Nginx Access Logs - Optimized for 400+ THG Performance  
+# 9-field extraction with method/path parsing
+
+sources:
+  nginx_logs:
+    type: stdin
+    
+transforms:
+  parse_nginx_access:
+    type: remap
+    source: |
+      message_str = to_string(.message) ?? ""
+      parts = split(message_str, " ")
+      
+      if length(parts) >= 9 {
+          .remote_addr = strip_whitespace(to_string(parts[0]))
+          .remote_user = strip_whitespace(to_string(parts[1]))
+          .time_local = strip_whitespace(to_string(parts[2]) + " " + to_string(parts[3]))
+          .request = strip_whitespace(to_string(parts[4]) + " " + to_string(parts[5]) + " " + to_string(parts[6]))
+          .status = to_int(parts[7]) ?? 0
+          .body_bytes_sent = to_int(parts[8]) ?? 0
+          
+          # Extract method and path from request efficiently
+          request_parts = split(.request, " ")
+          if length(request_parts) >= 2 {
+              .method = strip_whitespace(to_string(request_parts[0]))
+              .path = strip_whitespace(to_string(request_parts[1]))
+              .http_version = strip_whitespace(to_string(request_parts[2]) ?? "HTTP/1.1")
+          }
+          
+          # Performance optimization  
+          .log_type = "nginx_access"
+          .server_type = "nginx"
+      }
+
+sinks:
+  console_output:
+    type: console
+    inputs: ["parse_nginx_access"]
+    encoding:
+      codec: json

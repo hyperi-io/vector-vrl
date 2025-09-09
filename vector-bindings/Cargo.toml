@@ -16,6 +16,15 @@ serde = { version = "1.0.219", default-features = false, features = ["derive", "
 serde_json = { version = "1.0.142", default-features = false, features = ["std"] }
 tokio = { version = "1.45.1", default-features = false, features = ["full"] }
 chrono = { version = "0.4", features = ["serde"] }
+# Vector integration for native execution
+vector = { path = "../vector", default-features = false, features = [
+    "sources-file",
+    "sinks-file", 
+    "sinks-console",
+    "transforms-remap"
+] }
+vector-lib = { path = "../vector/lib/vector-lib" }
+yaml-rust2 = "0.8"
 
 [build-dependencies]
 pyo3-build-config = "0.22"

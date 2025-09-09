@@ -2,9 +2,36 @@
 
 **Stage 3 of the 4-component architecture**
 
-## 🎯 **Purpose**
+## 🎯 **Core Purpose: Native In-App Vector Execution**
 
-The `/vectordotdev` directory contains the **Python integration layer** with PyO3 bindings, the regex2vrl conversion tool, and comprehensive testing infrastructure.
+The `/vectordotdev` directory provides **native in-app Vector execution** for Python applications. This is the primary goal of the entire project: eliminating subprocess calls and enabling direct Vector runtime integration.
+
+### **Primary Capabilities:**
+1. **Native Vector Execution**: Execute Vector pipelines directly in Python process (no subprocess)
+2. **YAML/TOML Config Support**: Supply Vector configurations as Python dictionaries or files  
+3. **Native Error Handling**: Programmatic Vector/VRL error collection (no text parsing)
+4. **THG Performance Benchmarking**: Consistent scoring against test data for optimization
+5. **Embeddable Runtime**: Single PyPI package with full Vector capabilities
+
+### **Execution Model (Goal):**
+```python
+import vectordotdev
+
+# Native in-process Vector execution (no subprocess)
+config = {"sources": {...}, "transforms": {...}, "sinks": {...}}
+vector = vectordotdev.Vector(config)          # Configure pipeline
+vector.initialize()                           # Initialize runtime
+results = vector.process_logs(input_data)     # Process in-memory 
+errors = vector.get_errors()                  # Native error collection
+thg_score = vectordotdev.assess_vrl_performance(vrl, test_data)  # Benchmark
+```
+
+### **Benefits vs Command-line Vector:**
+- **10x+ Performance**: No subprocess/IPC overhead
+- **Memory Efficient**: Shared memory, no external process
+- **Error Handling**: Python exceptions instead of text parsing
+- **Programmatic**: Full Python control and automation  
+- **Deployment**: Single PyPI install, no external dependencies
 
 ## 🏗️ **Role in Build Pipeline**
 

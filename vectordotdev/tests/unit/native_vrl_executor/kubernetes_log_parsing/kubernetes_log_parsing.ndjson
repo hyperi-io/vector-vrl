@@ -1,0 +1,6 @@
+2023-09-08T12:00:00Z INFO [api-gateway] Starting HTTP server on port 8080
+2023-09-08T12:00:01Z ERROR [user-service] Database connection failed: timeout after 30s
+2023-09-08T12:00:02Z WARN [cache-service] Redis cluster node down, switching to backup
+2023-09-08T12:00:03Z DEBUG [db-migrator] Migration 'add_user_table' completed successfully
+2023-09-08T12:00:04Z INFO [api-auth] JWT token validated for user_456
+This is not a valid Kubernetes log format

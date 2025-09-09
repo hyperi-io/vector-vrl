@@ -42,3 +42,15 @@ test_scenarios:
     min_eps: 500
     min_thg_score: 400
     timeout_seconds: 30
+    
+  vrl_syntax_errors:
+    description: "Test VRL syntax error handling and structured error reporting"
+    expected_success: false
+    expected_error_types: ["vrl_syntax"]  # VRL syntax validation produces vrl_syntax errors
+    should_fail: true
+    
+  vrl_runtime_errors:
+    description: "Test VRL runtime error handling during execution"
+    expected_events: 5
+    expected_errors_count: 0  # Should handle errors gracefully, not fail
+    min_processed_events: 3

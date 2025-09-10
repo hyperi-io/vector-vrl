@@ -203,11 +203,13 @@ class ProductionPatternTestRunner:
         
         try:
             # Run Vector process
-            process = subprocess.Popen([
-                str(self.vector_binary),
-                "--config", str(config_path),
-                "--quiet" if not self.verbose else "--log-level", "info"
-            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            cmd = [str(self.vector_binary), "--config", str(config_path)]
+            if not self.verbose:
+                cmd.append("--quiet")
+            else:
+                cmd.append("-v")  # Use -v for verbose instead of --log-level info
+            
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             
             # Let Vector process the data
             time.sleep(4)

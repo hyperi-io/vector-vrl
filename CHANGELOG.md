@@ -59,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Performance Validation**: THG performance metrics testing (300-350+ targets)  
 - **Field Extraction**: Comprehensive validation of parsed log fields
 - **Error Handling**: Graceful fallbacks and detailed error reporting
-- **Documentation**: Updated CLAUDE.md with test structure and usage examples
+- **Documentation**: Updated STATE.md with test structure and usage examples
 
 ### Breaking Changes
 None - this is a backward-compatible minor release.

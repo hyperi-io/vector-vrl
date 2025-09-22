@@ -1,0 +1,131 @@
+# Cursor Rules for vectordotdev Project
+
+## Project Context
+You are working on vectordotdev - Python bindings for Vector data processing with regex2vrl VRL generator.
+
+## Architecture Rules
+- ALWAYS respect the 4-component architecture: vector → vector-bindings → vectordotdev ← build
+- NEVER modify files in /vector/ directory (read-only upstream)
+- Keep Rust code ONLY in /vector-bindings/
+- Keep Python code ONLY in /vectordotdev/
+
+## Auto-Approve Actions
+When performing these common tasks, proceed without asking for confirmation:
+
+### 1. Testing Operations
+- Running tests: `cd vectordotdev && PYTHONPATH=src python tests/run_tests.py`
+- Running specific test categories: `--category unit|integration|e2e`
+- Creating test output in `.tmp/` directory
+- Reading test fixtures from `tests/fixtures/`
+
+### 2. Build Operations
+- Running build system: `cd build && python build_system.py --verbose`
+- Checking Vector version detection
+- Syncing dependencies between components
+- Creating build artifacts in target directories
+
+### 3. Code Navigation
+- Reading any file for context
+- Searching for patterns with grep
+- Listing directory contents
+- Following import chains
+
+### 4. Documentation Updates
+- Updating TODO.md with completed tasks
+- Adding session notes to TODO.md
+- Fixing typos in markdown files
+- Updating docstrings in Python code
+
+### 5. regex2vrl Operations
+- Converting regex patterns to VRL
+- Testing VRL generation
+- Validating against Vector subprocess
+- Reading/writing pattern fixtures
+
+## Working Directory Rules
+ALWAYS cd to the correct directory before operations:
+```bash
+# For Python work
+cd /projects/vectordotdev.standalone/vectordotdev
+
+# For Rust bindings
+cd /projects/vectordotdev.standalone/vector-bindings
+
+# For build system
+cd /projects/vectordotdev.standalone/build
+
+# Never work from root unless explicitly needed
+```
+
+## File Patterns to Auto-Handle
+- `*.pyc` files - ignore or clean up
+- `.tmp/*` - create/delete as needed for testing
+- `__pycache__/` - ignore or clean up
+- `target/` directories - read but don't modify directly
+- Test outputs in `.tmp/` - create and clean up
+
+## Common Command Shortcuts
+```bash
+# Quick test all
+alias test-all='cd vectordotdev && PYTHONPATH=src python tests/run_tests.py'
+
+# Quick test unit
+alias test-unit='cd vectordotdev && PYTHONPATH=src python tests/run_tests.py --category unit'
+
+# Quick build
+alias build-all='cd build && python build_system.py --verbose'
+
+# Quick regex2vrl test
+alias test-vrl='cd vectordotdev && PYTHONPATH=src python tests/unit/test_regex2vrl_subprocess.py'
+```
+
+## Error Handling Patterns
+When encountering these errors, apply the fix automatically:
+
+1. **Import errors in tests**: Add `PYTHONPATH=src` prefix
+2. **Vector binary not found**: Check `/vector/target/release/vector` exists
+3. **Temp directory issues**: Create `.tmp/` in project root
+4. **Dependency sync needed**: Run `cd build && python dependency_sync.py vector-bindings`
+
+## Code Style Rules
+- Python: Follow PEP 8, use type hints
+- Rust: Follow rustfmt standards
+- Tests: Descriptive names, docstrings for complex tests
+- Comments: Explain WHY, not WHAT
+
+## Performance Targets
+- regex2vrl: Must achieve 350+ THG rating
+- Tests: Should complete in <30 seconds per category
+- Build: Full 3-stage build should complete in <10 minutes
+
+## State Management
+- ALWAYS read STATE.md first for project status
+- ALWAYS check TODO.md for current tasks
+- ALWAYS update TODO.md after completing tasks
+- Reference PROJECT_STRUCTURE.md for architecture questions
+
+## Testing Philosophy
+- NO MOCKS - use real Vector subprocess for validation
+- Test with production patterns from fixtures
+- Validate THG performance metrics
+- Ensure field extraction accuracy
+
+## Common Workflows
+
+### Adding a New Pattern
+1. Add pattern to `tests/fixtures/test_patterns/`
+2. Add test data to `tests/fixtures/test_data/`
+3. Run unit tests to validate
+4. Update documentation if needed
+
+### Debugging Failed Tests
+1. Check `.tmp/` for test outputs
+2. Verify Vector binary exists
+3. Check pattern syntax in fixtures
+4. Run with --verbose flag
+
+### Updating Dependencies
+1. Let build system auto-detect Vector version
+2. Run dependency sync if needed
+3. Test with multiple Vector versions
+4. Document any compatibility issues

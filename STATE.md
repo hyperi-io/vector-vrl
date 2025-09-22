@@ -1,16 +1,19 @@
-# vectordotdev Claude Code Guide
+# vectordotdev Project State Guide
 
 **🚨 READ FIRST**: [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) + [TODO.md](TODO.md)
+
+## AI Assistant Compatibility
+This guide works with: **Cursor**, **Claude Code**, **Claude.ai**, **ChatGPT**, and other AI coding assistants.
 
 ## Project Core
 Python extension (Rust) for **native Vector execution** - no subprocess, direct PyO3 integration.
 
 **Goals**: YAML/TOML config → in-process Vector → native errors → THG benchmarking
 
-## Session Rules
+## Session Rules (All AI Assistants)
 1. Read [TODO.md](TODO.md) for current tasks
 2. Work in component dirs (see PROJECT_STRUCTURE.md)  
-3. Track progress with TodoWrite → TODO.md
+3. Track progress by updating TODO.md
 4. Use component isolation: `cd vectordotdev && PYTHONPATH=src`
 
 ## Status (v1.0.5)
@@ -29,16 +32,16 @@ Python extension (Rust) for **native Vector execution** - no subprocess, direct 
 ### Work Directories (CRITICAL)
 ```bash
 # Vector (rarely needed)
-cd /projects/vectordotdev/vector && cargo build --release
+cd /projects/vectordotdev.standalone/vector && cargo build --release
 
 # Rust bindings  
-cd /projects/vectordotdev/vector-bindings && maturin develop
+cd /projects/vectordotdev.standalone/vector-bindings && maturin develop
 
 # Python package (most common)
-cd /projects/vectordotdev/vectordotdev && PYTHONPATH=src python tests/run_tests.py
+cd /projects/vectordotdev.standalone/vectordotdev && PYTHONPATH=src python tests/run_tests.py
 
 # Build system
-cd /projects/vectordotdev/build && python build_system.py
+cd /projects/vectordotdev.standalone/build && python build_system.py
 ```
 
 ### Quick Tasks
@@ -93,3 +96,26 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for complete details:
 - **Config**: dynaconf, `VECTORDOTDEV_` env prefix
 - **Python paths**: `PYTHONPATH=src` for vectordotdev testing
 - **Component isolation**: Always `cd` to component directory first
+
+## AI Assistant Tips
+
+### For Cursor Users
+- Use Cmd+K (Mac) / Ctrl+K (Windows/Linux) for inline edits
+- Use @ symbols to reference files and symbols
+- Composer mode for multi-file edits
+
+### For Claude Code Users
+- Use the integrated terminal for commands
+- Multiple file edits in single response supported
+
+### For ChatGPT/Claude.ai Users
+- Copy-paste commands to your local terminal
+- Request full file contents when needed
+- Use step-by-step instructions for complex tasks
+
+### Universal Best Practices
+1. Always check TODO.md first for current tasks
+2. Update TODO.md after completing tasks
+3. Follow the 4-component architecture strictly
+4. Test changes with real Vector subprocess validation
+5. Use absolute paths when switching directories

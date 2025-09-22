@@ -1,0 +1,152 @@
+{
+  "templates": [
+    {
+      "name": "Add Production Pattern",
+      "description": "Add a new production log pattern with tests",
+      "files": [
+        "tests/fixtures/test_patterns/production_patterns.yaml",
+        "tests/fixtures/test_data/${pattern_name}_logs.json",
+        "tests/unit/test_${pattern_name}.py"
+      ],
+      "instructions": "Add pattern ${pattern_name} with regex ${regex}, sample logs, and unit tests. Validate 350+ THG performance.",
+      "autoApprove": true
+    },
+    {
+      "name": "Fix Failing Test",
+      "description": "Debug and fix a failing test",
+      "files": [
+        "${test_file}",
+        "tests/fixtures/**/*",
+        ".tmp/**/*"
+      ],
+      "instructions": "Debug test failure in ${test_file}. Check Vector binary, temp directories, and pattern syntax. Run with verbose output.",
+      "autoApprove": true
+    },
+    {
+      "name": "Optimize VRL Performance",
+      "description": "Optimize VRL code for better THG rating",
+      "files": [
+        "src/vectordotdev/regex2vrl/working_vrl_engine.py",
+        "src/vectordotdev/regex2vrl/core.py",
+        "tests/unit/test_regex2vrl_subprocess.py"
+      ],
+      "instructions": "Optimize ${pattern} for 350+ THG. Replace regex with built-ins, use split/contains, minimize parsing.",
+      "autoApprove": true
+    },
+    {
+      "name": "Build and Test",
+      "description": "Run complete build and test cycle",
+      "files": [
+        "build/build_system.py",
+        "TODO.md"
+      ],
+      "instructions": "Run 3-stage build, execute all tests, update TODO.md with results.",
+      "autoApprove": true
+    },
+    {
+      "name": "Update Documentation",
+      "description": "Update project documentation",
+      "files": [
+        "STATE.md",
+        "TODO.md",
+        "README.md",
+        "CHANGELOG.md"
+      ],
+      "instructions": "Update documentation for ${change_description}. Update version, add to changelog, update TODO.",
+      "autoApprove": false
+    },
+    {
+      "name": "Sync Dependencies",
+      "description": "Synchronize dependencies between components",
+      "files": [
+        "vector-bindings/Cargo.toml",
+        "build/dependency_sync.py"
+      ],
+      "instructions": "Sync Vector dependencies to vector-bindings. Run dependency_sync.py and rebuild.",
+      "autoApprove": true
+    },
+    {
+      "name": "Performance Report",
+      "description": "Generate performance report for all patterns",
+      "files": [
+        "tests/fixtures/test_patterns/production_patterns.yaml",
+        "tests/unit/test_regex2vrl_subprocess.py",
+        "TODO.md"
+      ],
+      "instructions": "Test all patterns, measure THG scores, generate performance report, update TODO.",
+      "autoApprove": true
+    },
+    {
+      "name": "Vector Version Update",
+      "description": "Test with new Vector version",
+      "files": [
+        "build/vector_detection.py",
+        "build/build_system.py",
+        "TODO.md"
+      ],
+      "instructions": "Test with Vector ${version}. Run build, test compatibility, document issues.",
+      "autoApprove": true
+    },
+    {
+      "name": "Create Test Fixture",
+      "description": "Create new test fixture for pattern",
+      "files": [
+        "tests/fixtures/test_patterns/${category}.yaml",
+        "tests/fixtures/test_data/${category}/${pattern}.json"
+      ],
+      "instructions": "Create fixture for ${pattern} with sample logs and expected output. Include THG target.",
+      "autoApprove": true
+    },
+    {
+      "name": "Debug Import Error",
+      "description": "Fix Python import issues",
+      "files": [
+        "${error_file}",
+        "src/vectordotdev/__init__.py",
+        "src/vectordotdev/regex2vrl/__init__.py"
+      ],
+      "instructions": "Fix import error in ${error_file}. Check PYTHONPATH, __init__.py files, and module structure.",
+      "autoApprove": true
+    }
+  ],
+  "variables": {
+    "pattern_name": {
+      "type": "string",
+      "description": "Name of the log pattern (e.g., apache_combined, nginx_access)"
+    },
+    "regex": {
+      "type": "string",
+      "description": "Regular expression pattern"
+    },
+    "test_file": {
+      "type": "file",
+      "description": "Path to the failing test file"
+    },
+    "pattern": {
+      "type": "string",
+      "description": "Pattern to optimize"
+    },
+    "change_description": {
+      "type": "string",
+      "description": "Description of documentation changes"
+    },
+    "version": {
+      "type": "string",
+      "description": "Vector version (e.g., v0.49.0)"
+    },
+    "category": {
+      "type": "string",
+      "description": "Test category (e.g., web_servers, databases, cloud)"
+    },
+    "error_file": {
+      "type": "file",
+      "description": "File with import error"
+    }
+  },
+  "globalSettings": {
+    "autoSave": true,
+    "formatOnSave": true,
+    "runTestsAfterChange": true,
+    "updateTodoOnComplete": true
+  }
+}

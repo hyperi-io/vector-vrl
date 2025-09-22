@@ -1,0 +1,156 @@
+{
+    "projectName": "vectordotdev",
+    "description": "Python bindings for Vector with regex2vrl VRL generator",
+    "autoApprove": {
+        "enabled": true,
+        "patterns": [
+            "cd vectordotdev && PYTHONPATH=src python tests/**",
+            "cd build && python *.py",
+            "grep -r",
+            "find . -name",
+            "ls -la",
+            "cat *.md",
+            "mkdir -p .tmp/**",
+            "rm -rf .tmp/**",
+            "python -m pytest",
+            "cargo check",
+            "cargo build",
+            "maturin develop"
+        ],
+        "fileOperations": {
+            "autoCreate": [
+                ".tmp/**/*",
+                "tests/fixtures/**/*.yaml",
+                "tests/fixtures/**/*.json"
+            ],
+            "autoUpdate": [
+                "TODO.md",
+                "*.md",
+                "**/*.py",
+                "tests/**/*.py"
+            ],
+            "readOnly": [
+                "vector/**/*",
+                "target/**/*",
+                "*.lock"
+            ]
+        }
+    },
+    "contextRules": {
+        "alwaysInclude": [
+            "STATE.md",
+            "TODO.md",
+            "PROJECT_STRUCTURE.md"
+        ],
+        "componentContext": {
+            "vectordotdev": [
+                "src/vectordotdev/regex2vrl/core.py",
+                "src/vectordotdev/regex2vrl/working_vrl_engine.py",
+                "tests/fixtures/test_patterns/production_patterns.yaml"
+            ],
+            "vector-bindings": [
+                "src/lib.rs",
+                "Cargo.toml"
+            ],
+            "build": [
+                "build_system.py",
+                "vector_detection.py",
+                "dependency_sync.py"
+            ]
+        }
+    },
+    "commands": {
+        "test": {
+            "all": "cd vectordotdev && PYTHONPATH=src python tests/run_tests.py",
+            "unit": "cd vectordotdev && PYTHONPATH=src python tests/run_tests.py --category unit",
+            "integration": "cd vectordotdev && PYTHONPATH=src python tests/run_tests.py --category integration",
+            "e2e": "cd vectordotdev && PYTHONPATH=src python tests/run_tests.py --category e2e",
+            "vrl": "cd vectordotdev && PYTHONPATH=src python tests/unit/test_regex2vrl_subprocess.py --verbose"
+        },
+        "build": {
+            "all": "cd build && python build_system.py --verbose",
+            "vector": "cd vector && cargo build --release",
+            "bindings": "cd vector-bindings && maturin develop",
+            "python": "cd vectordotdev && pip install -e .",
+            "clean": "rm -rf .tmp/* */target */build */__pycache__"
+        },
+        "dev": {
+            "regex2vrl": "cd vectordotdev && PYTHONPATH=src python -c 'from vectordotdev.regex2vrl import RegexToVRL; r = RegexToVRL()'",
+            "check-vector": "ls -la vector/target/release/vector",
+            "sync-deps": "cd build && python dependency_sync.py vector-bindings"
+        }
+    },
+    "snippets": {
+        "test-pattern": {
+            "description": "Test a regex pattern conversion",
+            "body": [
+                "from vectordotdev.regex2vrl import RegexToVRL",
+                "converter = RegexToVRL()",
+                "regex = r'${1:pattern}'",
+                "vrl = converter.convert(regex)",
+                "print(vrl)"
+            ]
+        },
+        "run-vector": {
+            "description": "Run Vector with test config",
+            "body": [
+                "config = '''",
+                "[sources.test]",
+                "type = \"stdin\"",
+                "",
+                "[transforms.parse]",
+                "type = \"remap\"",
+                "inputs = [\"test\"]",
+                "source = '''${1:vrl_code}'''",
+                "",
+                "[sinks.output]",
+                "type = \"console\"",
+                "inputs = [\"parse\"]",
+                "encoding.codec = \"json\"",
+                "'''"
+            ]
+        }
+    },
+    "workspaceLayout": {
+        "primaryFocus": "vectordotdev",
+        "openByDefault": [
+            "STATE.md",
+            "TODO.md"
+        ],
+        "foldByDefault": [
+            "vector/",
+            "*/target/",
+            "*/__pycache__/"
+        ]
+    },
+    "aiAssistant": {
+        "defaultPrompts": {
+            "explainArchitecture": "Explain the 4-component architecture and dependency flow",
+            "testPattern": "Test this regex pattern with regex2vrl and validate with Vector",
+            "debugTest": "Debug why this test is failing, check Vector binary and temp files",
+            "addPattern": "Add a new production pattern to the test fixtures"
+        },
+        "contextWindow": {
+            "includeTests": true,
+            "includeFixtures": true,
+            "excludeVendor": true,
+            "excludeBuildArtifacts": true
+        }
+    },
+    "validation": {
+        "preCommit": [
+            "cd vectordotdev && PYTHONPATH=src python tests/run_tests.py --category unit",
+            "cd build && python build_system.py --test-flow"
+        ],
+        "autoFix": {
+            "imports": true,
+            "formatting": true,
+            "types": true
+        }
+    },
+    "environment": {
+        "PYTHONPATH": "src",
+        "VECTORDOTDEV_TEMP_DIR": ".tmp",
+        "RUST_BACKTRACE": "1"
+    }
+}

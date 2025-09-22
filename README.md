@@ -236,7 +236,7 @@ vectordotdev/
 ├── pyproject.toml       # Python package configuration
 ├── LICENSE              # Apache 2.0 License
 ├── README.md           # This file
-└── CLAUDE.md          # Development guide
+└── STATE.md           # Project state and AI assistant guide
 ```
 
 ### Source Code Architecture

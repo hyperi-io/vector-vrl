@@ -59,7 +59,7 @@ class VectorSubprocessUnitTester:
         if not self.vector_binary:
             return False, []
         
-        # Use project temp directory per CLAUDE.md policy
+        # Use project temp directory per STATE.md policy
         project_temp = Path(".tmp") / f"vector_{test_name}_{int(time.time())}"
         project_temp.mkdir(parents=True, exist_ok=True)
         

@@ -36,7 +36,7 @@ class VectorDotDevTestRunner:
     
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
-        # Use project-relative temp directory per CLAUDE.md policy
+        # Use project-relative temp directory per STATE.md policy
         self.temp_dir = Path(".tmp") / f"vectordotdev_test_{int(__import__('time').time())}"
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.results = {"passed": 0, "failed": 0, "tests": []}

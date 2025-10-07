@@ -1,0 +1,1 @@
+../../modules/hypersec-forge-core/scripts/bootstrap.d/15-jfrog-pip-config.py

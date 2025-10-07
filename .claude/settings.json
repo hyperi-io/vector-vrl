@@ -1,0 +1,114 @@
+{
+  "env": {
+    "ANTHROPIC_MODEL": "opusplan",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "8192",
+    "MAX_THINKING_TOKENS": "16000",
+    "DISABLE_NON_ESSENTIAL_MODEL_CALLS": "1",
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
+    "USE_BUILTIN_RIPGREP": "0",
+    "DISABLE_COST_WARNINGS": "1"
+  },
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch",
+      "Read(**)",
+      "Write(**)",
+      "Edit(**)",
+      "Glob",
+      "Grep",
+      "LS",
+      "Search",
+      "Find",
+      "Bash(.tmp/*)",
+      "Bash(mkdir .tmp *)",
+      "Bash(rm .tmp/*)",
+      "Bash(rm -rf .tmp/*)",
+      "Bash(chmod +x .tmp/*)",
+      "Bash(sh .tmp/*)",
+      "Bash(bash .tmp/*)",
+      "Bash(python .tmp/*)",
+      "Bash(ls *)",
+      "Bash(pwd)",
+      "Bash(echo *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(which *)",
+      "Bash(whoami)",
+      "Bash(env)",
+      "Bash(printenv *)",
+      "Bash(jq *)",
+      "Bash(sed *)",
+      "Bash(awk *)",
+      "Bash(sort *)",
+      "Bash(uniq *)",
+      "Bash(wc *)",
+      "Bash(zip *)",
+      "Bash(unzip *)",
+      "Bash(tar *)",
+      "Bash(gzip *)",
+      "Bash(gunzip *)",
+      "Bash(bzip2 *)",
+      "Bash(bunzip2 *)",
+      "Bash(xz *)",
+      "Bash(unxz *)",
+      "Bash(docker *)",
+      "Bash(docker-compose *)",
+      "Bash(kubectl *)",
+      "Bash(git *)",
+      "Bash(jf *)",
+      "Bash(gh *)",
+      "Bash(.venv-ci/*)",
+      "Bash(cd *)",
+      "Bash(export *)",
+      "Bash(source *)",
+      "Bash(.venv/*)",
+      "Bash(python *)",
+      "Bash(pip *)",
+      "Bash(uv *)",
+      "Bash(poetry *)",
+      "Bash(pytest *)",
+      "Bash(black *)",
+      "Bash(flake8 *)",
+      "Bash(mypy *)",
+      "Bash(ruff *)"
+    ],
+    "deny": [
+      "Bash(sudo *)",
+      "Bash(su *)",
+      "Bash(chmod 777 *)",
+      "Bash(dd *)",
+      "Bash(mkfs *)",
+      "Bash(:|:*)",
+      "Bash(curl * | sh *)",
+      "Bash(curl * | bash *)",
+      "Bash(wget * | sh *)",
+      "Bash(wget * | bash *)"
+    ],
+    "ask": [
+      "Bash(* && *)",
+      "Bash(* || *)",
+      "Bash(* ; *)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(rm *)",
+      "Bash(rm -rf *)",
+      "Bash(mv *)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'if [ -f STATE.md ]; then echo \"=== PROJECT STATE ===\"  && cat STATE.md; elif [ -f CLAUDE.md ]; then echo \"=== PROJECT CONTEXT ===\" && cat CLAUDE.md; fi; if [ -f TODO.md ]; then echo \"\" && echo \"=== TODO LIST ===\" && cat TODO.md; fi'"
+          }
+        ]
+      }
+    ]
+  }
+}

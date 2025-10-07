@@ -1,0 +1,66 @@
+# Apache/Nginx Access Log Parser
+# Parses common web server log formats and extracts structured fields
+
+# Parse Apache/Nginx access log format
+# Format: IP - - [timestamp] "METHOD path PROTOCOL" status bytes
+if exists(.raw_log) && is_string(.raw_log) {
+    parsed, parse_err = parse_regex(
+        .raw_log,
+        r'^(?P<ip>\S+) \S+ \S+ \[(?P<timestamp>[^\]]+)\] "(?P<method>\S+) (?P<path>\S+) (?P<protocol>\S+)" (?P<status>\d+) (?P<bytes>\d+)'
+    )
+
+    if is_null(parse_err) && !is_null(parsed) {
+        .client_ip = parsed.ip
+        .request_method = parsed.method
+        .request_path = parsed.path
+        .http_protocol = parsed.protocol
+        .status_code = to_int(parsed.status) ?? 0
+        .response_bytes = to_int(parsed.bytes) ?? 0
+        .raw_timestamp = parsed.timestamp
+
+        # Parse timestamp: 01/Jan/2025:10:30:45 +0000
+        .timestamp, ts_err = parse_timestamp(parsed.timestamp, "%d/%b/%Y:%H:%M:%S %z")
+        if !is_null(ts_err) {
+            .timestamp = now()
+        }
+
+        # Remove raw log after parsing
+        del(.raw_log)
+
+        # Add metadata
+        .log_type = "access_log"
+        .parsed = true
+
+        # Classify HTTP status code (safe to do now since we just set it)
+        status = .status_code
+        if status >= 500 {
+            .status_class = "server_error"
+            .severity = "error"
+        } else if status >= 400 {
+            .status_class = "client_error"
+            .severity = "warning"
+        } else if status >= 300 {
+            .status_class = "redirect"
+            .severity = "info"
+        } else if status >= 200 {
+            .status_class = "success"
+            .severity = "info"
+        } else {
+            .status_class = "unknown"
+            .severity = "info"
+        }
+    } else {
+        .parsed = false
+        .log_type = "unparsed"
+        if !is_null(parse_err) {
+            .parse_error = to_string(parse_err)
+        }
+    }
+} else {
+    # If no raw_log field, mark as pre-parsed
+    .parsed = false
+}
+
+# Add processing metadata
+.processed_at = now()
+.vrl_version = "log_parsing_v1"

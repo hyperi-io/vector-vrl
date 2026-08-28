@@ -8,17 +8,20 @@ import sys
 import json
 from pathlib import Path
 
+import pytest
+
 # Add vectordotdev to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-try:
-    from vectordotdev._bindings import execute_vrl, validate_vrl, get_vrl_performance
-    HAS_BINDINGS = True
-except ImportError as e:
-    print(f"❌ Error: Cannot import bindings: {e}")
-    print("Build bindings with: cd vector-bindings && .venv/bin/maturin develop --release")
-    HAS_BINDINGS = False
-    sys.exit(1)
+# pytest re-raises SystemExit as fatal rather than a per-module collection
+# error, so a bare sys.exit() here would take down the whole session when
+# the compiled bindings aren't built. importorskip skips just this module.
+pytest.importorskip(
+    "vectordotdev._bindings",
+    reason="compiled PyO3 bindings not built - run: cd vector-bindings && .venv/bin/maturin develop --release",
+)
+from vectordotdev._bindings import execute_vrl, validate_vrl, get_vrl_performance
+HAS_BINDINGS = True
 
 
 def test_basic_execution():

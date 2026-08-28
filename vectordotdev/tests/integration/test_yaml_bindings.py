@@ -1,219 +1,109 @@
-#!/usr/bin/env python3
-"""
-Test vectordotdev bindings with YAML config format.
-Ensures regex2vrl works with both TOML and YAML configs.
+"""Vector Python bindings accept both YAML and TOML config strings.
+
+Exercises the compiled `vector` PyO3 module directly (no subprocess) -
+mirrors the idiom in tests/integration/bindings.py. Skips when the
+compiled bindings are not built into the active environment.
 """
 
-import sys
+from __future__ import annotations
+
 import json
 import time
-import yaml
+from pathlib import Path
 
-# Add paths
-sys.path.insert(0, '/projects/vectordotdev/vectordotdev/.venv/lib/python3.13/site-packages')
-sys.path.insert(0, '/projects/vectordotdev')
+import pytest
 
-import vector
-from vectordotdev.regex2vrl.core import RegexToVRL
+vector = pytest.importorskip("vector")
+
+from vectordotdev.regex2vrl.core import RegexToVRL  # noqa: E402
+
+pytestmark = pytest.mark.integration
 
 
-def test_yaml_config():
-    """Test Vector with YAML configuration"""
-    
-    print("🧪 Testing YAML Config with Vector Bindings")
-    print("=" * 50)
-    
-    # Create YAML config
-    config_dict = {
-        "sources": {
-            "python": {
-                "type": "python"
-            }
-        },
-        "transforms": {
-            "yaml_test": {
-                "type": "remap",
-                "inputs": ["python"],
-                "source": """
-message_str = string!(.message)
-.yaml_processed = true
-.format = "yaml"
-if contains(message_str, "test") {
-    .contains_test = true
-}
+def _read_json_lines(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [json.loads(line) for line in lines]
+
+
+def _wait_for_output(path: Path, timeout: float = 5.0) -> list[dict]:
+    """Poll the sink's output file until it has content or the timeout expires."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        results = _read_json_lines(path)
+        if results:
+            return results
+        time.sleep(0.05)
+    return _read_json_lines(path)
+
+
+def test_vector_accepts_yaml_config(tmp_path: Path) -> None:
+    """A YAML-format config string is accepted by vector.Vector, same as TOML."""
+    output_file = tmp_path / "yaml_config_test.jsonl"
+    yaml_config = f"""
+sources:
+  python:
+    type: python
+transforms:
+  yaml_test:
+    type: remap
+    inputs: [python]
+    source: |
+      message_str = string!(.message)
+      .yaml_processed = true
+      .contains_test = contains(message_str, "test")
+sinks:
+  file:
+    type: file
+    inputs: [yaml_test]
+    path: "{output_file}"
+    encoding:
+      codec: json
 """
-            }
-        },
-        "sinks": {
-            "file": {
-                "type": "file",
-                "inputs": ["yaml_test"],
-                "path": "/tmp/yaml_config_test.txt",
-                "encoding": {
-                    "codec": "json"
-                }
-            }
-        }
-    }
-    
-    # Convert to YAML string
-    yaml_config = yaml.dump(config_dict, default_flow_style=False)
-    print("YAML Config:")
-    print(yaml_config)
-    
+    v = vector.Vector(yaml_config)
+    v.start()
     try:
-        # Test if Vector accepts YAML
-        v = vector.Vector(yaml_config)
-        v.start()
-        
-        data = json.dumps({"message": "yaml test message"}).encode()
-        v.send("python", data)
-        
-        time.sleep(1)
+        v.send("python", json.dumps({"message": "this is a test message"}).encode())
+        results = _wait_for_output(output_file)
+    finally:
         v.stop()
-        
-        # Check output
-        import os
-        if os.path.exists("/tmp/yaml_config_test.txt"):
-            with open("/tmp/yaml_config_test.txt") as f:
-                content = f.read()
-                print(f"✅ YAML config works! Output: {content}")
-                
-                # Validate
-                lines = [line.strip() for line in content.split('\n') if line.strip()]
-                if lines:
-                    result = json.loads(lines[0])
-                    if result.get("yaml_processed") == True:
-                        print("✅ YAML VRL processing confirmed!")
-                        return True
-        else:
-            print("❌ YAML config failed - no output")
-            
-    except Exception as e:
-        print(f"❌ YAML config error: {e}")
-        # If YAML fails, fall back to TOML
-        print("\n🔄 Trying TOML format as fallback...")
-        return test_toml_fallback()
-    
-    return False
+
+    assert len(results) == 1, f"expected one processed event, got {results}"
+    assert results[0]["yaml_processed"] is True
+    assert results[0]["contains_test"] is True
 
 
-def test_toml_fallback():
-    """Test with TOML format if YAML fails"""
-    
-    # Convert same config to TOML
-    toml_config = '''[sources.python]
-type = "python"
+def test_regex2vrl_simple_pattern_via_bindings(tmp_path: Path) -> None:
+    """A regex2vrl-generated VRL program runs correctly through the bindings."""
+    output_file = tmp_path / "simple_regex2vrl.jsonl"
+    vrl_code = RegexToVRL().convert(r"(?P<word>\w+)")
 
-[transforms.toml_test]  
-type = "remap"
-inputs = ["python"]
-source = """
-message_str = string!(.message)
-.toml_processed = true
-.format = "toml"
+    indented = "\n".join(f"      {line}" for line in vrl_code.split("\n"))
+    config = f"""
+sources:
+  python:
+    type: python
+transforms:
+  simple_regex2vrl:
+    type: remap
+    inputs: [python]
+    source: |
+{indented}
+sinks:
+  file:
+    type: file
+    inputs: [simple_regex2vrl]
+    path: "{output_file}"
+    encoding:
+      codec: json
 """
-
-[sinks.file]
-type = "file"
-inputs = ["toml_test"]
-path = "/tmp/toml_config_test.txt"
-encoding.codec = "json"
-'''
-    
+    v = vector.Vector(config)
+    v.start()
     try:
-        v = vector.Vector(toml_config)
-        v.start()
-        
-        data = json.dumps({"message": "toml test message"}).encode()
-        v.send("python", data)
-        
-        time.sleep(1)
+        v.send("python", json.dumps({"message": "hello world"}).encode())
+        results = _wait_for_output(output_file)
+    finally:
         v.stop()
-        
-        import os
-        if os.path.exists("/tmp/toml_config_test.txt"):
-            with open("/tmp/toml_config_test.txt") as f:
-                content = f.read()
-                print(f"✅ TOML config works! Output: {content}")
-                return True
-        else:
-            print("❌ TOML config also failed")
-            
-    except Exception as e:
-        print(f"❌ TOML config error: {e}")
-    
-    return False
 
-
-def test_regex2vrl_with_simple_pattern():
-    """Test regex2vrl with a simple pattern that should work"""
-    
-    print("\n🧪 Testing regex2vrl with Simple Pattern")
-    
-    # Use a simpler pattern that doesn't require regex functions
-    converter = RegexToVRL()
-    pattern = r'(?P<word>\w+)'  # Simple word extraction
-    vrl_code = converter.convert(pattern)
-    
-    print("Generated VRL:")
-    print(vrl_code)
-    
-    config = f'''[sources.python]
-type = "python"
-
-[transforms.simple_regex2vrl]
-type = "remap"
-inputs = ["python"]
-source = """
-{vrl_code}
-"""
-
-[sinks.file]
-type = "file"
-inputs = ["simple_regex2vrl"]
-path = "/tmp/simple_regex2vrl.txt"
-encoding.codec = "json"
-'''
-    
-    try:
-        v = vector.Vector(config)
-        v.start()
-        
-        data = json.dumps({"message": "hello world"}).encode()
-        v.send("python", data)
-        
-        time.sleep(1)
-        v.stop()
-        
-        import os
-        if os.path.exists("/tmp/simple_regex2vrl.txt"):
-            with open("/tmp/simple_regex2vrl.txt") as f:
-                content = f.read()
-                print(f"✅ Simple regex2vrl works! Output: {content}")
-                
-                lines = [line.strip() for line in content.split('\n') if line.strip()]
-                if lines:
-                    result = json.loads(lines[0])
-                    print(f"Parsed: {json.dumps(result, indent=2)}")
-                    return True
-        else:
-            print("❌ Simple regex2vrl failed")
-            
-    except Exception as e:
-        print(f"❌ Simple regex2vrl error: {e}")
-        import traceback
-        traceback.print_exc()
-    
-    return False
-
-
-if __name__ == '__main__':
-    test1 = test_yaml_config()
-    test2 = test_regex2vrl_with_simple_pattern()
-    
-    print(f"\n📊 Results:")
-    print(f"YAML config: {'✅' if test1 else '❌'}")
-    print(f"regex2vrl simple: {'✅' if test2 else '❌'}")
-    
-    sys.exit(0 if test1 or test2 else 1)
+    assert len(results) == 1, f"expected regex2vrl output for one event, got {results}"

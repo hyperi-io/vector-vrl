@@ -1,294 +1,134 @@
-#!/usr/bin/env python3
-"""
-Integration test that uses subprocess Vector validation first,
-then tests vectordotdev bindings. This ensures we validate regex2vrl
-with working Vector before testing the bindings.
+"""Cross-validate regex2vrl VRL: real Vector subprocess vs Python bindings.
+
+The subprocess run is the ground truth (uses `vector test` against a
+config-embedded unit test, via the shared `vector_runner` fixture - a
+real Vector binary or container, no mocks). The bindings run exercises
+the same generated VRL through the compiled `vector` PyO3 module and is
+only checked once the subprocess run has confirmed the VRL itself is
+sound.
 """
 
-import asyncio
+from __future__ import annotations
+
 import json
-import subprocess
-import sys
-import tempfile
 import time
 from pathlib import Path
 
-# Add paths
-sys.path.insert(0, '/projects/vectordotdev')
-sys.path.insert(0, '/projects/vectordotdev/vectordotdev/.venv/lib/python3.13/site-packages')
+import pytest
+import yaml
 
-import vector
 from vectordotdev.regex2vrl.core import RegexToVRL
 
+pytestmark = pytest.mark.integration
 
-class IntegrationTester:
-    """Integration tester using subprocess first, then bindings"""
-    
-    def __init__(self, verbose=False):
-        self.verbose = verbose
-        self.vector_binary = self._find_vector_binary()
-        self.results = {"subprocess": [], "bindings": []}
-    
-    def _find_vector_binary(self):
-        """Find Vector binary"""
-        for path in ["/usr/bin/vector", "/usr/local/bin/vector"]:
-            if Path(path).exists():
-                return path
-        try:
-            result = subprocess.run(["which", "vector"], capture_output=True, text=True, check=True)
-            return result.stdout.strip()
-        except subprocess.CalledProcessError:
-            return None
-    
-    def test_subprocess_vector_integration(self, pattern, test_logs, test_name):
-        """Test regex2vrl with subprocess Vector (ground truth)"""
-        
-        if self.verbose:
-            print(f"\n🔧 Subprocess Test: {test_name}")
-        
-        if not self.vector_binary:
-            print("   ⏭️ Skipped - No Vector binary")
-            return False
-        
-        try:
-            # Generate VRL
-            converter = RegexToVRL()
-            vrl_code = converter.convert(pattern)
-            
-            # Test with subprocess Vector
-            with tempfile.TemporaryDirectory(prefix="subprocess_test_") as temp_dir:
-                temp_path = Path(temp_dir)
-                
-                # Create Vector data directory
-                vector_data_dir = temp_path / "vector_data"
-                vector_data_dir.mkdir()
-                
-                # Create input file
-                input_file = temp_path / "input.log"
-                with open(input_file, 'w') as f:
-                    for log in test_logs:
-                        f.write(log + '\n')
-                
-                # Create Vector config (TOML format for subprocess Vector)
-                output_file = temp_path / "output.jsonl"
-                config_content = f'''
-data_dir = "{vector_data_dir}"
 
-[sources.file_input]
-type = "file"
-include = ["{input_file}"]
-read_from = "beginning"
-
-[transforms.test_transform]
-type = "remap"
-inputs = ["file_input"]
-source = """
-{vrl_code}
-"""
-
-[sinks.file_output]
-type = "file"
-inputs = ["test_transform"]
-path = "{output_file}"
-encoding.codec = "json"
-'''
-                
-                config_file = temp_path / "config.toml"
-                with open(config_file, 'w') as f:
-                    f.write(config_content)
-                
-                # Run Vector subprocess
-                process = subprocess.Popen([
-                    self.vector_binary,
-                    "--config", str(config_file),
-                    "--quiet"
-                ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                
-                time.sleep(3)
-                process.terminate()
-                stdout, stderr = process.communicate(timeout=5)
-                
-                # Check results
-                results = []
-                if output_file.exists():
-                    with open(output_file) as f:
-                        for line in f:
-                            if line.strip():
-                                try:
-                                    results.append(json.loads(line.strip()))
-                                except json.JSONDecodeError:
-                                    continue
-                
-                success = len(results) > 0
-                if self.verbose:
-                    print(f"   Subprocess: {'✅' if success else '❌'} - {len(results)}/{len(test_logs)} processed")
-                
-                self.results["subprocess"].append({
-                    "test": test_name,
-                    "success": success,
-                    "results_count": len(results),
-                    "input_count": len(test_logs)
-                })
-                
-                return success
-                
-        except Exception as e:
-            if self.verbose:
-                print(f"   ❌ Subprocess error: {e}")
-            return False
-    
-    def test_bindings_integration(self, pattern, test_logs, test_name):
-        """Test regex2vrl with vectordotdev bindings (after subprocess validation)"""
-        
-        if self.verbose:
-            print(f"      🔗 Bindings Test: {test_name}")
-        
-        try:
-            # Generate same VRL
-            converter = RegexToVRL()
-            vrl_code = converter.convert(pattern)
-            
-            # Create YAML config for bindings (TOML format for Vector bindings)
-            config = f'''[sources.python]
-type = "python"
-
-[transforms.test_transform]
-type = "remap"
-inputs = ["python"]
-source = """
-{vrl_code}
-"""
-
-[sinks.file]
-type = "file"
-inputs = ["test_transform"]
-path = "/tmp/bindings_{test_name}.txt"
-encoding.codec = "json"
-'''
-            
-            # Test with bindings
-            v = vector.Vector(config)
-            v.start()
-            
-            # Send same test data
-            for log in test_logs:
-                data = json.dumps({"message": log}).encode()
-                v.send("python", data)
-            
-            time.sleep(1)
-            v.stop()
-            
-            # Check output
-            import os
-            output_path = f"/tmp/bindings_{test_name}.txt"
-            if os.path.exists(output_path):
-                with open(output_path) as f:
-                    content = f.read().strip()
-                    if content:
-                        lines = [line.strip() for line in content.split('\n') if line.strip()]
-                        success = len(lines) > 0
-                        if self.verbose:
-                            print(f"      Bindings: {'✅' if success else '❌'} - {len(lines)} results")
-                        
-                        self.results["bindings"].append({
-                            "test": test_name,
-                            "success": success,
-                            "results_count": len(lines),
-                            "input_count": len(test_logs)
-                        })
-                        
-                        return success
-            
-            if self.verbose:
-                print(f"      Bindings: ❌ - No output")
-            
-            self.results["bindings"].append({
-                "test": test_name,
-                "success": False,
-                "results_count": 0,
-                "input_count": len(test_logs)
-            })
-            
-            return False
-            
-        except Exception as e:
-            if self.verbose:
-                print(f"      ❌ Bindings error: {e}")
-            return False
-    
-    def run_integration_tests(self):
-        """Run integration tests: subprocess first, then bindings"""
-        
-        print("🔗 Integration Test: Subprocess → Bindings Validation")
-        print("=" * 60)
-        print("Strategy: Validate with subprocess Vector first, then test bindings")
-        
-        # Test cases
-        test_cases = [
-            {
-                "name": "ip_extraction",
-                "pattern": r'(?P<ip>\d+\.\d+\.\d+\.\d+)',
-                "logs": ["Client IP: 192.168.1.100", "Server: 10.0.0.1"]
-            },
-            {
-                "name": "simple_word",
-                "pattern": r'(?P<word>\w+)',
-                "logs": ["hello world", "test message"]
+def _run_vector_unit_test(vector_runner, tmp_path: Path, vrl_source: str, message: str, condition: str):
+    """Run `vector test` against a config with one embedded unit test."""
+    config = {
+        "transforms": {
+            "under_test": {
+                "type": "remap",
+                "inputs": [],
+                "source": vrl_source,
             }
-            # Skip status pattern for now since it has VRL errors
-        ]
-        
-        for test_case in test_cases:
-            # Step 1: Validate with subprocess Vector (ground truth)
-            subprocess_success = self.test_subprocess_vector_integration(
-                test_case["pattern"], 
-                test_case["logs"], 
-                test_case["name"]
-            )
-            
-            # Step 2: Only test bindings if subprocess works
-            if subprocess_success:
-                bindings_success = self.test_bindings_integration(
-                    test_case["pattern"],
-                    test_case["logs"], 
-                    test_case["name"]
-                )
-            else:
-                if self.verbose:
-                    print(f"      ⏭️ Skipping bindings test - subprocess failed")
-    
-    def generate_report(self):
-        """Generate integration test report"""
-        
-        subprocess_passed = sum(1 for r in self.results["subprocess"] if r["success"])
-        subprocess_total = len(self.results["subprocess"])
-        
-        bindings_passed = sum(1 for r in self.results["bindings"] if r["success"]) 
-        bindings_total = len(self.results["bindings"])
-        
-        print(f"""
-
-Integration Test Report - Subprocess → Bindings
-{'=' * 55}
-
-Subprocess Tests (Ground Truth):
-  Passed: {subprocess_passed}/{subprocess_total}
-  
-Bindings Tests (Implementation): 
-  Passed: {bindings_passed}/{bindings_total}
-
-Strategy Validation:
-- Use subprocess tests to validate regex2vrl works correctly
-- Use bindings tests to identify areas needing development
-- Ensures we only test bindings with patterns we know work
-""")
+        },
+        "tests": [
+            {
+                "name": "check",
+                "input": {"insert_at": "under_test", "type": "raw", "value": message},
+                "outputs": [
+                    {
+                        "extract_from": "under_test",
+                        "conditions": [{"type": "vrl", "source": condition}],
+                    }
+                ],
+            }
+        ],
+    }
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(yaml.dump(config, default_flow_style=False), encoding="utf-8")
+    return vector_runner(["test", str(config_path)], tmp_path)
 
 
-def main():
-    tester = IntegrationTester(verbose=True)
-    tester.run_integration_tests()
-    tester.generate_report()
+def _read_json_lines(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [json.loads(line) for line in lines]
 
 
-if __name__ == '__main__':
-    main()
+@pytest.mark.parametrize(
+    ("pattern", "message", "condition"),
+    [
+        pytest.param(
+            r"(?P<ip>\d+\.\d+\.\d+\.\d+)",
+            "192.168.1.100 connected as client",
+            'exists(.ip) && to_string!(.ip) == "192.168.1.100"',
+            id="ip_extraction",
+        ),
+        pytest.param(
+            r"(?P<word>\w+)",
+            "hello world",
+            "exists(.word)",
+            id="simple_word",
+        ),
+    ],
+)
+def test_regex2vrl_ground_truth_via_subprocess(vector_runner, tmp_path, pattern, message, condition):
+    """The generated VRL passes a real `vector test` run (ground truth)."""
+    vrl_code = RegexToVRL().convert(pattern)
+    result = _run_vector_unit_test(vector_runner, tmp_path, vrl_code, message, condition)
+    assert result.returncode == 0, (
+        f"vector test failed for pattern {pattern!r}: stdout={result.stdout} stderr={result.stderr}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("pattern", "message"),
+    [
+        pytest.param(r"(?P<ip>\d+\.\d+\.\d+\.\d+)", "192.168.1.100 connected as client", id="ip_extraction"),
+        pytest.param(r"(?P<word>\w+)", "hello world", id="simple_word"),
+    ],
+)
+def test_regex2vrl_bindings_match_subprocess(vector_runner, tmp_path, pattern, message):
+    """Once ground truth is confirmed, the same VRL also produces output via bindings."""
+    vector = pytest.importorskip("vector")
+
+    vrl_code = RegexToVRL().convert(pattern)
+    ground_truth = _run_vector_unit_test(vector_runner, tmp_path, vrl_code, message, "exists(.message)")
+    assert ground_truth.returncode == 0, "subprocess ground-truth check must pass before bindings are tested"
+
+    output_file = tmp_path / "bindings_output.jsonl"
+    indented = "\n".join(f"      {line}" for line in vrl_code.split("\n"))
+    config = f"""
+sources:
+  python:
+    type: python
+transforms:
+  test_transform:
+    type: remap
+    inputs: [python]
+    source: |
+{indented}
+sinks:
+  file:
+    type: file
+    inputs: [test_transform]
+    path: "{output_file}"
+    encoding:
+      codec: json
+"""
+    v = vector.Vector(config)
+    v.start()
+    try:
+        v.send("python", json.dumps({"message": message}).encode())
+        deadline = time.monotonic() + 5.0
+        results: list[dict] = []
+        while time.monotonic() < deadline and not results:
+            results = _read_json_lines(output_file)
+            if not results:
+                time.sleep(0.05)
+    finally:
+        v.stop()
+
+    assert len(results) == 1, f"expected bindings to process the event, got {results}"

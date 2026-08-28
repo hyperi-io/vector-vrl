@@ -1,10 +1,9 @@
-#!/usr/bin/env python3
-"""
-Pytest-compatible VRL function tests.
-"""
+"""Pytest-compatible VRL expression checks.
 
-import pytest
-import json
+`import vector` always fails (no such module ships here), so every
+assertion runs against the `MockVRL` heuristic defined below, not the
+real VRL parser.
+"""
 
 # Mock VRL functionality for testing when vector module isn't available
 class MockVRL:
@@ -13,24 +12,24 @@ class MockVRL:
         """Mock VRL expression checker."""
         if not expr.strip():
             return False
-        
+
         # Check bracket matching
         if (expr.count('(') != expr.count(')') or
-            expr.count('{') != expr.count('}') or 
+            expr.count('{') != expr.count('}') or
             expr.count('[') != expr.count(']')):
             return False
-        
+
         # Invalid patterns
         invalid_patterns = [
             'invalid syntax', ' +$', ' =$', 'unknown_func', 'parse_nonexistent'
         ]
-        
+
         for pattern in invalid_patterns:
             if pattern in expr:
                 return False
-                
+
         return True
-    
+
     @staticmethod
     def vrl_functions():
         """Mock VRL functions list."""
@@ -56,7 +55,7 @@ except ImportError:
 
 class TestVRLBasics:
     """Test basic VRL functionality."""
-    
+
     def test_valid_field_assignments(self):
         """Test basic field assignment expressions."""
         valid_assignments = [
@@ -65,10 +64,10 @@ class TestVRLBasics:
             ".processed = true",
             ".enriched = false"
         ]
-        
+
         for expr in valid_assignments:
             assert vrl_check(expr), f"Expression should be valid: {expr}"
-    
+
     def test_function_calls(self):
         """Test basic VRL function calls."""
         function_calls = [
@@ -77,60 +76,60 @@ class TestVRLBasics:
             "del(.field)",
             "del(.password)"
         ]
-        
+
         for expr in function_calls:
             assert vrl_check(expr), f"Function call should be valid: {expr}"
-    
+
     def test_json_parsing(self):
         """Test JSON parsing expressions."""
         json_expressions = [
             "parse_json!(.message)",
             ".parsed = parse_json(.message) ?? {}"
         ]
-        
+
         for expr in json_expressions:
             assert vrl_check(expr), f"JSON expression should be valid: {expr}"
-    
+
     def test_conditionals(self):
         """Test conditional expressions."""
         conditional_expressions = [
             "if .level == \"ERROR\" { .alert = true }",
             ".status = if .code == 200 { \"ok\" } else { \"error\" }"
         ]
-        
+
         for expr in conditional_expressions:
             assert vrl_check(expr), f"Conditional should be valid: {expr}"
 
 class TestVRLFunctions:
     """Test VRL function availability."""
-    
+
     def test_core_functions_available(self):
         """Test that core VRL functions are available."""
         functions = vrl_functions()
         core_functions = ['now', 'uuid_v4', 'del', 'type']
-        
+
         for func in core_functions:
             assert func in functions, f"Core function '{func}' should be available"
-    
+
     def test_parsing_functions_available(self):
         """Test parsing functions are available."""
         functions = vrl_functions()
         parsing_functions = ['parse_json', 'parse_timestamp', 'parse_int']
-        
+
         for func in parsing_functions:
             assert func in functions, f"Parsing function '{func}' should be available"
-    
+
     def test_string_functions_available(self):
         """Test string manipulation functions."""
         functions = vrl_functions()
         string_functions = ['upcase', 'downcase', 'strip_whitespace', 'replace']
-        
+
         for func in string_functions:
             assert func in functions, f"String function '{func}' should be available"
 
 class TestVRLInvalidExpressions:
     """Test invalid VRL expression detection."""
-    
+
     def test_syntax_errors_detected(self):
         """Test that syntax errors are properly detected."""
         invalid_expressions = [
@@ -139,10 +138,10 @@ class TestVRLInvalidExpressions:
             ".bad = unknown_func(.data)",
             "if .condition {"  # Missing closing brace
         ]
-        
+
         for expr in invalid_expressions:
             assert not vrl_check(expr), f"Invalid expression should be rejected: {expr}"
-    
+
     def test_incomplete_expressions_detected(self):
         """Test that incomplete expressions are detected."""
         # Note: Some of these might pass in mock mode due to simplified checking
@@ -150,7 +149,7 @@ class TestVRLInvalidExpressions:
             ". = .field +",  # Incomplete operator
             ".field ="       # Incomplete assignment
         ]
-        
+
         for expr in incomplete_expressions:
             result = vrl_check(expr)
             if VECTOR_AVAILABLE:
@@ -159,12 +158,12 @@ class TestVRLInvalidExpressions:
 
 class TestVRLMetadata:
     """Test VRL metadata and configuration."""
-    
+
     def test_function_count(self):
         """Test that reasonable number of functions are available."""
         functions = vrl_functions()
         assert len(functions) >= 20, f"Expected at least 20 VRL functions, got {len(functions)}"
-    
+
     def test_vector_availability(self):
         """Test Vector module availability status."""
         if VECTOR_AVAILABLE:
@@ -175,13 +174,13 @@ class TestVRLMetadata:
 def test_yaml_config_validation():
     """Test VRL expressions within YAML configuration context."""
     import yaml
-    
+
     # Sample YAML with VRL
     config_yaml = """
     sources:
       app:
         type: python
-    
+
     transforms:
       process:
         type: remap
@@ -190,66 +189,34 @@ def test_yaml_config_validation():
           .timestamp = now()
           .id = uuid_v4()
           .processed = true
-          
+
           if .level == "ERROR" {
             .alert = true
           } else {
             .alert = false
           }
-    
+
     sinks:
       output:
         type: console
         inputs: ["process"]
     """
-    
+
     # Test YAML parsing
     config = yaml.safe_load(config_yaml)
     assert config is not None, "YAML should parse successfully"
-    
+
     # Test VRL source extraction
     vrl_source = config["transforms"]["process"]["source"]
     assert vrl_source is not None, "VRL source should be extractable"
-    
+
     # Test individual VRL lines
-    lines = [line.strip() for line in vrl_source.split('\n') 
+    lines = [line.strip() for line in vrl_source.split('\n')
              if line.strip() and not line.strip().startswith('#')]
-    
+
     valid_lines = 0
     for line in lines:
         if vrl_check(line):
             valid_lines += 1
-    
-    assert valid_lines >= len(lines) * 0.6, f"Most VRL lines should be valid: {valid_lines}/{len(lines)}"
 
-if __name__ == "__main__":
-    # Run tests directly if not using pytest
-    print("🧪 Running VRL Tests")
-    print("=" * 30)
-    
-    test_instance = TestVRLBasics()
-    test_instance.test_valid_field_assignments()
-    test_instance.test_function_calls() 
-    test_instance.test_json_parsing()
-    test_instance.test_conditionals()
-    print("✅ Basic VRL tests passed")
-    
-    func_test = TestVRLFunctions()
-    func_test.test_core_functions_available()
-    func_test.test_parsing_functions_available()
-    func_test.test_string_functions_available()
-    print("✅ VRL function tests passed")
-    
-    invalid_test = TestVRLInvalidExpressions()
-    invalid_test.test_syntax_errors_detected()
-    print("✅ Invalid expression tests passed")
-    
-    meta_test = TestVRLMetadata()
-    meta_test.test_function_count()
-    meta_test.test_vector_availability()
-    print("✅ Metadata tests passed")
-    
-    test_yaml_config_validation()
-    print("✅ YAML config tests passed")
-    
-    print(f"\n🎉 All VRL tests completed! (Vector module: {'Available' if VECTOR_AVAILABLE else 'Mock mode'})")
+    assert valid_lines >= len(lines) * 0.6, f"Most VRL lines should be valid: {valid_lines}/{len(lines)}"

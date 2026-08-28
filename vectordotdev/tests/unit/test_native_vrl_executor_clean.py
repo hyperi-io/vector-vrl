@@ -10,15 +10,11 @@ import tempfile
 import yaml
 from pathlib import Path
 import sys
-import io
 
 # Add vectordotdev to path for testing
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from vectordotdev.native_vector_executor import (
-    execute_vrl_remap, quick_vrl_test, NativeVectorExecutor,
-    VectorExecutionResult, ExecutionMetrics, VectorError
-)
+from vectordotdev.native_vector_executor import execute_vrl_remap, NativeVectorExecutor
 
 
 class TestDataLoader:
@@ -390,50 +386,3 @@ class TestDataIntegrity(unittest.TestCase):
             self.assertIn(scenario, scenarios, f"Missing scenario config: {scenario}")
             scenario_config = scenarios[scenario]
             self.assertIn("description", scenario_config, f"Missing description for: {scenario}")
-
-
-def load_test_suite():
-    """Load complete test suite with external data validation"""
-    suite = unittest.TestSuite()
-    
-    # Add data integrity tests first
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestDataIntegrity))
-    
-    # Add main functionality tests
-    suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestNativeVRLExecutorClean))
-    
-    return suite
-
-
-if __name__ == '__main__':
-    # Run clean test suite
-    print("🧪 Running Clean Native VRL Executor Tests")
-    print("📁 Using external VRL and test data files")
-    print("🚫 No hardcoded test data or VRL")
-    print("=" * 60)
-    
-    suite = load_test_suite()
-    runner = unittest.TextTestRunner(verbosity=2)
-    result = runner.run(suite)
-    
-    # Summary
-    print("\n" + "=" * 60)
-    print("🎯 CLEAN TEST SUMMARY")
-    print("=" * 60)
-    print(f"✅ Tests Run: {result.testsRun}")
-    print(f"❌ Failures: {len(result.failures)}")
-    print(f"⚠️ Errors: {len(result.errors)}")
-    
-    if result.wasSuccessful():
-        print("🚀 All clean tests passed! External data architecture working.")
-        print("📁 VRL and test data properly externalized.")
-    else:
-        print("⚠️ Some tests failed - check external data files.")
-        
-        for failure in result.failures:
-            print(f"FAILURE: {failure[0]}")
-            
-        for error in result.errors:
-            print(f"ERROR: {error[0]}")
-
-    exit(0 if result.wasSuccessful() else 1)

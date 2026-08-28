@@ -1,301 +1,138 @@
 # vectordotdev Test Suite
 
-This directory contains comprehensive tests for the vectordotdev library, organized by test type following best practices.
+Real pytest, organised by test type. No bespoke runner, no mocks - subprocess
+tests get a real `vector` binary (locally built if found, else a throwaway
+`timberio/vector` container, else skip/fail per `conftest.py`), and binding
+tests use the compiled PyO3 module in-process.
 
 ## Overview
 
 The test suite validates vectordotdev functionality including:
 1. **Unit Tests**: Isolated component testing (VRL functions, subprocess Vector calls)
-2. **Integration Tests**: Component interaction testing (vectordotdev Python bindings)
+2. **Integration Tests**: Component interaction testing (vectordotdev Python bindings, subprocess Vector configs)
 3. **E2E Tests**: End-to-end production scenarios (regex2vrl with real patterns)
+4. **Smoke Tests**: Mandatory startup check (`smoke/test_startup.py`)
 
 ## Test Structure
 
 ```
 vectordotdev/tests/
-├── run_tests.py                       # Main test runner
-├── unit/                              # Unit tests (isolated components)
-│   ├── subprocess.py                  # Vector subprocess unit tests
-│   └── test_vrl_*.py                  # VRL function unit tests
-├── integration/                       # Integration tests (component interaction)
-│   └── bindings.py                    # vectordotdev bindings integration tests
-├── e2e/                               # End-to-end tests (full scenarios)
-│   ├── production_patterns.py         # Production pattern E2E tests
-│   ├── regex2vrl.py                   # Full regex2vrl pipeline tests
-│   └── run_regex2vrl_tests.py         # Legacy comprehensive test runner
+├── conftest.py                        # vector_runner fixture: run(args, cwd) against a real vector binary/container
+├── smoke/                             # Mandatory startup smoke test
+├── unit/                              # Unit tests - isolated components, no explicit marker
+│   ├── test_native_vrl_*.py           # In-process PyO3 VRL execution (no subprocess)
+│   ├── test_vrl_in_memory.py          # In-process VRL execution
+│   └── test_*_vector*.py / test_*_subprocess.py  # Real vector subprocess tests (vector_runner fixture)
+├── integration/                       # @pytest.mark.integration
+│   ├── bindings.py                    # vectordotdev Python bindings, in-process, no subprocess
+│   └── test_*.py                      # Bindings and subprocess-config integration tests
+├── e2e/                                # @pytest.mark.e2e
+│   ├── test_production_patterns.py    # Production pattern E2E tests
+│   └── test_regex2vrl.py              # Full regex2vrl pipeline tests
+├── manual/                            # NOT collected as tests - debug/audit/scratch scripts kept for reference
+├── vrl/                                # Fixture data: sample logs and a VRL script
 └── fixtures/                          # Shared test data and configurations
-    ├── test_patterns/                 # Production regex/grok patterns
-    ├── test_data/                     # Real log samples
-    └── test_configs/                  # Test configuration mappings
 ```
+
+## Running Tests
+
+```bash
+# All tests
+cd vectordotdev
+uv run --with pytest pytest tests/ -v
+
+# By marker
+uv run --with pytest pytest tests/ -m unit -v
+uv run --with pytest pytest tests/ -m integration -v
+uv run --with pytest pytest tests/ -m e2e -v
+uv run --with pytest pytest tests/ -m smoke -v
+
+# A single file or test
+uv run --with pytest pytest tests/unit/test_working_vector.py -v
+```
+
+`hyperi-ci run test -C vectordotdev` (what CI actually calls, via `make
+test-python`) runs plain `pytest` under the hood - there is no separate
+runner script to keep in sync.
+
+### Vector binary resolution (see `conftest.py`)
+
+The `vector_runner` fixture picks, in order: a locally-built binary
+(`vector/target/release/vector` etc, or `vector` on `PATH`), then a one-shot
+`docker run --rm timberio/vector:<pinned tag>` with the test's `tmp_path`
+mounted as the working directory, then `pytest.skip` - or `pytest.fail` if
+`$CI` is set, since a gate that cannot run must not silently pass. Expect
+subprocess-backed unit/integration/e2e tests to skip in an environment with
+neither a local vector checkout nor docker; that is correct behaviour, not a
+bug.
 
 ## Test Categories
 
 ### Unit Tests (`unit/`)
-**Isolated component testing - NO dependencies between tests**
+Isolated component testing - no dependencies between tests. VRL function
+tests run in-process against the compiled bindings; subprocess tests spin a
+real `vector` process via `vector_runner` per test.
 
-- **VRL Function Tests**: Test individual VRL functions (parse_json, split, etc.)
-- **Subprocess Tests**: Test regex2vrl → VRL → Vector subprocess → validation
-  - Uses real Vector binary as subprocess 
-  - Isolated units that don't depend on vectordotdev bindings
-  - Creates temporary Vector configs and runs Vector processes
-
-### Integration Tests (`integration/`)  
-**Component interaction testing - tests how parts work together**
-
-- **Bindings Tests**: Test vectordotdev Python bindings directly
-  - Uses `vector.Vector()` Python API
-  - Tests regex2vrl integration with vectordotdev library
-  - No subprocess calls - pure Python integration
+### Integration Tests (`integration/`)
+Component interaction testing. `bindings.py` uses `vector.Vector()` directly,
+in-process, no subprocess. Other files here exercise a real `vector`
+subprocess against a generated config (regex2vrl output, YAML configs,
+auto-stop behaviour, etc) via `vector_runner`.
 
 ### E2E Tests (`e2e/`)
-**End-to-end production scenarios - full workflow testing**
+Full regex2vrl -> VRL -> Vector -> validation pipelines against production-
+shaped patterns (Apache/Nginx/syslog/JSON/Docker/Kubernetes logs, grok
+patterns) via `vector_runner`.
 
-- **Production Patterns**: Comprehensive testing with real-world patterns
-- **Full Pipeline**: regex2vrl → VRL → Vector → validation → reporting
-- **Performance Testing**: THG validation and optimization verification
+## Manual / non-test scripts (`manual/`)
 
-## Production Patterns Tested
+`tests/manual/` holds debug, audit, and scratch scripts that were previously
+disguised as tests (`if __name__ == '__main__':`, print-based pass/fail, no
+real assertions) - forcing pytest asserts onto them would have invented fake
+coverage. They are not collected by pytest (no `test_*.py` naming, and
+outside the collected tree in intent). Run one directly with `python
+tests/manual/<script>.py` if you need the manual/human-in-the-loop check it
+was written for. Some are candidates for outright deletion (fully superseded,
+no remaining reference value) - flagged as such wherever that applies; ask
+before removing.
 
-Based on 2025 research of most common patterns in production environments:
+## Known product bugs surfaced by this migration
 
-### Regex Patterns
-1. **Apache Combined Log** - Most common web server log format
-2. **Nginx Access Log** - Nginx with X-Forwarded-For support
-3. **Syslog Standard** - RFC3164 syslog format
-4. **JSON Application Log** - Structured application logs
-5. **Docker Container Log** - Docker JSON log driver format
-6. **Kubernetes Pod Log** - CRI-O/containerd format
-7. **IP Address Extraction** - IPv4 address parsing
-8. **ISO 8601 Timestamp** - Standard timestamp format
-9. **Log Level Extraction** - Common log levels
-10. **HTTP Status Code** - HTTP response codes
-
-### Grok Patterns  
-1. **COMBINEDAPACHELOG** - Apache combined log format
-2. **COMMONAPACHELOG** - Apache common log format
-3. **SYSLOGBASE** - Basic syslog structure
-4. **SYSLOG5424PRI** - RFC5424 with priority
-5. **Nginx Access** - Detailed nginx parsing
-6. **HAProxy HTTP** - Load balancer logs
-7. **AWS ELB** - Elastic Load Balancer logs
-8. **MySQL Error** - Database error logs
-9. **Postfix SMTP** - Mail server logs
-10. **ISO 8601 Timestamp** - Grok timestamp parsing
-
-## Running Tests
-
-### Quick Start - All Tests
-```bash
-# Run all test categories
-cd vectordotdev/tests
-python run_tests.py
-
-# Verbose output
-python run_tests.py --verbose
-
-# With custom Vector binary
-python run_tests.py --vector-binary /path/to/vector
-```
-
-### By Test Category
-
-```bash
-# Unit tests only (isolated components)
-python run_tests.py --category unit --verbose
-
-# Integration tests only (vectordotdev bindings)
-python run_tests.py --category integration --verbose
-
-# E2E tests only (production scenarios)
-python run_tests.py --category e2e --verbose
-
-# Filtered E2E tests
-python run_tests.py --category e2e --filter apache --verbose
-```
-
-### Individual Test Runners
-
-```bash
-# Run unit tests directly
-python unit/subprocess.py --verbose --vector-binary /path/to/vector
-
-# Run integration tests directly  
-python integration/bindings.py --verbose
-
-# Run E2E tests directly
-python e2e/production_patterns.py --verbose --filter regex
-```
-
-## Test Requirements
-
-### Prerequisites
-
-1. **Python Dependencies**:
-   ```bash
-   pip install pytest pyyaml
-   ```
-
-2. **vectordotdev Library**: Must be in Python path
-   ```bash
-   # Automatically handled by test runners
-   ```
-
-### Optional (for full testing):
-
-3. **Vector Binary**: For subprocess unit tests and E2E tests
-   ```bash
-   # Build Vector (from vector directory)
-   cargo build --release
-   # Or specify path: --vector-binary /path/to/vector
-   ```
-
-4. **vectordotdev Bindings**: For integration tests
-   ```bash
-   # Must be built and available as Python module
-   ```
-
-## Test Types Explained
-
-### 🔧 Unit Tests
-- **Purpose**: Test individual components in isolation
-- **No Mocks**: Uses real Vector subprocess calls
-- **Isolated**: Each test is independent
-- **Fast**: Quick execution, focused testing
-
-**Example**: Test that regex pattern `(?P<ip>\d+\.\d+\.\d+\.\d+)` converts to VRL that correctly extracts IP addresses when run through Vector subprocess.
-
-### 🔗 Integration Tests  
-- **Purpose**: Test component interactions
-- **Bindings**: Uses vectordotdev Python bindings directly
-- **Integration**: Tests how regex2vrl integrates with Vector
-- **No Subprocesses**: Pure Python API usage
-
-**Example**: Test that `vector.Vector(config)` with regex2vrl-generated VRL correctly processes log data through the Python API.
-
-### 🚀 E2E Tests
-- **Purpose**: Full production scenarios
-- **Comprehensive**: Tests complete workflows
-- **Performance**: Validates THG metrics
-- **Real Data**: Uses actual production log patterns
-
-**Example**: Test that Apache combined log parsing achieves 350+ THG performance with 100% parsing accuracy across 50 real log samples.
-
-## Test Configuration
-
-All patterns and test data are externalized (no hardcoding):
-
-### Pattern Definitions (`fixtures/test_patterns/`)
-```yaml
-apache_combined_log:
-  name: "Apache Combined Log Format"
-  pattern: '^(?P<ip>\d+\.\d+\.\d+\.\d+)...'
-  expected_fields: [ip, method, status]
-```
-
-### Test Data (`fixtures/test_data/`)
-```yaml
-apache_combined_log:
-  - '192.168.1.100 - - [15/Jan/2025:10:30:45 +0000] "GET /index.html HTTP/1.1" 200 1024...'
-```
-
-### Test Configuration (`fixtures/test_configs/`)
-```yaml
-apache_combined_regex:
-  pattern_file: "production_regex_patterns.yaml"
-  pattern_key: "apache_combined_log"
-  sample_data_file: "production_log_samples.yaml"
-  performance_target_thg: 300
-```
-
-## Expected Output
-
-Successful test run shows:
-
-```
-🧪 vectordotdev Test Suite
-========================================
-
-🔧 Running Unit Tests
-==============================
-📋 VRL Function Tests:
-✅ 12/12 VRL expressions validated
-✅ VRL Functions: Available
-
-🔄 Vector Subprocess Unit Tests:
-✅ Subprocess unit tests passed
-
-🔗 Running Integration Tests
-===================================
-✅ Integration tests passed
-
-🚀 Running End-to-End Tests
-================================
-✅ E2E tests passed
-
-📊 Test Summary
-====================
-Unit: ✅ PASSED
-Integration: ✅ PASSED  
-E2E: ✅ PASSED
-
-Overall: 3/3 categories passed (100%)
-```
+Converting the bespoke subprocess/regex2vrl tests to real pytest asserts
+surfaced genuine regex2vrl/grok conversion bugs that the old print-based
+runner was silently swallowing. Tracked in GH issue #13 (with a follow-up
+comment covering the wider grok/regex2vrl findings) - not re-litigated here.
 
 ## Adding New Tests
 
-### Adding Unit Tests
 ```python
-# In unit/ directory
-def test_new_pattern():
-    pattern = "(?P<field>\w+)"
-    converter = RegexToVRL()
-    vrl = converter.convert(pattern)
-    # Test with subprocess Vector call
-```
+# unit/ or integration/ - a real vector subprocess test
+def test_new_pattern(vector_runner, tmp_path):
+    config = tmp_path / "vector.yaml"
+    config.write_text(render_config(some_vrl))
+    result = vector_runner.run(["validate", str(config)], cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
 
-### Adding Integration Tests  
-```python  
-# In integration/ directory
-async def test_new_integration():
-    vector_instance = vector.Vector(config)
-    await vector_instance.start()
-    # Test with vectordotdev bindings
-```
+# integration/ - mark it
+import pytest
 
-### Adding E2E Tests
-```yaml
-# Add to fixtures/test_patterns/
-new_pattern:
-  name: "New Pattern"
-  pattern: "regex_here" 
-  expected_fields: [field1, field2]
+@pytest.mark.integration
+def test_new_binding_case():
+    ...
+
+# e2e/ - mark it
+@pytest.mark.e2e
+def test_new_production_pattern(vector_runner, tmp_path):
+    ...
 ```
 
 ## Troubleshooting
 
-### Common Issues
-
-1. **Vector binary not found** (Unit/E2E tests):
-   ```bash
-   # Build Vector or specify path
-   --vector-binary /path/to/vector
-   ```
-
-2. **vectordotdev import error** (Integration tests):
-   ```bash
-   # Ensure vectordotdev library is built and available
-   ```
-
-3. **Tests timeout**: Increase timeout in test configuration
-
-4. **Path issues**: Tests automatically handle relative paths from test runners
-
-### Debug Mode
-```bash
-# Keep temporary files for debugging  
-python unit/subprocess.py --keep-workspace --verbose
-python e2e/production_patterns.py --keep-workspace --verbose
-```
-
-This organized structure ensures clear separation of concerns and follows testing best practices! 🎯
+1. **Vector binary not found, no docker**: expected skip outside CI/a dev
+   box with `vector` built - not a failure. Under `$CI` this is a hard
+   `pytest.fail` instead, by design.
+2. **vectordotdev import error** (bindings-based tests): the compiled PyO3
+   module must be built and importable - see the top-level build docs.
+3. **Slow/flaky subprocess tests**: mark genuinely slow ones
+   `@pytest.mark.slow` so they can be excluded from a fast local loop
+   (`-m "not slow"`).

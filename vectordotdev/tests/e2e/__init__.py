@@ -2,7 +2,8 @@
 End-to-end tests - full production-like testing scenarios.
 
 Tests in this directory:
-- production_patterns.py: Comprehensive production pattern testing
-- regex2vrl.py: Full regex2vrl pipeline testing
-- run_regex2vrl_tests.py: Legacy comprehensive test runner
+- test_production_patterns.py: Fixture-driven production regex/grok
+  pattern testing against a real Vector subprocess (vector_runner fixture)
+- test_regex2vrl.py: Full regex2vrl pipeline testing against a real
+  Vector subprocess
 """

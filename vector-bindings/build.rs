@@ -25,6 +25,10 @@ fn main() {
         PathBuf::from("../vector/lib/vector-common/src"),
     ];
 
+    for path in &search_paths {
+        println!("cargo:rerun-if-changed={}", path.display());
+    }
+
     let mut all_apis = Vec::new();
 
     println!("cargo:warning=🔍 Auto-discovering Vector APIs from multiple modules...");
@@ -76,6 +80,8 @@ fn discover_apis(root_path: &Path) -> Vec<ApiInfo> {
         .filter_map(|e| e.ok())
         .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("rs"))
     {
+        println!("cargo:rerun-if-changed={}", entry.path().display());
+
         if let Ok(content) = fs::read_to_string(entry.path())
             && let Ok(syntax) = syn::parse_file(&content)
         {

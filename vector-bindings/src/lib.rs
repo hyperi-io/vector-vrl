@@ -378,6 +378,18 @@ fn get_vrl_performance(
     iterations: Option<u32>,
 ) -> PyResult<PyObject> {
     let iter_count = iterations.unwrap_or(100);
+
+    // test_data.len() * iter_count is fully materialised in memory before
+    // execution; both are caller-controlled, so cap the total to bound
+    // worst-case memory use.
+    const MAX_TOTAL_EVENTS: usize = 1_000_000;
+    let total_requested = test_data.len().saturating_mul(iter_count as usize);
+    if total_requested > MAX_TOTAL_EVENTS {
+        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+            "requested {total_requested} events (test_data.len() * iterations) exceeds the {MAX_TOTAL_EVENTS} limit"
+        )));
+    }
+
     let start_time = std::time::Instant::now();
 
     // Execute VRL processing with real VRL runtime

@@ -5,13 +5,44 @@ build-backend = "maturin"
 [project]
 name = "vectordotdev"
 version = "1.0.5"
-requires-python = ">=3.7"
+requires-python = ">=3.12"
 description = "Pure Python package for Vector data processing pipelines with regex2vrl conversion"
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [
     {name = "vectordotdev", email = "info@vectordotdev.io"}
 ]
+keywords = ["vector", "data-processing", "logging", "observability", "rust", "async"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Logging",
+    "Topic :: System :: Monitoring",
+    "Topic :: System :: Systems Administration",
+]
+dependencies = [
+    "scalo[metrics]>=2.28.5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-asyncio>=0.21.0", "ruff>=0.1.0"]
+test = ["pytest>=7.0", "pytest-asyncio>=0.21.0"]
+
+[project.urls]
+"Homepage" = "https://github.com/hypersec-io/vectordotdev"
+"Bug Reports" = "https://github.com/hypersec-io/vectordotdev/issues"
+"Source" = "https://github.com/hypersec-io/vectordotdev"
+"Documentation" = "https://github.com/hypersec-io/vectordotdev#readme"
+"License" = "https://github.com/hypersec-io/vectordotdev/blob/main/LICENSE"
 
 # Python package configuration for complete PyPI wheel
 [tool.setuptools]
@@ -24,44 +55,6 @@ include = ["vectordotdev*"]
 [tool.setuptools.package-data]
 vectordotdev = ["*.yaml", "*.toml", "*.so", "*.dll", "*.dylib"]
 "vectordotdev._bindings" = ["*.so", "*.dll", "*.dylib"]
-keywords = ["vector", "data-processing", "logging", "observability", "rust", "async"]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "Intended Audience :: System Administrators",
-    "License :: Other/Proprietary License",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
-    "Programming Language :: Python :: 3.8", 
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Rust",
-    "Programming Language :: Python :: Implementation :: CPython",
-    "Topic :: Software Development :: Libraries :: Python Modules",
-    "Topic :: System :: Logging",
-    "Topic :: System :: Monitoring",
-    "Topic :: System :: Systems Administration",
-]
-dependencies = [
-    "dynaconf>=3.1.0",
-    "psutil>=5.8.0",
-    "pyyaml>=6.0",
-]
-
-[project.optional-dependencies]
-dev = ["pytest>=7.0", "pytest-asyncio>=0.21.0", "ruff>=0.1.0"]
-test = ["pytest>=7.0", "pytest-asyncio>=0.21.0"]
-
-[project.urls]
-"Homepage" = "https://github.com/hypersec-io/vectordotdev"
-"Bug Reports" = "https://github.com/hypersec-io/vectordotdev/issues"
-"Source" = "https://github.com/hypersec-io/vectordotdev"
-"Documentation" = "https://github.com/hypersec-io/vectordotdev#readme"
-"License" = "https://hypersec.io/eula"
 
 [tool.maturin]
 manifest-path = "../vector-bindings/Cargo.toml"

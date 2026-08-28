@@ -30,8 +30,8 @@ class DependencyManager:
                 vector_toml_content = f.read()
             
             # Parse Vector's workspace dependencies
-            import toml
-            vector_toml = toml.loads(vector_toml_content)
+            import tomllib
+            vector_toml = tomllib.loads(vector_toml_content)
             workspace_deps = vector_toml.get('workspace', {}).get('dependencies', {})
             
             if not workspace_deps:

@@ -71,13 +71,14 @@ class CoreBuildSystem:
     def _download_vector_tarball(self, version: str) -> bool:
         """Download Vector source as tar.gz (cleaner, no git metadata)"""
         try:
-            import requests
-            
+            from scalo.http import HttpClient
+
             # GitHub releases API for tar.gz
             tarball_url = f"https://github.com/vectordotdev/vector/archive/refs/tags/{version}.tar.gz"
             log_message(f"📥 Downloading Vector {version} tar.gz...")
-            
-            response = requests.get(tarball_url, timeout=60)
+
+            with HttpClient(timeout=60.0) as client:
+                response = client.get(tarball_url)
             if response.status_code != 200:
                 log_message(f"❌ Tar.gz download failed: HTTP {response.status_code}")
                 return False

@@ -17,9 +17,3 @@ def test_bindings_info_reports_a_source() -> None:
 
     info = vectordotdev.get_bindings_info()
     assert info["source"] in ("bundled", "external", "none")
-
-
-def test_regex2vrl_core_imports() -> None:
-    """regex2vrl is standalone - it must import with zero Rust bindings."""
-    module = importlib.import_module("vectordotdev.regex2vrl.core")
-    assert module is not None

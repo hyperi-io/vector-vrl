@@ -1,0 +1,32 @@
+# Project:   vector-bindings
+# File:      .hyperi-ci.yaml
+# Purpose:   HyperI CI configuration
+#
+# License:   Apache-2.0
+# Copyright: (c) 2026 HyperSec
+#
+# Internal crate: builds and tests here, does NOT publish standalone.
+# The publishable artefact is ../vectordotdev (maturin wraps this crate).
+#
+# Override defaults with HYPERCI_* env vars.
+# Reference: config/defaults.yaml in hyperi-ci.
+
+language: rust
+license: Apache-2.0
+classification: general-oss
+project:
+  status: experimental
+quality:
+  enabled: true
+test:
+  enabled: true
+  coverage: false
+build:
+  enabled: true
+  strategies:
+  - native
+  rust:
+    features: all
+    targets: []
+publish:
+  enabled: false

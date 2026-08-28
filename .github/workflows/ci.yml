@@ -1,0 +1,105 @@
+# Project:   vectordotdev
+# File:      .github/workflows/ci.yml
+# Purpose:   CI for the 3-component repo (vector-bindings Rust crate,
+#            vectordotdev Python package, build/ orchestration tooling).
+#
+# hyperi-ci has no multi-component/hybrid-repo model (one language, one
+# root per project) and its reusable GitHub Actions workflows assume the
+# checkout root IS the project, so this repo cannot use them directly.
+# Each component keeps its own .hyperi-ci.yaml, and every quality/test/
+# build step below runs through the Makefile, which wraps
+# `hyperi-ci run <stage> -C <dir>` per component - the same ruff/ty/
+# bandit/pip-audit/vulture and cargo fmt/clippy/audit/deny/osv-scanner
+# checks any hyperi-ci-managed project gets, just orchestrated by hand
+# across the 3 components instead of hyperi-ci's single-project pipeline.
+#
+# Publish is gated: only a push to main whose HEAD commit message
+# contains "Publish: true", or an explicit workflow_dispatch, builds and
+# publishes to pypi.org. Every other push/PR only runs quality + test.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    outputs:
+      will-publish: ${{ steps.gate.outputs.will-publish }}
+    steps:
+      - name: Compute publish gate
+        id: gate
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "will-publish=true" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref }}" == "refs/heads/main" && "${{ github.event_name }}" == "push" ]] \
+               && [[ "${{ contains(github.event.head_commit.message, 'Publish: true') }}" == "true" ]]; then
+            echo "will-publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "will-publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  quality-test-rust:
+    name: vector-bindings (quality + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - run: make quality-rust
+      - run: make test-rust
+
+  quality-test-python:
+    name: vectordotdev + build/ (quality + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - run: make quality-python
+      - run: make test-python
+
+  build-vectordotdev:
+    name: Build vectordotdev wheel
+    needs: [plan, quality-test-rust, quality-test-python]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - run: make build
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vectordotdev-wheel
+          path: vectordotdev/dist/*
+          retention-days: 7
+
+  publish-vectordotdev:
+    name: Publish to pypi.org (gated)
+    needs: [plan, build-vectordotdev]
+    if: needs.plan.outputs.will-publish == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi-publish
+    permissions:
+      id-token: write # PyPI Trusted Publishing (OIDC) - no stored token
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v7.0.0
+        with:
+          name: vectordotdev-wheel
+          path: vectordotdev/dist/
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - working-directory: vectordotdev
+        run: uvx hyperi-ci run publish -C .

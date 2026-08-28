@@ -1,3 +1,10 @@
+// pyo3 0.22's #[pymethods]/#[pyfunction] macro expansion predates edition
+// 2024's unsafe_op_in_unsafe_fn tightening and emits a redundant PyErr->PyErr
+// conversion in its generated trampolines - neither lint fires on our own
+// code. Tracked for removal on the pyo3 0.29+ migration (see repo CLAUDE.md
+// / plan Decision Log, pyo3 0.22 vs Python 3.14 gap).
+#![allow(unsafe_op_in_unsafe_fn, clippy::useless_conversion)]
+
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyDictMethods};
 use serde_json::Value as JsonValue;
@@ -5,7 +12,7 @@ use std::collections::BTreeMap;
 use vrl::compiler::prelude::NotNan;
 use vrl::compiler::runtime::{Runtime, Terminate};
 use vrl::compiler::state::RuntimeState;
-use vrl::compiler::{compile, Program, TargetValue, TimeZone};
+use vrl::compiler::{Program, TargetValue, TimeZone, compile};
 use vrl::value::{Secrets, Value};
 
 /// VRL execution result with error details
@@ -160,6 +167,10 @@ fn vrl_value_to_json(value: Value) -> JsonValue {
 #[pyclass]
 #[derive(Debug)]
 struct Vector {
+    // Accepted by Vector::new() but never applied to process_logs/initialize -
+    // config-driven pipeline behavior isn't wired up yet, tracked as a
+    // follow-up rather than silently dropped.
+    #[allow(dead_code)]
     config: JsonValue,
     initialized: bool,
 }

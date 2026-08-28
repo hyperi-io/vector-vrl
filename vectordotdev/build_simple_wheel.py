@@ -101,7 +101,7 @@ if __name__ == '__main__':
     
     success = build_simple_wheel()
     if success:
-        print("\n🎉 Ready for JFrog deployment!")
+        print("\n🎉 Ready for PyPI deployment!")
     else:
         print("\n❌ Wheel build failed")
     

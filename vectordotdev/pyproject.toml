@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "vectordotdev"
 version = "1.0.5"
 requires-python = ">=3.12"
-description = "Pure Python package for Vector data processing pipelines with regex2vrl conversion"
+description = "Pure Python package for Vector data processing pipelines"
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [
@@ -57,6 +57,8 @@ vectordotdev = ["*.yaml", "*.toml", "*.so", "*.dll", "*.dylib"]
 "vectordotdev._bindings" = ["*.so", "*.dll", "*.dylib"]
 
 [tool.maturin]
+python-source = "src"
+module-name = "vectordotdev._bindings.vector_bindings"
 manifest-path = "../vector-bindings/Cargo.toml"
 
 [tool.maturin.environment]

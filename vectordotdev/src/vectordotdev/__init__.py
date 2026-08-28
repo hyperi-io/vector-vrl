@@ -75,10 +75,6 @@ try:
         get_apache_combined, get_nginx_access, get_json_application,
         get_kubernetes_pods, get_docker_container
     )
-    from .native_vector_executor import (
-        execute_vrl_remap, quick_vrl_test, NativeVectorExecutor,
-        VectorExecutionResult, ExecutionMetrics, VectorError
-    )
     _performance_available = True
 except ImportError:
     _performance_available = False
@@ -117,13 +113,6 @@ __all__ = [
     "get_json_application",
     "get_kubernetes_pods",
     "get_docker_container",
-    # Native Vector Execution
-    "execute_vrl_remap",
-    "quick_vrl_test",
-    "NativeVectorExecutor",
-    "VectorExecutionResult", 
-    "ExecutionMetrics",
-    "VectorError"
 ]
 
 

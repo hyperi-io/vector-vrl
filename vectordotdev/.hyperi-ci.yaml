@@ -1,0 +1,31 @@
+# Project:   vectordotdev
+# File:      .hyperi-ci.yaml
+# Purpose:   HyperI CI configuration
+#
+# License:   Apache-2.0
+# Copyright: (c) 2026 HyperSec
+#
+# The publishable artefact: maturin build wraps ../vector-bindings.
+# publish stays gated - fires only on the Publish:true trailer or an
+# explicit workflow_dispatch, never on a plain push.
+#
+# Override defaults with HYPERCI_* env vars.
+# Reference: config/defaults.yaml in hyperi-ci.
+
+language: python
+license: Apache-2.0
+classification: general-oss
+project:
+  status: experimental
+quality:
+  enabled: true
+test:
+  enabled: true
+build:
+  enabled: true
+  strategies:
+  - native
+  type: package
+publish:
+  enabled: true
+  target: oss

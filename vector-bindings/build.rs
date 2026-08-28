@@ -76,32 +76,31 @@ fn discover_apis(root_path: &Path) -> Vec<ApiInfo> {
         .filter_map(|e| e.ok())
         .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("rs"))
     {
-        if let Ok(content) = fs::read_to_string(entry.path()) {
-            if let Ok(syntax) = syn::parse_file(&content) {
-                for item in &syntax.items {
-                    match item {
-                        Item::Struct(s) if is_public(&s.vis) => {
-                            let name = s.ident.to_string();
-                            if !skip_names.contains(&name.as_str()) && !name.starts_with('_') {
-                                apis.push(ApiInfo {
-                                    name,
-                                    kind: ApiKind::Struct,
-                                });
-                            }
+        if let Ok(content) = fs::read_to_string(entry.path())
+            && let Ok(syntax) = syn::parse_file(&content)
+        {
+            for item in &syntax.items {
+                match item {
+                    Item::Struct(s) if is_public(&s.vis) => {
+                        let name = s.ident.to_string();
+                        if !skip_names.contains(&name.as_str()) && !name.starts_with('_') {
+                            apis.push(ApiInfo {
+                                name,
+                                kind: ApiKind::Struct,
+                            });
                         }
-                        Item::Enum(e) if is_public(&e.vis) => {
-                            let name = e.ident.to_string();
-                            if !skip_names.contains(&name.as_str()) && !name.starts_with('_') {
-                                let variants =
-                                    e.variants.iter().map(|v| v.ident.to_string()).collect();
-                                apis.push(ApiInfo {
-                                    name,
-                                    kind: ApiKind::Enum { variants },
-                                });
-                            }
-                        }
-                        _ => {}
                     }
+                    Item::Enum(e) if is_public(&e.vis) => {
+                        let name = e.ident.to_string();
+                        if !skip_names.contains(&name.as_str()) && !name.starts_with('_') {
+                            let variants = e.variants.iter().map(|v| v.ident.to_string()).collect();
+                            apis.push(ApiInfo {
+                                name,
+                                kind: ApiKind::Enum { variants },
+                            });
+                        }
+                    }
+                    _ => {}
                 }
             }
         }

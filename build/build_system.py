@@ -15,16 +15,14 @@ from vector_detection import VectorDetector
 from dependency_sync import DependencyManager  
 from monitoring import BuildMonitor
 from core_build import CoreBuildSystem
-from jfrog_deploy import JFrogPyPIDeployer
 
 class RobustBuildSystem:
     """Main entry point for vectordotdev 3-stage build system"""
-    
+
     def __init__(self):
         self.project_root = Path(__file__).parent.parent
         self.core_builder = CoreBuildSystem(self.project_root)
-        self.jfrog_deployer = JFrogPyPIDeployer(self.project_root)
-        
+
         # Configure from environment
         self.max_fallbacks = 2
         self.verbose = os.environ.get('VECTORDOTDEV_VERBOSE', '').lower() == 'true'
@@ -83,16 +81,6 @@ class RobustBuildSystem:
             
             if python_result.success:
                 log_message(f"🎉 Success with {version} in {total_time:.1f}s!")
-                
-                # Optional: Deploy to JFrog if enabled
-                if os.environ.get('ENABLE_JFROG_DEPLOYMENT', 'OFF').upper() == 'ON':
-                    log_message("\n📦 Deploying to JFrog PyPI...")
-                    deploy_success = self.jfrog_deployer.full_build_and_deploy()
-                    if deploy_success:
-                        log_message("✅ JFrog deployment successful")
-                    else:
-                        log_message("⚠️ JFrog deployment failed (build still successful)")
-                
                 return BuildResult(True, version, total_time, stage_results)
             elif python_result.error_type == ErrorType.UPSTREAM_COMPILE:
                 continue  # Try older version
@@ -109,25 +97,14 @@ def main():
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
     parser.add_argument('--test-flow', action='store_true', help='Test build flow without heavy compilation')
     parser.add_argument('--skip-vector', action='store_true', help='Skip Vector build (test stages 2-3 only)')
-    parser.add_argument('--deploy', action='store_true', help='Deploy to JFrog PyPI after successful build')
-    parser.add_argument('--deploy-only', action='store_true', help='Only deploy (skip build - requires existing wheel)')
-    
+
     args = parser.parse_args()
-    
+
     if args.verbose:
         os.environ['VECTORDOTDEV_VERBOSE'] = 'true'
-    
-    if args.deploy or args.deploy_only:
-        os.environ['ENABLE_JFROG_DEPLOYMENT'] = 'ON'
-    
+
     build_system = RobustBuildSystem()
-    
-    # Deploy-only mode
-    if args.deploy_only:
-        log_message("📦 JFrog PyPI deployment only...")
-        success = build_system.jfrog_deployer.deploy_to_jfrog()
-        sys.exit(0 if success else 1)
-    
+
     # Test mode - just test the build flow logic
     if args.test_flow:
         log_message("🧪 Testing build flow without heavy compilation...")

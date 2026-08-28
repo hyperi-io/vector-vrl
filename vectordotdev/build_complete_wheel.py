@@ -281,7 +281,7 @@ def main():
     success = builder.build_complete_wheel()
     
     if success:
-        print(f"\n🎉 Ready for JFrog deployment!")
+        print(f"\n🎉 Ready for PyPI deployment!")
         print(f"   Use: twine upload dist/{builder.get_wheel_filename()}")
     else:
         print(f"\n❌ Wheel build failed")

@@ -2,9 +2,8 @@
 /target/
 */target/
 **/target/
-.cargo/
-*/Cargo.lock
-**/Cargo.lock
+# Cargo.lock IS committed for vector-bindings (the only Rust crate here) -
+# see standards/rules/rust.md "Required Tooling"
 
 # Vector source directory (build artifact - ignore entirely)
 /vector/
@@ -69,13 +68,15 @@ build/*.backup
 vectordotdev/target/
 # vectordotdev/dist/ - Allow for deployment wheels
 vector-bindings/target/
-vector-bindings/Cargo.lock
 
-# Cargo registry and git checkouts (major source of 10K+ changes)
+# Cargo registry and git checkouts (major source of 10K+ changes) -
+# NOT .cargo/config.toml, which is meant to be committed
 .cargo/registry/
 .cargo/git/
-*/.cargo/
-**/.cargo/
+*/.cargo/registry/
+*/.cargo/git/
+**/.cargo/registry/
+**/.cargo/git/
 
 # Rust incremental compilation data
 */incremental/

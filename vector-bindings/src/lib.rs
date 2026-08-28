@@ -39,8 +39,41 @@ impl VrlResult {
     }
 }
 
+// The VRL parser recurses per nesting level with no depth limit of its
+// own; past a few hundred levels of (), {}, or [] it overflows the stack
+// and segfaults the whole process (uncatchable in Rust - a Python caller
+// could crash the interpreter with a single malicious VRL string). This
+// cap rejects the input before it reaches the parser; ordinary VRL never
+// nests anywhere near this deep.
+const MAX_VRL_NESTING_DEPTH: usize = 64;
+
+fn check_nesting_depth(vrl_code: &str) -> Result<(), String> {
+    let mut depth: usize = 0;
+    let mut max_depth: usize = 0;
+    for c in vrl_code.chars() {
+        match c {
+            '(' | '{' | '[' => {
+                depth += 1;
+                max_depth = max_depth.max(depth);
+            }
+            ')' | '}' | ']' => {
+                depth = depth.saturating_sub(1);
+            }
+            _ => {}
+        }
+    }
+    if max_depth > MAX_VRL_NESTING_DEPTH {
+        return Err(format!(
+            "VRL source nests {max_depth} levels deep, exceeding the {MAX_VRL_NESTING_DEPTH}-level limit"
+        ));
+    }
+    Ok(())
+}
+
 /// Compile VRL code into a runnable program using real Vector VRL compiler
 fn compile_vrl_program(vrl_code: &str) -> Result<Program, String> {
+    check_nesting_depth(vrl_code)?;
+
     // Get all VRL standard library functions
     let functions = vrl::stdlib::all();
 
@@ -179,7 +212,16 @@ struct Vector {
 impl Vector {
     #[new]
     fn new(config_dict: &Bound<'_, PyDict>) -> PyResult<Self> {
-        let config_str = config_dict.to_string();
+        // PyDict::to_string() is Python repr() (single-quoted, Python
+        // literals), not JSON - only an empty dict happened to parse as
+        // valid JSON (`{}`). Round-trip through Python's own `json`
+        // module so nested dicts/lists/strings/numbers/bools/None are
+        // all serialized correctly.
+        let py = config_dict.py();
+        let json_module = py.import_bound("json")?;
+        let config_str: String = json_module
+            .call_method1("dumps", (config_dict,))?
+            .extract()?;
         let config: JsonValue = serde_json::from_str(&config_str).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid config: {}", e))
         })?;

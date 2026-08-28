@@ -134,10 +134,11 @@ pub struct {name} {{
 }}
 
 #[pymethods]
+#[allow(clippy::new_without_default)]
 impl {name} {{
     #[new]
     pub fn new() -> Self {{ {name} {{ data: String::new() }} }}
-    pub fn __repr__(&self) -> String {{ format!("{name}()") }}
+    pub fn __repr__(&self) -> String {{ "{name}()".to_string() }}
 }}
 
 "#,

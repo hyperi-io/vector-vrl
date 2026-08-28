@@ -10,42 +10,37 @@ import time
 # Import from bundled vector-bindings extension
 try:
     # Try bundled extension first (included in PyPI wheel)
-    from ._bindings import (
-        Vector, VectorCliPy, vrl_check, vrl_functions,
-        check_config_syntax_py, parse_cli_args_py
-    )
+    from ._bindings import Vector, VrlResult, execute_vrl, validate_vrl, get_vrl_performance
     _bindings_source = "bundled"
     _bindings_available = True
-    
+
 except ImportError:
     # Fallback to external vector-bindings if available
     try:
         import vector_bindings
         Vector = vector_bindings.Vector
-        VectorCliPy = vector_bindings.VectorCliPy
-        vrl_check = vector_bindings.vrl_check
-        vrl_functions = vector_bindings.vrl_functions
-        check_config_syntax_py = vector_bindings.check_config_syntax_py
-        parse_cli_args_py = vector_bindings.parse_cli_args_py
-        
+        VrlResult = vector_bindings.VrlResult
+        execute_vrl = vector_bindings.execute_vrl
+        validate_vrl = vector_bindings.validate_vrl
+        get_vrl_performance = vector_bindings.get_vrl_performance
+
         _bindings_source = "external"
         _bindings_available = True
-        
+
     except ImportError as e:
         # No bindings available
         print(f"⚠️ Warning: vector bindings not available: {e}")
         _bindings_available = False
         _bindings_source = "none"
-        
+
         # Stub implementations
         class Vector:
             def __init__(self, config): raise ImportError("Vector bindings not available")
-        class VectorCliPy:
-            def __init__(self, args): raise ImportError("Vector CLI bindings not available")
-        def vrl_check(code): raise ImportError("VRL functions not available")
-        def vrl_functions(): raise ImportError("VRL functions not available") 
-        def check_config_syntax_py(config): raise ImportError("Config validation not available")
-        def parse_cli_args_py(args): raise ImportError("CLI parsing not available")
+        class VrlResult:
+            def __init__(self, *args, **kwargs): raise ImportError("VRL bindings not available")
+        def execute_vrl(code, data): raise ImportError("VRL bindings not available")
+        def validate_vrl(code): raise ImportError("VRL bindings not available")
+        def get_vrl_performance(code, data, iterations=None): raise ImportError("VRL bindings not available")
 
 
 # Version information
@@ -91,11 +86,10 @@ except ImportError:
 # Re-export key components
 __all__ = [
     "Vector",
-    "VectorCliPy", 
-    "vrl_check",
-    "vrl_functions", 
-    "check_config_syntax_py",
-    "parse_cli_args_py",
+    "VrlResult",
+    "execute_vrl",
+    "validate_vrl",
+    "get_vrl_performance",
     "get_bindings_info",
     # THG Performance Assessment
     "THGPerformanceAssessor",

@@ -14,7 +14,10 @@ allow = ["Apache-2.0", "Apache-2.0 WITH LLVM-exception", "MIT", "MIT-0", "BSD-2-
 
 [bans]
 multiple-versions = "warn"
-wildcards = "deny"
+# "deny" would fail on `vrl` (git = ..., branch = "main", no version) -
+# a deliberate, documented choice (repo CLAUDE.md) to always track vrl's
+# main branch, not an accidental floating dependency.
+wildcards = "warn"
 highlight = "all"
 
 [sources]

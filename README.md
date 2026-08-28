@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 [![Build Status](https://img.shields.io/badge/build-3--stage-brightgreen)](#build-process)
 
-Python bindings for Vector data processing pipelines with high-performance regex2vrl conversion tool and comprehensive testing infrastructure.
+Python bindings for Vector data processing pipelines, with native in-process VRL execution and comprehensive testing infrastructure.
 
 ## 🚀 Features
 
@@ -543,9 +543,7 @@ vectordotdev is designed for high-throughput scenarios:
 
 ## 📄 License
 
-Copyright (c) 2025 HyperSec. This software is licensed under the HyperSec End User License Agreement (EULA). 
-
-For complete license terms, visit: https://hypersec.io/eula
+Apache License, Version 2.0. See [LICENSE](LICENSE) for the full text.
 
 ## 🔗 Related Projects
 

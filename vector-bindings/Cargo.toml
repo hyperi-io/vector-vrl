@@ -16,8 +16,12 @@ serde = { version = "1.0.219", default-features = false, features = ["derive", "
 serde_json = { version = "1.0.142", default-features = false, features = ["std"] }
 tokio = { version = "1.45.1", default-features = false, features = ["full"] }
 chrono = { version = "0.4", features = ["serde"] }
-# VRL - synced from Vector's workspace dependencies (NO HARDCODING)
-vrl = { git = "https://github.com/vectordotdev/vrl.git", branch = "main", features = ["cli"] }
+# VRL - synced from Vector's workspace dependencies (NO HARDCODING).
+# stdlib-base only, NOT the default `stdlib`/`cli`: this crate executes
+# caller-supplied VRL text, so enable_env_functions/enable_system_functions/
+# enable_network_functions (get_env_var, http_request, dns_lookup,
+# get_hostname) must stay off. enable_crypto_functions is safe to keep.
+vrl = { git = "https://github.com/vectordotdev/vrl.git", branch = "main", default-features = false, features = ["stdlib-base", "enable_crypto_functions"] }
 
 yaml-rust2 = "0.8"
 

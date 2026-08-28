@@ -41,13 +41,17 @@ class MockVRL:
             'is_string', 'is_integer', 'is_array', 'is_object', 'type'
         ]
 
-# Try to import vector, fallback to mock
+# Try to import vector, fallback to mock. AttributeError is also caught
+# here: the sibling `vector/` checkout (upstream Vector source, not a
+# Python package) can shadow this import as an empty PEP 420 namespace
+# package depending on sys.path/cwd, so `import vector` succeeds but has
+# none of the expected attributes.
 try:
     import vector
     vrl_check = vector.vrl_check
     vrl_functions = vector.vrl_functions
     VECTOR_AVAILABLE = True
-except ImportError:
+except (ImportError, AttributeError):
     mock_vrl = MockVRL()
     vrl_check = mock_vrl.vrl_check
     vrl_functions = mock_vrl.vrl_functions

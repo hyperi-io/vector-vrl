@@ -18,14 +18,12 @@ tokio = { version = "1.45.1", default-features = false, features = ["full"] }
 chrono = { version = "0.4", features = ["serde"] }
 # VRL - synced from Vector's workspace dependencies (NO HARDCODING)
 vrl = { git = "https://github.com/vectordotdev/vrl.git", branch = "main", features = ["cli"] }
-ordered-float = "4.5"
 
 yaml-rust2 = "0.8"
 
 [build-dependencies]
 pyo3-build-config = "0.22"
-syn = { version = "2.0", features = ["full", "parsing", "visit"] }
-quote = "1.0"
+syn = { version = "2.0", features = ["full", "parsing"] }
 walkdir = "2.5"
 
 [features]

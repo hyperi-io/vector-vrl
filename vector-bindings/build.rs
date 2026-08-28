@@ -1,7 +1,7 @@
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use syn::{File, Item, ItemEnum, ItemStruct, Visibility};
+use syn::{Item, Visibility};
 use walkdir::WalkDir;
 
 #[derive(Debug, Clone)]
@@ -26,18 +26,23 @@ fn main() {
     ];
 
     let mut all_apis = Vec::new();
-    let mut discovered_count = 0;
 
     println!("cargo:warning=🔍 Auto-discovering Vector APIs from multiple modules...");
 
     for path in &search_paths {
         if path.exists() {
             let apis = discover_apis(path);
-            println!("cargo:warning=  ✅ {} - {} APIs", path.display(), apis.len());
-            discovered_count += apis.len();
+            println!(
+                "cargo:warning=  ✅ {} - {} APIs",
+                path.display(),
+                apis.len()
+            );
             all_apis.extend(apis);
         } else {
-            println!("cargo:warning=  ⚠️  {} - not found, skipping", path.display());
+            println!(
+                "cargo:warning=  ⚠️  {} - not found, skipping",
+                path.display()
+            );
         }
     }
 
@@ -45,19 +50,26 @@ fn main() {
     let mut seen = std::collections::HashSet::new();
     all_apis.retain(|api| seen.insert(api.name.clone()));
 
-    println!("cargo:warning=✅ Discovered {} unique Vector APIs across all modules", all_apis.len());
+    println!(
+        "cargo:warning=✅ Discovered {} unique Vector APIs across all modules",
+        all_apis.len()
+    );
 
     let bindings = generate_bindings(&all_apis);
 
-    let out_dir = env::var("OUT_DIR").unwrap();
+    let out_dir = env::var("OUT_DIR").expect("OUT_DIR is always set by Cargo for build scripts");
     let dest_path = Path::new(&out_dir).join("auto_bindings.rs");
-    fs::write(&dest_path, bindings).unwrap();
-    println!("cargo:warning=✅ Generated {} auto-bindings", all_apis.len());
+    fs::write(&dest_path, bindings)
+        .unwrap_or_else(|e| panic!("failed to write generated bindings to {dest_path:?}: {e}"));
+    println!(
+        "cargo:warning=✅ Generated {} auto-bindings",
+        all_apis.len()
+    );
 }
 
 fn discover_apis(root_path: &Path) -> Vec<ApiInfo> {
     let mut apis = Vec::new();
-    let skip_names = vec!["Secrets", "BTreeMap", "HashMap"]; // Skip conflicting types
+    let skip_names = ["Secrets", "BTreeMap", "HashMap"]; // Skip conflicting types
 
     for entry in WalkDir::new(root_path)
         .into_iter()
@@ -80,9 +92,8 @@ fn discover_apis(root_path: &Path) -> Vec<ApiInfo> {
                         Item::Enum(e) if is_public(&e.vis) => {
                             let name = e.ident.to_string();
                             if !skip_names.contains(&name.as_str()) && !name.starts_with('_') {
-                                let variants = e.variants.iter()
-                                    .map(|v| v.ident.to_string())
-                                    .collect();
+                                let variants =
+                                    e.variants.iter().map(|v| v.ident.to_string()).collect();
                                 apis.push(ApiInfo {
                                     name,
                                     kind: ApiKind::Enum { variants },
@@ -107,10 +118,9 @@ fn generate_bindings(apis: &[ApiInfo]) -> String {
     let mut code = String::from(
         r#"// AUTO-GENERATED from Vector - DO NOT EDIT
 
+// pyo3::prelude is already in scope: this file is spliced into lib.rs via
+// include!(), which already imports it before the include! call.
 #[allow(dead_code, unused_variables)]
-
-use pyo3::prelude::*;
-
 "#,
     );
 
@@ -118,7 +128,7 @@ use pyo3::prelude::*;
         code.push_str(&match &api.kind {
             ApiKind::Struct => format!(
                 r#"#[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct {name} {{
     #[pyo3(get, set)]
     pub data: String,
@@ -150,7 +160,7 @@ impl {name} {{
 
                 format!(
                     r#"#[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct {name} {{ v: String }}
 
 #[pymethods]

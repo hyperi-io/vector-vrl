@@ -1,15 +1,16 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyDictMethods};
+use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
-use serde_json::{Value as JsonValue, json};
-use vrl::compiler::{Program, TimeZone, compile, TargetValue};
+use vrl::compiler::prelude::NotNan;
 use vrl::compiler::runtime::{Runtime, Terminate};
 use vrl::compiler::state::RuntimeState;
-use vrl::value::{Value, Secrets};
+use vrl::compiler::{compile, Program, TargetValue, TimeZone};
+use vrl::value::{Secrets, Value};
 
 /// VRL execution result with error details
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct VrlResult {
     #[pyo3(get)]
     success: bool,
@@ -43,7 +44,7 @@ fn compile_vrl_program(vrl_code: &str) -> Result<Program, String> {
             // Format compilation errors
             let mut errors = Vec::new();
             for diagnostic in diagnostics {
-                errors.push(format!("{}", diagnostic.message()));
+                errors.push(diagnostic.message().to_string());
             }
             errors.join("\n")
         })
@@ -87,7 +88,10 @@ fn execute_vrl_on_event(program: &Program, event_data: &str) -> Result<Value, St
 
     // Execute VRL program using Vector's runtime
     match runtime.resolve(&mut target, program, &timezone) {
-        Ok(result) => Ok(target.value),
+        // The VRL program's own return value is discarded here; the mutated
+        // `target.value` (the event after any `.field = ...` assignments) is
+        // what callers expect back.
+        Ok(_) => Ok(target.value),
         Err(terminate) => {
             let error_msg = match terminate {
                 Terminate::Abort(msg) => format!("VRL aborted: {}", msg),
@@ -107,16 +111,18 @@ fn json_to_vrl_value(json: JsonValue) -> Value {
             if let Some(i) = n.as_i64() {
                 Value::Integer(i)
             } else if let Some(f) = n.as_f64() {
-                // Use NotNan::new for v0.27+ (handles NaN gracefully, no hardcoding!)
-                Value::Float(ordered_float::NotNan::new(f).unwrap_or(ordered_float::NotNan::new(0.0).unwrap()))
+                // Value::Float requires vrl's own NotNan type, not a separately
+                // pinned ordered-float crate -- the two can diverge in version.
+                // 0.0 is never NaN, so this fallback can never fail.
+                Value::Float(
+                    NotNan::new(f).unwrap_or_else(|_| NotNan::new(0.0).expect("0.0 is never NaN")),
+                )
             } else {
                 Value::Null
             }
         }
         JsonValue::String(s) => Value::Bytes(s.into()),
-        JsonValue::Array(arr) => {
-            Value::Array(arr.into_iter().map(json_to_vrl_value).collect())
-        }
+        JsonValue::Array(arr) => Value::Array(arr.into_iter().map(json_to_vrl_value).collect()),
         JsonValue::Object(obj) => {
             let mut map = BTreeMap::new();
             for (k, v) in obj {
@@ -137,9 +143,7 @@ fn vrl_value_to_json(value: Value) -> JsonValue {
             JsonValue::Number(serde_json::Number::from_f64(f.into_inner()).unwrap_or(0.into()))
         }
         Value::Bytes(b) => JsonValue::String(String::from_utf8_lossy(&b).to_string()),
-        Value::Array(arr) => {
-            JsonValue::Array(arr.into_iter().map(vrl_value_to_json).collect())
-        }
+        Value::Array(arr) => JsonValue::Array(arr.into_iter().map(vrl_value_to_json).collect()),
         Value::Object(obj) => {
             let mut map = serde_json::Map::new();
             for (k, v) in obj {
@@ -154,6 +158,7 @@ fn vrl_value_to_json(value: Value) -> JsonValue {
 
 /// In-process Vector configuration and execution
 #[pyclass]
+#[derive(Debug)]
 struct Vector {
     config: JsonValue,
     initialized: bool,
@@ -164,8 +169,9 @@ impl Vector {
     #[new]
     fn new(config_dict: &Bound<'_, PyDict>) -> PyResult<Self> {
         let config_str = config_dict.to_string();
-        let config: JsonValue = serde_json::from_str(&config_str)
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid config: {}", e)))?;
+        let config: JsonValue = serde_json::from_str(&config_str).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid config: {}", e))
+        })?;
 
         Ok(Vector {
             config,
@@ -182,12 +188,18 @@ impl Vector {
     /// Process logs in-process using real VRL runtime
     fn process_logs(&self, logs: Vec<String>, vrl_code: String) -> PyResult<Vec<PyObject>> {
         if !self.initialized {
-            return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Vector not initialized"));
+            return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Vector not initialized",
+            ));
         }
 
         // Compile VRL program using real Vector VRL compiler
-        let program = compile_vrl_program(&vrl_code)
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("VRL compilation failed: {}", e)))?;
+        let program = compile_vrl_program(&vrl_code).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "VRL compilation failed: {}",
+                e
+            ))
+        })?;
 
         Python::with_gil(|py| {
             let mut results = Vec::new();
@@ -233,8 +245,9 @@ impl Vector {
 #[pyfunction]
 fn execute_vrl(vrl_code: String, input_data: Vec<String>) -> PyResult<Vec<PyObject>> {
     // Compile VRL program using real Vector VRL compiler
-    let program = compile_vrl_program(&vrl_code)
-        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("VRL compilation failed: {}", e)))?;
+    let program = compile_vrl_program(&vrl_code).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("VRL compilation failed: {}", e))
+    })?;
 
     Python::with_gil(|py| {
         let mut results = Vec::new();
@@ -306,12 +319,21 @@ fn validate_vrl(vrl_code: String) -> PyResult<VrlResult> {
 /// Get THG performance metrics for VRL code using real VRL execution
 #[pyfunction]
 #[pyo3(signature = (vrl_code, test_data, iterations=None))]
-fn get_vrl_performance(vrl_code: String, test_data: Vec<String>, iterations: Option<u32>) -> PyResult<PyObject> {
+fn get_vrl_performance(
+    vrl_code: String,
+    test_data: Vec<String>,
+    iterations: Option<u32>,
+) -> PyResult<PyObject> {
     let iter_count = iterations.unwrap_or(100);
     let start_time = std::time::Instant::now();
 
     // Execute VRL processing with real VRL runtime
-    let repeated_data: Vec<String> = test_data.iter().cycle().take(test_data.len() * iter_count as usize).cloned().collect();
+    let repeated_data: Vec<String> = test_data
+        .iter()
+        .cycle()
+        .take(test_data.len() * iter_count as usize)
+        .cloned()
+        .collect();
     let _results = execute_vrl(vrl_code.clone(), repeated_data)?;
     let processing_time = start_time.elapsed();
 

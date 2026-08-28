@@ -7,9 +7,21 @@ use std::path::Path;
 /// Represents a discovered public API in Vector
 #[derive(Debug)]
 enum PublicApi {
-    Struct { name: String, module: String, fields: Vec<Field> },
-    Enum { name: String, module: String, variants: Vec<String> },
-    Function { name: String, module: String, signature: String },
+    Struct {
+        name: String,
+        module: String,
+        fields: Vec<Field>,
+    },
+    Enum {
+        name: String,
+        module: String,
+        variants: Vec<String>,
+    },
+    Function {
+        name: String,
+        module: String,
+        signature: String,
+    },
 }
 
 #[derive(Debug)]
@@ -31,7 +43,7 @@ fn discover_vector_apis(vector_path: &str) -> Vec<PublicApi> {
             Field {
                 name: "value".to_string(),
                 type_: "Value".to_string(),
-                is_public: false,  // Uses accessor methods
+                is_public: false, // Uses accessor methods
             },
             Field {
                 name: "metadata".to_string(),
@@ -100,11 +112,21 @@ pub fn register_all_auto_bindings(m: &Bound<'_, PyModule>) -> PyResult<()> {
 /// Generate binding for a single API
 fn generate_single_binding(api: &PublicApi) -> String {
     match api {
-        PublicApi::Struct { name, module, fields } => generate_struct_binding(name, module, fields),
-        PublicApi::Enum { name, module, variants } => generate_enum_binding(name, module, variants),
-        PublicApi::Function { name, module, signature } => {
-            generate_function_binding(name, module, signature)
-        }
+        PublicApi::Struct {
+            name,
+            module,
+            fields,
+        } => generate_struct_binding(name, module, fields),
+        PublicApi::Enum {
+            name,
+            module,
+            variants,
+        } => generate_enum_binding(name, module, variants),
+        PublicApi::Function {
+            name,
+            module,
+            signature,
+        } => generate_function_binding(name, module, signature),
     }
 }
 
@@ -213,7 +235,10 @@ fn main() {
     println!("🔧 Generating PyO3 bindings...");
     let bindings_code = generate_bindings(&apis);
 
-    println!("✅ Generated {} lines of code\n", bindings_code.lines().count());
+    println!(
+        "✅ Generated {} lines of code\n",
+        bindings_code.lines().count()
+    );
 
     // Step 3: Write to file (in real build.rs, this goes to OUT_DIR)
     let output_path = "src/auto_generated_poc.rs";

@@ -7,11 +7,11 @@ use std::collections::BTreeMap;
 
 /// Auto-generated binding for vector_core::event::LogEvent
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct LogEvent {
     // Internal Vector type (not exposed to Python directly)
     #[pyo3(get, set)]
-    pub data: String,  // Simplified for POC
+    pub data: String, // Simplified for POC
 }
 
 #[pymethods]
@@ -33,7 +33,7 @@ impl LogEvent {
 
 /// Auto-generated binding for vector_core::event::Event
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Event {
     variant: String,
 }
@@ -72,11 +72,11 @@ impl Event {
 
 /// Auto-generated binding for vector_core::event::Metric
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Metric {
     // Internal Vector type (not exposed to Python directly)
     #[pyo3(get, set)]
-    pub data: String,  // Simplified for POC
+    pub data: String, // Simplified for POC
 }
 
 #[pymethods]
@@ -95,7 +95,6 @@ impl Metric {
     // Auto-generated getters/setters would go here
     // In real implementation, use actual Vector API
 }
-
 
 /// Register all auto-discovered Vector APIs
 pub fn register_all_auto_bindings(m: &Bound<'_, PyModule>) -> PyResult<()> {

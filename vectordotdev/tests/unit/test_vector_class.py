@@ -21,6 +21,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -141,19 +142,33 @@ class TestVectorPipeline:
         ]
         vrl = '.level = upcase!(.level)\n.stage = "processed"\n.len = length!(.message)'
 
-        results = pipeline.process_logs(logs, vrl)
+        events = pipeline.process_logs(logs, vrl)
 
-        assert len(results) == len(logs)
-        # process_logs returns {"result": <json string>, "success": bool} -
-        # note this differs from execute_vrl, which returns the event's
-        # fields flattened into the dict.
-        events = [json.loads(item["result"]) for item in results]
-        assert all(item["success"] is True for item in results)
+        assert len(events) == len(logs)
+        # The event's fields come back flattened into the dict, the same as
+        # execute_vrl - no "result" JSON string, no "success" wrapper key.
         assert [event["level"] for event in events] == ["INFO", "ERROR", "DEBUG"]
         assert [event["stage"] for event in events] == ["processed"] * 3
         assert [event["len"] for event in events] == [10, 11, 9]
         # The untouched field survives the transform.
         assert events[0]["message"] == "user login"
+
+    def test_process_logs_matches_execute_vrl_shape(self):
+        """The two entry points return the same dict for the same event.
+
+        Both run the same VRL runtime, so a caller must not have to care
+        which one produced the result (issue #18).
+        """
+        pipeline = self._initialized()
+        # One event that transforms cleanly, one that fails at runtime, so
+        # both the success and the error shape are compared.
+        logs = [
+            json.dumps({"message": '{"ok":true}', "n": 1, "f": 1.5, "b": True, "nul": None}),
+            json.dumps({"message": "not json"}),
+        ]
+        vrl = ".upper = upcase!(.message)\n.parsed = parse_json!(.message)"
+
+        assert pipeline.process_logs(logs, vrl) == execute_vrl(vrl, logs)
 
     def test_process_logs_reports_runtime_error_per_event(self):
         """A bad event is reported, not dropped and not fatal to the batch."""
@@ -163,10 +178,13 @@ class TestVectorPipeline:
         results = pipeline.process_logs(logs, ".parsed = parse_json!(.message)")
 
         assert len(results) == 2
-        assert results[0]["success"] is True
-        assert results[1]["success"] is False
+        # Failure is signalled the execute_vrl way: an "error" key replaces
+        # the event's fields entirely.
+        assert "error" not in results[0]
+        assert results[0]["message"] == '{"ok":true}'
         assert "parse_json" in results[1]["error"]
         assert results[1]["original"] == logs[1]
+        assert "parsed" not in results[1]
 
     def test_process_logs_empty_batch_returns_empty(self):
         assert self._initialized().process_logs([], ".x = 1") == []
@@ -176,20 +194,85 @@ class TestVectorPipeline:
         with pytest.raises(ValueError, match="VRL compilation failed"):
             pipeline.process_logs(['{"a":1}'], ".x = no_such_function!()")
 
-    def test_get_stats_returns_dict(self):
-        pipeline = self._initialized()
-        pipeline.process_logs([json.dumps({"level": "info"})], ".level = upcase!(.level)")
+    def test_get_stats_before_any_work_is_all_zero(self):
+        stats = Vector({}).get_stats()
 
+        assert {"events_processed", "bytes_processed", "errors", "uptime_seconds"} <= set(stats)
+        assert all(isinstance(value, int | float) for value in stats.values())
+        assert stats["events_processed"] == 0
+        assert stats["bytes_processed"] == 0
+        assert stats["errors"] == 0
+        # Never initialized, so the uptime clock has not started.
+        assert stats["uptime_seconds"] == 0.0
+
+    def test_get_stats_counts_real_work(self):
+        """The counters track what process_logs actually did."""
+        pipeline = self._initialized()
+        logs = [json.dumps({"level": "info"}), json.dumps({"level": "error"})]
+
+        pipeline.process_logs(logs, ".level = upcase!(.level)")
         stats = pipeline.get_stats()
 
-        assert isinstance(stats, dict)
-        # Only the shape is asserted: the counters are hardcoded zeros in
-        # the crate and do not yet track real work, so asserting values
-        # here would enshrine that as intended behaviour.
-        assert {"events_processed", "bytes_processed", "errors", "uptime_seconds"} <= set(
-            stats
-        )
-        assert all(isinstance(value, int | float) for value in stats.values())
+        assert stats["events_processed"] == 2
+        assert stats["errors"] == 0
+        assert stats["bytes_processed"] == sum(len(log.encode()) for log in logs)
+
+    def test_get_stats_accumulates_across_batches(self):
+        pipeline = self._initialized()
+        log = json.dumps({"level": "info"})
+
+        pipeline.process_logs([log], ".level = upcase!(.level)")
+        pipeline.process_logs([log, log], ".level = upcase!(.level)")
+
+        assert pipeline.get_stats()["events_processed"] == 3
+
+    def test_get_stats_counts_per_event_errors_separately(self):
+        """A failed event lands in `errors`, not `events_processed`."""
+        pipeline = self._initialized()
+        logs = [json.dumps({"message": '{"ok":true}'}), json.dumps({"message": "not json"})]
+
+        pipeline.process_logs(logs, ".parsed = parse_json!(.message)")
+        stats = pipeline.get_stats()
+
+        assert stats["events_processed"] == 1
+        assert stats["errors"] == 1
+        # Every attempted event is counted exactly once, and its bytes are
+        # counted whether or not it transformed cleanly.
+        assert stats["events_processed"] + stats["errors"] == len(logs)
+        assert stats["bytes_processed"] == sum(len(log.encode()) for log in logs)
+
+    def test_get_stats_uptime_is_real_elapsed_time(self):
+        pipeline = self._initialized()
+        first = pipeline.get_stats()["uptime_seconds"]
+        assert first > 0.0
+
+        time.sleep(0.05)
+
+        assert pipeline.get_stats()["uptime_seconds"] >= first + 0.04
+
+    def test_initialize_restarts_the_counters(self):
+        """Stats describe the run since the most recent initialize()."""
+        pipeline = self._initialized()
+        pipeline.process_logs([json.dumps({"level": "info"})], ".level = upcase!(.level)")
+        assert pipeline.get_stats()["events_processed"] == 1
+
+        pipeline.initialize()
+
+        stats = pipeline.get_stats()
+        assert stats["events_processed"] == 0
+        assert stats["bytes_processed"] == 0
+        assert stats["errors"] == 0
+
+    def test_get_stats_unmoved_by_a_compile_failure(self):
+        """Compilation fails before any event is touched, so nothing counts."""
+        pipeline = self._initialized()
+        with pytest.raises(ValueError, match="VRL compilation failed"):
+            pipeline.process_logs(['{"a":1}'], ".x = no_such_function!()")
+
+        stats = pipeline.get_stats()
+        assert stats["events_processed"] == 0
+        assert stats["errors"] == 0
+        assert stats["bytes_processed"] == 0
 
 
 class TestVrlSandbox:

@@ -87,9 +87,8 @@ A VRL runtime error replaces that event's dict entirely. You get `error` and
   'original': '{"message":"nope"}'}]
 ```
 
-Note there is no `success` key here. `Vector.process_logs` returns a
-different shape for the same condition - see below. Detect failure with
-`"error" in result`.
+Note there is no `success` key here. Detect failure with
+`"error" in result`. `Vector.process_logs` returns exactly this shape too.
 
 ## validate_vrl
 
@@ -182,35 +181,46 @@ raises `RuntimeError("Vector not initialized")`.
 
 ### process_logs return shape
 
-Different from `execute_vrl`. One dict per log, and the event is a JSON
-string under `result` rather than flattened:
+Identical to `execute_vrl` - both go through the same conversion in the
+crate. One dict per log, the event's fields flattened in:
 
 ```python
-{'result': '{"level":"INFO"}', 'success': True}
+{'level': 'INFO'}
 ```
 
-On a per-event runtime error:
+On a per-event runtime error, `error` and `original` replace the event's
+fields:
 
 ```python
-{'error': 'VRL error: ...', 'success': False, 'original': '<the input string>'}
+{'error': 'VRL error: ...', 'original': '<the input string>'}
 ```
 
-So `json.loads(item["result"])` to get the event. Uncompilable VRL raises
-`ValueError("VRL compilation failed: ...")` for the whole batch, same as
-`execute_vrl`.
+So `"error" in result` is the failure check, the same as `execute_vrl`.
+Uncompilable VRL raises `ValueError("VRL compilation failed: ...")` for the
+whole batch, also the same as `execute_vrl`.
 
 ### get_stats
 
 ```python
-{'events_processed': 0, 'bytes_processed': 0, 'errors': 0, 'uptime_seconds': 0.0}
+{'events_processed': 2, 'bytes_processed': 51, 'errors': 1, 'uptime_seconds': 0.31}
 ```
 
-Those are hardcoded zeros. They do not count anything, and they stay zero
-after processing. The keys are stable, the values are not yet real.
+Real accumulated counts, measured from the most recent `initialize()` -
+calling `initialize()` again restarts the uptime clock and zeroes the
+counters, so the numbers always describe one run.
 
-The unused `config`, the zeroed stats, and the return-shape mismatch between
-`process_logs` and `execute_vrl` are tracked together in
-[issue #18](https://github.com/hyperi-io/vectordotdev/issues/18).
+| Key | Counts |
+|---|---|
+| `events_processed` | events `process_logs` transformed without a runtime error |
+| `errors` | events that hit a VRL runtime error |
+| `bytes_processed` | UTF-8 bytes of every input string handed to `process_logs`, failed events included |
+| `uptime_seconds` | seconds since `initialize()`; `0.0` before it is called |
+
+Every event lands in exactly one of `events_processed` or `errors`, so the
+two sum to the number of events attempted. VRL that fails to COMPILE raises
+before any event is touched and moves no counter.
+
+`config` is still stored and never used - see the constraints above.
 
 ## VRL restrictions
 

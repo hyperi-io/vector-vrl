@@ -1,189 +1,208 @@
-"""Pytest-compatible VRL expression checks.
+"""VRL expression checks against the real VRL compiler.
 
-`import vector` always fails (no such module ships here), so every
-assertion runs against the `MockVRL` heuristic defined below, not the
-real VRL parser.
+Every assertion goes through `validate_vrl` from the compiled bindings,
+so a failure means real VRL disagrees. There is no stand-in checker and
+no `import vector` fallback: no such top-level package ships, so a
+fallback is a guarantee of testing nothing (issue #17).
+
+`validate_vrl` compiles without running, which is exactly the question
+these cases ask - does this expression compile - so nothing here needs an
+event to run against.
 """
 
-# Mock VRL functionality for testing when vector module isn't available
-class MockVRL:
-    @staticmethod
-    def vrl_check(expr):
-        """Mock VRL expression checker."""
-        if not expr.strip():
-            return False
+from __future__ import annotations
 
-        # Check bracket matching
-        if (expr.count('(') != expr.count(')') or
-            expr.count('{') != expr.count('}') or
-            expr.count('[') != expr.count(']')):
-            return False
+import sys
+from pathlib import Path
 
-        # Invalid patterns
-        invalid_patterns = [
-            'invalid syntax', ' +$', ' =$', 'unknown_func', 'parse_nonexistent'
-        ]
+import pytest
 
-        for pattern in invalid_patterns:
-            if pattern in expr:
-                return False
+_SRC = Path(__file__).resolve().parents[2] / "src"
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
 
-        return True
+# Skip just this module (not the session) when the crate isn't built.
+pytest.importorskip(
+    "vectordotdev._bindings",
+    reason="compiled PyO3 bindings not built - run: cd vector-bindings && maturin develop --release",
+)
 
-    @staticmethod
-    def vrl_functions():
-        """Mock VRL functions list."""
-        return [
-            'now', 'uuid_v4', 'del', 'parse_json', 'to_string', 'to_int',
-            'upcase', 'downcase', 'strip_whitespace', 'replace', 'split',
-            'join', 'push', 'pop', 'length', 'get', 'contains',
-            'format_timestamp', 'parse_timestamp', 'parse_int',
-            'is_string', 'is_integer', 'is_array', 'is_object', 'type'
-        ]
+from vectordotdev import validate_vrl  # noqa: E402
 
-# Try to import vector, fallback to mock. AttributeError is also caught
-# here: the sibling `vector/` checkout (upstream Vector source, not a
-# Python package) can shadow this import as an empty PEP 420 namespace
-# package depending on sys.path/cwd, so `import vector` succeeds but has
-# none of the expected attributes.
-try:
-    import vector
-    vrl_check = vector.vrl_check
-    vrl_functions = vector.vrl_functions
-    VECTOR_AVAILABLE = True
-except (ImportError, AttributeError):
-    mock_vrl = MockVRL()
-    vrl_check = mock_vrl.vrl_check
-    vrl_functions = mock_vrl.vrl_functions
-    VECTOR_AVAILABLE = False
+
+def assert_compiles(expr: str) -> None:
+    result = validate_vrl(expr)
+    assert result.success is True, f"{expr!r} should compile, got: {result.error}"
+    assert result.error is None
+    assert result.error_type is None
+
+
+def assert_rejected(expr: str) -> None:
+    result = validate_vrl(expr)
+    assert result.success is False, f"{expr!r} should be rejected, but it compiled"
+    assert result.error
+    assert result.error_type == "compilation_error"
+
 
 class TestVRLBasics:
-    """Test basic VRL functionality."""
+    """Expressions the compiler accepts."""
 
-    def test_valid_field_assignments(self):
-        """Test basic field assignment expressions."""
-        valid_assignments = [
+    @pytest.mark.parametrize(
+        "expr",
+        [
             ". = .message",
-            ".level = \"INFO\"",
+            '.level = "INFO"',
             ".processed = true",
-            ".enriched = false"
-        ]
+            ".enriched = false",
+        ],
+    )
+    def test_valid_field_assignments(self, expr):
+        assert_compiles(expr)
 
-        for expr in valid_assignments:
-            assert vrl_check(expr), f"Expression should be valid: {expr}"
-
-    def test_function_calls(self):
-        """Test basic VRL function calls."""
-        function_calls = [
+    @pytest.mark.parametrize(
+        "expr",
+        [
             "now()",
             "uuid_v4()",
             "del(.field)",
-            "del(.password)"
-        ]
+            "del(.password)",
+        ],
+    )
+    def test_function_calls(self, expr):
+        assert_compiles(expr)
 
-        for expr in function_calls:
-            assert vrl_check(expr), f"Function call should be valid: {expr}"
-
-    def test_json_parsing(self):
-        """Test JSON parsing expressions."""
-        json_expressions = [
+    @pytest.mark.parametrize(
+        "expr",
+        [
             "parse_json!(.message)",
-            ".parsed = parse_json(.message) ?? {}"
-        ]
+            ".parsed = parse_json(.message) ?? {}",
+        ],
+    )
+    def test_json_parsing(self, expr):
+        assert_compiles(expr)
 
-        for expr in json_expressions:
-            assert vrl_check(expr), f"JSON expression should be valid: {expr}"
+    @pytest.mark.parametrize(
+        "expr",
+        [
+            'if .level == "ERROR" { .alert = true }',
+            '.status = if .code == 200 { "ok" } else { "error" }',
+        ],
+    )
+    def test_conditionals(self, expr):
+        assert_compiles(expr)
 
-    def test_conditionals(self):
-        """Test conditional expressions."""
-        conditional_expressions = [
-            "if .level == \"ERROR\" { .alert = true }",
-            ".status = if .code == 200 { \"ok\" } else { \"error\" }"
-        ]
 
-        for expr in conditional_expressions:
-            assert vrl_check(expr), f"Conditional should be valid: {expr}"
+# One call per function, written the way the stdlib actually types it -
+# `!` where the function is fallible, real argument types where it is
+# picky. A function that has been removed from the stdlib stops
+# compiling, which is the point.
+STDLIB_CALLS = {
+    "now": ".x = now()",
+    "uuid_v4": ".x = uuid_v4()",
+    "del": ".x = del(.a)",
+    "parse_json": ".x = parse_json!(.message)",
+    "parse_timestamp": '.x = parse_timestamp!(.s, "%F")',
+    "parse_int": ".x = parse_int!(.s)",
+    "upcase": ".x = upcase!(.s)",
+    "downcase": ".x = downcase!(.s)",
+    "strip_whitespace": ".x = strip_whitespace!(.s)",
+    "replace": '.x = replace!(.s, "a", "b")',
+    "split": '.x = split!(.s, ",")',
+    "join": '.x = join!(.arr, ",")',
+    "pop": ".x = pop!(.arr)",
+    "get": '.x = get!(.obj, ["a"])',
+    "length": ".x = length!(.s)",
+    "contains": '.x = contains!(.s, "x")',
+    "format_timestamp": '.x = format_timestamp!(now(), "%F")',
+    "to_string": ".x = to_string!(.n)",
+    "to_int": ".x = to_int!(.n)",
+    "is_string": ".x = is_string(.s)",
+    "is_integer": ".x = is_integer(.s)",
+    "is_array": ".x = is_array(.s)",
+    "is_object": ".x = is_object(.s)",
+}
+
 
 class TestVRLFunctions:
-    """Test VRL function availability."""
+    """The stdlib functions callers rely on are compiled in."""
 
-    def test_core_functions_available(self):
-        """Test that core VRL functions are available."""
-        functions = vrl_functions()
-        core_functions = ['now', 'uuid_v4', 'del', 'type']
+    @pytest.mark.parametrize("name", ["now", "uuid_v4", "del"])
+    def test_core_functions_available(self, name):
+        assert_compiles(STDLIB_CALLS[name])
 
-        for func in core_functions:
-            assert func in functions, f"Core function '{func}' should be available"
+    @pytest.mark.parametrize("name", ["parse_json", "parse_timestamp", "parse_int"])
+    def test_parsing_functions_available(self, name):
+        assert_compiles(STDLIB_CALLS[name])
 
-    def test_parsing_functions_available(self):
-        """Test parsing functions are available."""
-        functions = vrl_functions()
-        parsing_functions = ['parse_json', 'parse_timestamp', 'parse_int']
+    @pytest.mark.parametrize("name", ["upcase", "downcase", "strip_whitespace", "replace"])
+    def test_string_functions_available(self, name):
+        assert_compiles(STDLIB_CALLS[name])
 
-        for func in parsing_functions:
-            assert func in functions, f"Parsing function '{func}' should be available"
+    @pytest.mark.parametrize("name", sorted(STDLIB_CALLS))
+    def test_documented_stdlib_call_compiles(self, name):
+        assert_compiles(STDLIB_CALLS[name])
 
-    def test_string_functions_available(self):
-        """Test string manipulation functions."""
-        functions = vrl_functions()
-        string_functions = ['upcase', 'downcase', 'strip_whitespace', 'replace']
+    def test_undefined_function_is_not_quietly_accepted(self):
+        """Positive control for the whole group above.
 
-        for func in string_functions:
-            assert func in functions, f"String function '{func}' should be available"
+        Without this, every availability assertion would still pass if
+        the compiler stopped resolving function names at all.
+        """
+        assert_rejected(".x = definitely_not_a_vrl_function!(.s)")
+
 
 class TestVRLInvalidExpressions:
-    """Test invalid VRL expression detection."""
+    """Expressions the compiler rejects."""
 
-    def test_syntax_errors_detected(self):
-        """Test that syntax errors are properly detected."""
-        invalid_expressions = [
+    @pytest.mark.parametrize(
+        "expr",
+        [
             "invalid syntax",
             "parse_nonexistent(.field)",
             ".bad = unknown_func(.data)",
-            "if .condition {"  # Missing closing brace
-        ]
+            "if .condition {",
+        ],
+    )
+    def test_syntax_errors_detected(self, expr):
+        assert_rejected(expr)
 
-        for expr in invalid_expressions:
-            assert not vrl_check(expr), f"Invalid expression should be rejected: {expr}"
+    @pytest.mark.parametrize(
+        "expr",
+        [
+            ". = .field +",
+            ".field =",
+        ],
+    )
+    def test_incomplete_expressions_detected(self, expr):
+        """A truncated expression is a parse failure, not a lenient pass."""
+        assert_rejected(expr)
 
-    def test_incomplete_expressions_detected(self):
-        """Test that incomplete expressions are detected."""
-        # Note: Some of these might pass in mock mode due to simplified checking
-        incomplete_expressions = [
-            ". = .field +",  # Incomplete operator
-            ".field ="       # Incomplete assignment
-        ]
+    def test_empty_source_compiles(self):
+        """Empty VRL is a no-op program, not an error."""
+        assert_compiles("")
 
-        for expr in incomplete_expressions:
-            result = vrl_check(expr)
-            if VECTOR_AVAILABLE:
-                assert not result, f"Incomplete expression should be rejected: {expr}"
-            # In mock mode, we're more lenient since we don't have full parsing
 
-class TestVRLMetadata:
-    """Test VRL metadata and configuration."""
+class TestVRLErrorReporting:
+    """The failure a caller is handed is usable, not just falsy."""
 
-    def test_function_count(self):
-        """Test that reasonable number of functions are available."""
-        functions = vrl_functions()
-        assert len(functions) >= 20, f"Expected at least 20 VRL functions, got {len(functions)}"
+    def test_undefined_function_names_the_problem(self):
+        result = validate_vrl("parse_nonexistent(.field)")
+        assert "undefined function" in result.error
 
-    def test_vector_availability(self):
-        """Test Vector module availability status."""
-        if VECTOR_AVAILABLE:
-            import vector
-            assert hasattr(vector, 'vrl_check'), "Vector should have vrl_check function"
-            assert hasattr(vector, 'vrl_functions'), "Vector should have vrl_functions function"
+    def test_success_carries_no_error(self):
+        result = validate_vrl('.level = "INFO"')
+        assert result.output == "VRL syntax valid"
+        assert result.error is None
+
 
 def test_yaml_config_validation():
-    """Test VRL expressions within YAML configuration context."""
+    """The VRL inside a Vector transform config compiles as a whole."""
     import yaml
 
-    # Sample YAML with VRL
     config_yaml = """
     sources:
       app:
-        type: python
+        type: stdin
 
     transforms:
       process:
@@ -206,21 +225,10 @@ def test_yaml_config_validation():
         inputs: ["process"]
     """
 
-    # Test YAML parsing
     config = yaml.safe_load(config_yaml)
-    assert config is not None, "YAML should parse successfully"
-
-    # Test VRL source extraction
     vrl_source = config["transforms"]["process"]["source"]
-    assert vrl_source is not None, "VRL source should be extractable"
 
-    # Test individual VRL lines
-    lines = [line.strip() for line in vrl_source.split('\n')
-             if line.strip() and not line.strip().startswith('#')]
-
-    valid_lines = 0
-    for line in lines:
-        if vrl_check(line):
-            valid_lines += 1
-
-    assert valid_lines >= len(lines) * 0.6, f"Most VRL lines should be valid: {valid_lines}/{len(lines)}"
+    # The whole source, not line by line: an `if` block's lines do not
+    # compile on their own, so checking them individually measures
+    # nothing about the transform.
+    assert_compiles(vrl_source)

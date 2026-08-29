@@ -9,6 +9,8 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyDictMethods};
 use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
+use std::num::Saturating;
+use std::time::Instant;
 use vrl::compiler::prelude::NotNan;
 use vrl::compiler::runtime::{Runtime, Terminate};
 use vrl::compiler::state::RuntimeState;
@@ -196,16 +198,75 @@ fn vrl_value_to_json(value: Value) -> JsonValue {
     }
 }
 
+/// Convert one event's VRL outcome into the dict the Python caller gets back.
+///
+/// `execute_vrl` and `Vector::process_logs` both funnel through here, which is
+/// what keeps the two entry points returning one shape. On success the event's
+/// top-level fields are flattened into the dict; on a per-event runtime error
+/// the dict carries `error` and `original` INSTEAD of the event's fields, so
+/// `"error" in result` is the failure check for both.
+///
+/// Nested objects and arrays are stringified, matching what the Python API
+/// reference documents - a caller wanting the structure back calls
+/// `json.loads` on them.
+fn vrl_outcome_to_py_dict(
+    py: Python<'_>,
+    outcome: Result<Value, String>,
+    original: &str,
+) -> PyResult<PyObject> {
+    let result_dict = PyDict::new_bound(py);
+
+    match outcome {
+        Ok(vrl_result) => {
+            if let JsonValue::Object(obj) = vrl_value_to_json(vrl_result) {
+                for (key, value) in obj {
+                    let py_value = match value {
+                        JsonValue::String(s) => s.into_py(py),
+                        JsonValue::Number(n) => {
+                            if let Some(i) = n.as_i64() {
+                                i.into_py(py)
+                            } else if let Some(f) = n.as_f64() {
+                                f.into_py(py)
+                            } else {
+                                py.None()
+                            }
+                        }
+                        JsonValue::Bool(b) => b.into_py(py),
+                        JsonValue::Null => py.None(),
+                        JsonValue::Array(_) | JsonValue::Object(_) => value.to_string().into_py(py),
+                    };
+                    result_dict.set_item(key, py_value)?;
+                }
+            }
+        }
+        Err(e) => {
+            result_dict.set_item("error", e)?;
+            result_dict.set_item("original", original)?;
+        }
+    }
+
+    Ok(result_dict.into())
+}
+
 /// In-process Vector configuration and execution
 #[pyclass]
 #[derive(Debug)]
 struct Vector {
     // Accepted by Vector::new() but never applied to process_logs/initialize -
-    // config-driven pipeline behavior isn't wired up yet, tracked as a
-    // follow-up rather than silently dropped.
+    // config-driven pipeline behaviour is not implemented, and the Python API
+    // reference documents that rather than the dict being silently dropped.
     #[allow(dead_code)]
     config: JsonValue,
     initialized: bool,
+    // Counters behind get_stats(), Saturating so telemetry pegs at u64::MAX
+    // rather than panicking on overflow. Every event process_logs attempts
+    // lands in exactly one of events_processed or errors.
+    events_processed: Saturating<u64>,
+    errors: Saturating<u64>,
+    bytes_processed: Saturating<u64>,
+    // Set by initialize(), so uptime_seconds is 0.0 on an uninitialized
+    // pipeline rather than timed from construction.
+    started_at: Option<Instant>,
 }
 
 #[pymethods]
@@ -229,17 +290,29 @@ impl Vector {
         Ok(Vector {
             config,
             initialized: false,
+            events_processed: Saturating(0),
+            errors: Saturating(0),
+            bytes_processed: Saturating(0),
+            started_at: None,
         })
     }
 
     /// Initialize Vector pipeline in-process
+    ///
+    /// Starts the uptime clock and zeroes the counters, so `get_stats()`
+    /// always describes the run since the most recent `initialize()` rather
+    /// than mixing two runs' numbers together.
     fn initialize(&mut self) -> PyResult<bool> {
         self.initialized = true;
+        self.events_processed = Saturating(0);
+        self.errors = Saturating(0);
+        self.bytes_processed = Saturating(0);
+        self.started_at = Some(Instant::now());
         Ok(true)
     }
 
     /// Process logs in-process using real VRL runtime
-    fn process_logs(&self, logs: Vec<String>, vrl_code: String) -> PyResult<Vec<PyObject>> {
+    fn process_logs(&mut self, logs: Vec<String>, vrl_code: String) -> PyResult<Vec<PyObject>> {
         if !self.initialized {
             return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
                 "Vector not initialized",
@@ -255,25 +328,21 @@ impl Vector {
         })?;
 
         Python::with_gil(|py| {
-            let mut results = Vec::new();
+            let mut results = Vec::with_capacity(logs.len());
 
             for log in logs {
-                match execute_vrl_on_event(&program, &log) {
-                    Ok(vrl_result) => {
-                        let json_result = vrl_value_to_json(vrl_result);
-                        let result_dict = pyo3::types::PyDict::new_bound(py);
-                        result_dict.set_item("result", json_result.to_string())?;
-                        result_dict.set_item("success", true)?;
-                        results.push(result_dict.into());
-                    }
-                    Err(e) => {
-                        let result_dict = pyo3::types::PyDict::new_bound(py);
-                        result_dict.set_item("error", e)?;
-                        result_dict.set_item("success", false)?;
-                        result_dict.set_item("original", &log)?;
-                        results.push(result_dict.into());
-                    }
+                // bytes_processed is input volume read, so an event that
+                // fails at runtime still counts its bytes.
+                self.bytes_processed += Saturating(log.len() as u64);
+
+                let outcome = execute_vrl_on_event(&program, &log);
+                if outcome.is_ok() {
+                    self.events_processed += Saturating(1);
+                } else {
+                    self.errors += Saturating(1);
                 }
+
+                results.push(vrl_outcome_to_py_dict(py, outcome, &log)?);
             }
 
             Ok(results)
@@ -281,13 +350,21 @@ impl Vector {
     }
 
     /// Get Vector runtime statistics
+    ///
+    /// Real accumulated counts, measured from the last `initialize()`. A
+    /// batch whose VRL fails to COMPILE raises before any event is touched
+    /// and so moves no counter - `errors` counts per-event runtime failures.
     fn get_stats(&self) -> PyResult<PyObject> {
+        let uptime_seconds = self
+            .started_at
+            .map_or(0.0, |started| started.elapsed().as_secs_f64());
+
         Python::with_gil(|py| {
-            let stats_dict = pyo3::types::PyDict::new_bound(py);
-            stats_dict.set_item("events_processed", 0)?;
-            stats_dict.set_item("bytes_processed", 0)?;
-            stats_dict.set_item("errors", 0)?;
-            stats_dict.set_item("uptime_seconds", 0.0)?;
+            let stats_dict = PyDict::new_bound(py);
+            stats_dict.set_item("events_processed", self.events_processed.0)?;
+            stats_dict.set_item("bytes_processed", self.bytes_processed.0)?;
+            stats_dict.set_item("errors", self.errors.0)?;
+            stats_dict.set_item("uptime_seconds", uptime_seconds)?;
 
             Ok(stats_dict.into())
         })
@@ -303,47 +380,11 @@ fn execute_vrl(vrl_code: String, input_data: Vec<String>) -> PyResult<Vec<PyObje
     })?;
 
     Python::with_gil(|py| {
-        let mut results = Vec::new();
+        let mut results = Vec::with_capacity(input_data.len());
 
         for input in input_data {
-            match execute_vrl_on_event(&program, &input) {
-                Ok(vrl_result) => {
-                    let json_result = vrl_value_to_json(vrl_result);
-                    let result_dict = pyo3::types::PyDict::new_bound(py);
-
-                    // Parse JSON result and add fields to dict
-                    if let JsonValue::Object(obj) = json_result {
-                        for (key, value) in obj {
-                            let py_value = match value {
-                                JsonValue::String(s) => s.into_py(py),
-                                JsonValue::Number(n) => {
-                                    if let Some(i) = n.as_i64() {
-                                        i.into_py(py)
-                                    } else if let Some(f) = n.as_f64() {
-                                        f.into_py(py)
-                                    } else {
-                                        py.None()
-                                    }
-                                }
-                                JsonValue::Bool(b) => b.into_py(py),
-                                JsonValue::Null => py.None(),
-                                JsonValue::Array(_) | JsonValue::Object(_) => {
-                                    value.to_string().into_py(py)
-                                }
-                            };
-                            result_dict.set_item(key, py_value)?;
-                        }
-                    }
-
-                    results.push(result_dict.into());
-                }
-                Err(e) => {
-                    let result_dict = pyo3::types::PyDict::new_bound(py);
-                    result_dict.set_item("error", e)?;
-                    result_dict.set_item("original", &input)?;
-                    results.push(result_dict.into());
-                }
-            }
+            let outcome = execute_vrl_on_event(&program, &input);
+            results.push(vrl_outcome_to_py_dict(py, outcome, &input)?);
         }
 
         Ok(results)

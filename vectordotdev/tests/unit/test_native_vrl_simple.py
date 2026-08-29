@@ -62,7 +62,6 @@ def test_basic_execution():
         assert 'timestamp' in result, "timestamp should be added"
 
     print("\n✅ Basic execution test PASSED")
-    return True
 
 
 def test_validation():
@@ -89,7 +88,6 @@ def test_validation():
     assert result.error is not None, "Invalid VRL should have error message"
 
     print("\n✅ Validation test PASSED")
-    return True
 
 
 def test_performance():
@@ -121,7 +119,6 @@ def test_performance():
     assert metrics['total_events'] == 2000, "Should process 2000 events (2 * 1000)"
 
     print("\n✅ Performance test PASSED")
-    return True
 
 
 def test_edge_cases():
@@ -163,7 +160,6 @@ def test_edge_cases():
     print("✅ Multiple fields handled correctly")
 
     print("\n✅ Edge cases test PASSED")
-    return True
 
 
 def test_error_handling():
@@ -186,7 +182,6 @@ def test_error_handling():
     print(f"✅ Infallible operations work correctly")
 
     print("\n✅ Error handling test PASSED")
-    return True
 
 
 def run_all_tests():
@@ -215,8 +210,11 @@ def run_all_tests():
 
     for test_func in tests:
         try:
-            if test_func():
-                passed += 1
+            # The test functions assert internally and return None (pytest
+            # treats a returned value as an error), so completing without
+            # raising is the pass signal.
+            test_func()
+            passed += 1
         except Exception as e:
             print(f"\n❌ Test FAILED: {test_func.__name__}")
             print(f"Error: {e}")

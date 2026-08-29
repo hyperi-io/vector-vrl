@@ -120,7 +120,7 @@ class TestNativeVRLExecutor(unittest.TestCase):
 
     def test_apache_log_parsing_complex(self):
         """Test complex Apache log parsing with multiple fields"""
-        vrl_code = '''
+        vrl_code = r'''
         # Apache Combined Log Format parsing
         message_str = to_string(.message) ?? ""
         
@@ -328,7 +328,7 @@ class TestNativeVRLExecutor(unittest.TestCase):
 
     def test_kubernetes_log_parsing(self):
         """Test Kubernetes pod log parsing with metadata extraction"""
-        vrl_code = '''
+        vrl_code = r'''
         message_str = to_string(.message) ?? ""
         
         # K8s log format: timestamp level [component] message
@@ -560,7 +560,7 @@ class TestNativeVRLExecutor(unittest.TestCase):
 
     def test_complex_nginx_log_parsing(self):
         """Test complex Nginx access log parsing with real data"""
-        vrl_code = '''
+        vrl_code = r'''
         # Nginx combined log format with custom fields
         message_str = to_string(.message) ?? ""
         

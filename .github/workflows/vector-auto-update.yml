@@ -1,6 +1,6 @@
 # Project:   vectordotdev
 # File:      .github/workflows/vector-auto-update.yml
-# Purpose:   Weekly check for a new Vector release; try it, and only ship
+# Purpose:   Daily check for a new Vector release; try it, and only ship
 #            if it actually builds and passes.
 #
 # Never touches main on a red result - the commit only happens after the
@@ -19,7 +19,7 @@ name: Vector auto-update
 
 on:
   schedule:
-    - cron: "0 6 * * 1" # weekly, Monday 06:00 UTC
+    - cron: "0 6 * * *" # daily, 06:00 UTC
   workflow_dispatch: {}
 
 concurrency:
@@ -91,6 +91,6 @@ jobs:
       - run: |
           gh issue create \
             --title "Vector auto-update failed - manual bump needed" \
-            --body "The weekly Vector version check found a newer release, but \`make check\` failed against it - see the [failed run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}). Nothing was committed or published; the pinned version is unchanged. Run \`python3 build/vector_pin.py update\` locally to reproduce and fix."
+            --body "The daily Vector version check found a newer release, but \`make check\` failed against it - see the [failed run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}). Nothing was committed or published; the pinned version is unchanged. Run \`python3 build/vector_pin.py update\` locally to reproduce and fix."
         env:
           GH_TOKEN: ${{ github.token }}

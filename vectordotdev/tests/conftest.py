@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 # renovate: datasource=docker depName=timberio/vector
-_VECTOR_TAG = "0.48.0-debian"
+_VECTOR_TAG = "0.58.0-debian"
 _DEFAULT_IMAGE = f"timberio/vector:{_VECTOR_TAG}"
 
 _SUITE_LABEL = "io.hyperi.test.suite=vectordotdev"

@@ -38,11 +38,11 @@ dev = ["pytest>=7.0", "pytest-asyncio>=0.21.0", "ruff>=0.1.0"]
 test = ["pytest>=7.0", "pytest-asyncio>=0.21.0"]
 
 [project.urls]
-"Homepage" = "https://github.com/hypersec-io/vectordotdev"
-"Bug Reports" = "https://github.com/hypersec-io/vectordotdev/issues"
-"Source" = "https://github.com/hypersec-io/vectordotdev"
-"Documentation" = "https://github.com/hypersec-io/vectordotdev#readme"
-"License" = "https://github.com/hypersec-io/vectordotdev/blob/main/LICENSE"
+"Homepage" = "https://github.com/hyperi-io/vectordotdev"
+"Bug Reports" = "https://github.com/hyperi-io/vectordotdev/issues"
+"Source" = "https://github.com/hyperi-io/vectordotdev"
+"Documentation" = "https://github.com/hyperi-io/vectordotdev#readme"
+"License" = "https://github.com/hyperi-io/vectordotdev/blob/main/LICENSE"
 
 # Python package configuration for complete PyPI wheel
 [tool.setuptools]

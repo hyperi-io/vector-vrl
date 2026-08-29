@@ -1,7 +1,8 @@
 # Project:   vectordotdev
 # File:      .github/workflows/vector-auto-update.yml
-# Purpose:   Daily check for a new Vector release; try it, and only ship
-#            if it actually builds and passes.
+# Purpose:   Daily check for a new Vector release (7-day release-age
+#            cooldown - build/vector_pin.py skips anything newer); try it,
+#            and only ship if it actually builds and passes.
 #
 # Never touches main on a red result - the commit only happens after the
 # same `make check` gate every normal push gets passes clean. A push made

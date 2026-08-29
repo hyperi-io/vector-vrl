@@ -80,16 +80,41 @@ jobs:
       - run: make test-python
 
   build-vectordotdev:
-    name: Build vectordotdev wheel
+    name: Build wheel (${{ matrix.name }})
     needs: [plan, quality-test-rust, quality-test-python]
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # manylinux: maturin-action builds inside a manylinux container,
+          # so the wheel is tagged manylinux_*_<arch>, not the bare
+          # linux_<arch> tag PyPI has never accepted for uploads.
+          - name: linux-x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          # Native arm64 runner (GA, free on public repos) - no QEMU
+          # cross-compilation, the manylinux container runs natively.
+          - name: linux-aarch64
+            os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          # One universal2 wheel covers both Mac architectures - macos-latest
+          # is Apple Silicon; maturin cross-builds the x86_64 slice and
+          # lipo-combines both into a single file.
+          - name: macos-universal2
+            os: macos-latest
+            target: universal2-apple-darwin
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-      - run: make build
+      - uses: PyO3/maturin-action@fdd104694b233054d6e985e29b3af9f126af7ac6 # v1.9.0
+        with:
+          working-directory: vectordotdev
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          manylinux: auto # ignored on macOS
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: vectordotdev-wheel
+          name: vectordotdev-wheel-${{ matrix.name }}
           path: vectordotdev/dist/*
           retention-days: 7
 
@@ -104,8 +129,9 @@ jobs:
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v7.0.0
         with:
-          name: vectordotdev-wheel
+          pattern: vectordotdev-wheel-*
           path: vectordotdev/dist/
+          merge-multiple: true
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
       - working-directory: vectordotdev
         run: uvx hyperi-ci run publish -C .

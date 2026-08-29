@@ -1,5 +1,0 @@
-Plain text message that is not JSON
-Another plain text log entry
-{"valid": "json", "but": "mixed", "with": "plain", "text": true}
-Yet another plain text entry
-{"another": "valid", "json": "entry"}

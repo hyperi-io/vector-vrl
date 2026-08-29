@@ -1,4 +1,0 @@
-{"timestamp": "2023-09-08T12:00:00Z", "level": "INFO", "service": "api-gateway", "request_id": "req_123", "duration_ms": 45, "user_id": "user_456", "method": "GET", "path": "/api/v1/users", "status": 200}
-{"timestamp": "2023-09-08T12:00:01Z", "level": "ERROR", "service": "user-service", "request_id": "req_124", "duration_ms": 120, "user_id": "user_789", "method": "POST", "path": "/api/v1/login", "status": 401, "error": "invalid_credentials"}
-{"timestamp": "2023-09-08T12:00:02Z", "level": "WARN", "service": "cache-service", "request_id": "req_125", "duration_ms": 250, "cache_hit": false, "key": "user_profile_123"}
-{"timestamp": "2023-09-08T12:00:03Z", "level": "ERROR", incomplete_json

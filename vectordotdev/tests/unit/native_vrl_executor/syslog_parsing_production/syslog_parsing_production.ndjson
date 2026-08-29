@@ -1,5 +1,0 @@
-<102>1 2020-12-22T15:22:31.111Z vector-user.biz su 2666 ID389 - Something went wrong
-<34>1 2023-09-08T12:00:00Z web-server nginx 1234 - - 192.168.1.100 GET /api/v1/users 200
-<165>1 2023-09-08T12:00:01Z db-server postgres 5432 - - Connection established from 192.168.1.50
-<86>1 2023-09-08T12:00:02Z app-server java 8080 REQ123 - User authentication successful for user_456
-This is not a valid syslog message format

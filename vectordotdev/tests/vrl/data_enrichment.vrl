@@ -1,0 +1,59 @@
+# Data Enrichment
+# Adds derived context that the emitting service did not have: network zone,
+# action classification, and account bucketing.
+
+.user_id = to_int(.user_id) ?? -1
+action = downcase(to_string(.action) ?? "unknown")
+.action = action
+
+# Network zone from the source address, using the RFC 1918 ranges.
+zone = "unknown"
+if exists(.ip) {
+    ip = to_string(.ip) ?? ""
+    in_10 = ip_cidr_contains("10.0.0.0/8", ip) ?? false
+    in_172 = ip_cidr_contains("172.16.0.0/12", ip) ?? false
+    in_192 = ip_cidr_contains("192.168.0.0/16", ip) ?? false
+    in_loopback = ip_cidr_contains("127.0.0.0/8", ip) ?? false
+    if in_10 || in_172 || in_192 {
+        zone = "internal"
+    } else if in_loopback {
+        zone = "loopback"
+    } else if is_ipv4(ip) || is_ipv6(ip) {
+        zone = "external"
+    } else {
+        zone = "invalid"
+    }
+}
+
+# Actions are grouped so alerting rules target a category, not a list of verbs.
+category = "other"
+sensitive = false
+if includes(["login", "logout", "password_reset", "mfa_challenge"], action) {
+    category = "authentication"
+    sensitive = true
+} else if includes(["purchase", "refund", "checkout", "subscribe"], action) {
+    category = "commerce"
+    sensitive = true
+} else if includes(["view", "search", "list", "scroll"], action) {
+    category = "browse"
+    sensitive = false
+} else {
+    category = "other"
+    sensitive = false
+}
+
+# Deterministic bucket for sampling and cohort comparison, stable per user.
+bucket = mod(.user_id, 10)
+
+.enrichment = {
+    "network_zone": zone,
+    "action_category": category,
+    "is_sensitive": sensitive,
+    "user_bucket": bucket,
+    "source": "data_enrichment_v1"
+}
+
+# Sensitive actions are retained longer for audit.
+.retention_days = if sensitive { 365 } else { 30 }
+
+.processed_at = format_timestamp!(now(), "%+")

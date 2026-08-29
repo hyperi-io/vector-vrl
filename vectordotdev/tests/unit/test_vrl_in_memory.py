@@ -87,10 +87,23 @@ class TestVRLInMemory(unittest.TestCase):
         # Validate parsing occurred
         self.assertEqual(len(results), 2)
 
-        # Check if IP addresses were extracted
+        # log_parsing.vrl deletes raw_log once it has parsed it, so a parsed
+        # event carries client_ip and an unparsed one still carries raw_log.
         for result in results:
-            # Should have either parsed IP or original raw_log
-            self.assertTrue("ip" in result or "raw_log" in result)
+            self.assertTrue(
+                "client_ip" in result or "raw_log" in result,
+                f"Expected client_ip (parsed) or raw_log (unparsed), got: {result}"
+            )
+
+        # The sample lines are well-formed, so both should parse.
+        self.assertEqual(results[0]["client_ip"], "192.168.1.100")
+        self.assertEqual(results[0]["request_method"], "GET")
+        self.assertEqual(results[0]["request_path"], "/api/v1/users")
+        self.assertEqual(results[0]["status_code"], 200)
+        self.assertEqual(results[0]["status_class"], "success")
+        self.assertEqual(results[1]["client_ip"], "10.0.0.1")
+        self.assertEqual(results[1]["request_method"], "POST")
+        self.assertEqual(results[1]["status_code"], 201)
 
     def test_security_filtering_in_memory(self):
         """Test security filtering VRL executes in-memory"""
@@ -109,13 +122,22 @@ class TestVRLInMemory(unittest.TestCase):
         # Validate security checks
         self.assertEqual(len(results), 3)
 
-        # First log should detect SQL injection
-        if "security" in results[0]:
-            self.assertTrue(results[0]["security"].get("sql_injection_detected", False))
+        # execute_vrl flattens the event, so a nested object arrives as a JSON
+        # string - see docs/reference-python-api.md, "What comes back".
+        verdicts = [json.loads(r["security"]) for r in results]
 
-        # Second log should detect XSS
-        if "security" in results[1]:
-            self.assertTrue(results[1]["security"].get("xss_detected", False))
+        # First log should detect SQL injection, and only that.
+        self.assertTrue(verdicts[0]["sql_injection_detected"])
+        self.assertFalse(verdicts[0]["xss_detected"])
+
+        # Second log should detect XSS, and only that.
+        self.assertTrue(verdicts[1]["xss_detected"])
+        self.assertFalse(verdicts[1]["sql_injection_detected"])
+
+        # Third log is benign and must not trip any detector.
+        self.assertFalse(results[2]["threat_detected"])
+        self.assertEqual(verdicts[2]["threat_score"], 0)
+        self.assertEqual(verdicts[2]["action"], "allow")
 
     def test_error_handling_in_memory(self):
         """Test error handling VRL executes in-memory"""
@@ -167,9 +189,10 @@ class TestVRLInMemory(unittest.TestCase):
 
     def test_vrl_validation_in_memory(self):
         """Test VRL syntax validation using real VRL compiler"""
-        # Valid VRL
+        # Valid VRL. upcase is fallible against an untyped field, so the
+        # infallible form needs the ! variant.
         valid_vrl = """
-        .level = upcase(.level)
+        .level = upcase!(.level)
         .timestamp = now()
         """
 
@@ -298,7 +321,9 @@ class TestVRLEdgeCasesInMemory(unittest.TestCase):
 
     def test_large_payload(self):
         """Test handling of large payloads"""
-        vrl_code = ".size = length(.message)"
+        # length() is fallible against an untyped field, so the assignment has
+        # to handle the error or the whole program fails to compile.
+        vrl_code = ".size = length!(.message)"
 
         # Large message
         large_message = "x" * 10000

@@ -1,0 +1,63 @@
+# Error Handling
+# Every fallible call is captured rather than aborted, so a malformed field
+# degrades one event's enrichment instead of dropping the event.
+
+errors = []
+
+# Embedded JSON payload.
+if exists(.json_data) {
+    decoded, err = parse_json(to_string(.json_data) ?? "")
+    if err == null {
+        .decoded = decoded
+        if is_object(decoded) {
+            inner_level = get(object!(decoded), ["level"]) ?? null
+            if inner_level != null {
+                .level = upcase(to_string(inner_level) ?? "UNKNOWN")
+            }
+        }
+    } else {
+        errors = push(errors, "json_data: " + to_string(err))
+        .json_data_valid = false
+    }
+}
+
+# Line-oriented log text, where the level is the first bare word we recognise.
+if exists(.log_line) {
+    line = to_string(.log_line) ?? ""
+    matched, match_err = parse_regex(line, r'(?P<level>TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL|CRITICAL)')
+    if match_err == null {
+        .level = upcase(to_string(matched.level))
+    } else {
+        errors = push(errors, "log_line: no recognised level")
+    }
+}
+
+# Numeric field arriving as a string.
+if exists(.status_code_str) {
+    code, code_err = to_int(to_string(.status_code_str) ?? "")
+    if code_err == null {
+        .status_code = code
+        .status_class = if code >= 500 {
+            "server_error"
+        } else if code >= 400 {
+            "client_error"
+        } else {
+            "ok"
+        }
+    } else {
+        errors = push(errors, "status_code_str: not an integer")
+        .status_code = null
+    }
+}
+
+# Default level so downstream routing always has one.
+if !exists(.level) {
+    .level = "UNKNOWN"
+}
+
+.error_handling = {
+    "ok": length(errors) == 0,
+    "error_count": length(errors),
+    "errors": errors,
+    "handler": "error_handling_v1"
+}

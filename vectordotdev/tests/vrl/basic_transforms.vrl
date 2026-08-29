@@ -1,0 +1,54 @@
+# Basic Field Transforms
+# The everyday normalisation pass: canonical severity, tidy message body,
+# a real timestamp, and a small metadata block describing the transform.
+
+# Severity is upper-cased so downstream routing matches on one spelling.
+level = to_string(.level) ?? "unknown"
+.level = upcase(level)
+
+# Syslog-style numeric severity, so numeric comparisons ("worse than warning")
+# work without re-deriving an ordering at every hop.
+if .level == "FATAL" || .level == "CRITICAL" {
+    .severity_number = 2
+} else if .level == "ERROR" {
+    .severity_number = 3
+} else if .level == "WARN" || .level == "WARNING" {
+    .severity_number = 4
+} else if .level == "INFO" {
+    .severity_number = 6
+} else if .level == "DEBUG" || .level == "TRACE" {
+    .severity_number = 7
+} else {
+    .severity_number = 6
+}
+
+# Anything at warning or worse is worth alerting on.
+.is_problem = .severity_number <= 4
+
+# Collector whitespace breaks exact-match rules downstream.
+if exists(.message) {
+    .message = strip_whitespace(to_string(.message) ?? "")
+    .message_length = length!(.message)
+}
+
+# Promote the string timestamp to a real timestamp where one was supplied,
+# falling back to ingest time so every event is ordered.
+if exists(.timestamp) {
+    parsed_ts, ts_err = parse_timestamp(to_string(.timestamp) ?? "", "%+")
+    if ts_err == null {
+        .timestamp = parsed_ts
+    } else {
+        .timestamp = now()
+        .timestamp_source = "ingest"
+    }
+} else {
+    .timestamp = now()
+    .timestamp_source = "ingest"
+}
+
+# Metadata block describing what touched this event.
+.meta = {
+    "transform": "basic_transforms",
+    "version": "v1",
+    "processed_at": format_timestamp!(now(), "%+")
+}

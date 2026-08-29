@@ -1,0 +1,60 @@
+# Metrics Extraction
+# Turns a request log line into the dimensions and buckets a metrics sink
+# needs, without discarding the original numeric fields.
+# `duration` is a VRL type keyword, hence `latency_ms` for the local.
+
+latency_ms = to_float(.duration_ms) ?? -1.0
+status = to_int(.status_code) ?? 0
+count = to_int(.request_count) ?? 0
+
+.duration_ms = latency_ms
+.status_code = status
+.request_count = count
+
+# Latency buckets matching the histogram boundaries used downstream.
+bucket = "unknown"
+if latency_ms < 0.0 {
+    bucket = "unknown"
+} else if latency_ms <= 10.0 {
+    bucket = "le_10ms"
+} else if latency_ms <= 100.0 {
+    bucket = "le_100ms"
+} else if latency_ms <= 500.0 {
+    bucket = "le_500ms"
+} else if latency_ms <= 1000.0 {
+    bucket = "le_1s"
+} else {
+    bucket = "gt_1s"
+}
+
+# A 300ms objective, resolved here so the sink does not carry the threshold.
+slo_met = latency_ms >= 0.0 && latency_ms <= 300.0
+
+outcome = "success"
+if status >= 500 {
+    outcome = "server_error"
+} else if status >= 400 {
+    outcome = "client_error"
+} else if status >= 300 {
+    outcome = "redirect"
+} else if status < 200 {
+    outcome = "unknown"
+}
+
+# Errors are counted separately so an error rate is a division, not a scan.
+is_error = status >= 500
+error_count = if is_error { count } else { 0 }
+
+.metrics = {
+    "latency_bucket": bucket,
+    "duration_seconds": latency_ms / 1000.0,
+    "slo_met": slo_met,
+    "outcome": outcome,
+    "is_error": is_error,
+    "error_count": error_count,
+    "request_count": count,
+    "extractor": "metrics_extraction_v1"
+}
+
+.metric_name = "http_request_duration"
+.extracted_at = format_timestamp!(now(), "%+")

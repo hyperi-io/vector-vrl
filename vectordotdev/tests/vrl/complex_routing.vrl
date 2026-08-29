@@ -1,0 +1,53 @@
+# Complex Routing
+# Decides where an event goes, how much of it to keep, and what to key it by.
+# The route decision is written onto the event so a downstream `route`
+# transform can switch on one field instead of re-evaluating this logic.
+
+level = upcase(to_string(.level) ?? "INFO")
+.level = level
+
+service = to_string(.service) ?? "unknown"
+.service = service
+
+# Severity tier drives both the route and the sampling rate.
+if level == "FATAL" || level == "CRITICAL" || level == "ERROR" {
+    .severity_tier = "high"
+} else if level == "WARN" || level == "WARNING" {
+    .severity_tier = "medium"
+} else {
+    .severity_tier = "low"
+}
+
+# User-facing services get their errors escalated a tier.
+user_facing = ["api", "web", "gateway", "checkout"]
+.user_facing = includes(user_facing, service)
+
+# The route: one field, exhaustive, no fallthrough.
+if .severity_tier == "high" && .user_facing {
+    .route = "alerts"
+    .sample_rate = 1.0
+    .retention_days = 90
+} else if .severity_tier == "high" {
+    .route = "errors"
+    .sample_rate = 1.0
+    .retention_days = 30
+} else if .severity_tier == "medium" {
+    .route = "warnings"
+    .sample_rate = 1.0
+    .retention_days = 14
+} else if service == "cache" || service == "healthcheck" {
+    # High-volume chatter, sampled down to a tenth for trend lines.
+    .route = "archive"
+    .sample_rate = 0.1
+    .retention_days = 7
+} else {
+    .route = "default"
+    .sample_rate = 1.0
+    .retention_days = 7
+}
+
+# Partition key keeps one service's events on one downstream partition, so
+# per-service ordering survives the fan-out.
+.partition_key = join!([service, .severity_tier], "/")
+
+.routed_at = format_timestamp!(now(), "%+")

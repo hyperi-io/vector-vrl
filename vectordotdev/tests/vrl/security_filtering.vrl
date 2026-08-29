@@ -1,0 +1,72 @@
+# Security Filtering
+# Pattern-matches the message body for common injection classes and attaches a
+# verdict. Detection only: nothing is dropped here, the routing decision is a
+# downstream concern acting on .security.action.
+
+message = to_string(.message) ?? ""
+status = to_int(.status_code) ?? 0
+
+# SQL injection: union-select stitching, always-true predicates, stacked
+# statements, and inline comment terminators.
+sqli_union = match(message, r'(?i)\bunion\b\s+(\ball\b\s+)?\bselect\b')
+sqli_tautology = match(message, r'(?i)\bor\b\s+[\x27"]?\d+[\x27"]?\s*=\s*[\x27"]?\d+')
+sqli_stacked = match(message, r'(?i);\s*(drop|delete|update|insert|truncate)\s+')
+sqli_comment = match(message, r'(?i)(--\s|/\*|#)\s*$')
+sqli_select_from = match(message, r'(?i)\bselect\b\s+.+\s+\bfrom\b\s+\w')
+sql_injection = sqli_union || sqli_tautology || sqli_stacked || sqli_select_from
+
+# Cross-site scripting: script tags, javascript URLs, inline event handlers,
+# and embedded frames.
+xss_tag = match(message, r'(?i)<\s*(script|iframe|object|embed|svg)\b')
+xss_url = match(message, r'(?i)javascript\s*:')
+xss_handler = match(message, r'(?i)\bon(error|load|click|mouseover|focus)\s*=')
+xss_entity = match(message, r'(?i)&#x?[0-9a-f]{2,6};?\s*<')
+xss = xss_tag || xss_url || xss_handler || xss_entity
+
+# Directory traversal, in raw and percent-encoded forms.
+traversal = match(message, r'(?i)(\.\./|\.\.\\|%2e%2e[/\\%])')
+
+# Shell metacharacters followed by a command likely to be useful to an attacker.
+command_injection = match(message, r'(?i)[;|`]\s*(cat|rm|wget|curl|nc|bash|sh|chmod|python)\s')
+
+# Credentials or tokens pasted into a log line.
+secret_leak = match(message, r'(?i)\b(password|passwd|secret|api[_-]?key|token|authorization)\b\s*[:=]\s*\S+')
+
+# Threat score weights the classes by how reliably each pattern indicates a
+# genuine attempt rather than a false positive.
+score = 0
+if sql_injection { score = score + 40 }
+if xss { score = score + 35 }
+if command_injection { score = score + 45 }
+if traversal { score = score + 25 }
+if secret_leak { score = score + 15 }
+
+# A request the origin already rejected is weaker evidence than one it served.
+if score > 0 && status >= 200 && status < 400 { score = score + 10 }
+
+action = "allow"
+if score >= 45 {
+    action = "block"
+} else if score >= 20 {
+    action = "flag"
+}
+
+.security = {
+    "sql_injection_detected": sql_injection,
+    "xss_detected": xss,
+    "traversal_detected": traversal,
+    "command_injection_detected": command_injection,
+    "secret_leak_detected": secret_leak,
+    "threat_score": score,
+    "action": action,
+    "scanner": "security_filtering_v1"
+}
+
+.threat_detected = score > 0
+
+# Redact anything that looks like a credential before the event is stored.
+if secret_leak {
+    .message = replace(message, r'(?i)\b(password|passwd|secret|api[_-]?key|token|authorization)\b\s*[:=]\s*\S+', "$1=[REDACTED]")
+}
+
+.scanned_at = format_timestamp!(now(), "%+")

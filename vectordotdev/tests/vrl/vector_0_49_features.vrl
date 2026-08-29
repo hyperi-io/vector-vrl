@@ -1,0 +1,46 @@
+# Vector 0.49 VRL Features
+# Exercises the collection and path helpers available in the pinned VRL
+# compiler, over both object-shaped and array-shaped events.
+
+used = []
+
+# Deep path access without a chain of exists() guards.
+if exists(.data) && is_object(.data) {
+    nested = object!(.data)
+    .deep_value = get(nested, ["nested", "value"]) ?? null
+    .data_keys = keys(nested)
+    .data_flat = flatten(nested)
+    used = push(used, "get")
+    used = push(used, "keys")
+    used = push(used, "flatten")
+}
+
+# Array helpers: closures over elements, with the index bound but unused.
+if exists(.array) && is_array(.array) {
+    items = array!(.array)
+    .array_length = length(items)
+    .array_unique = unique(items)
+    .array_evens = filter(items) -> |_index, item| {
+        mod(to_int(item) ?? 0, 2) == 0
+    }
+    .array_doubled = map_values(items) -> |item| {
+        (to_int(item) ?? 0) * 2
+    }
+    used = push(used, "filter")
+    used = push(used, "map_values")
+    used = push(used, "unique")
+}
+
+# compact drops null and empty members so sinks are not asked to store them.
+.compacted = compact({"kept": "value", "dropped": null})
+used = push(used, "compact")
+
+# Canonical JSON of the event so far, for checksum and dedupe use.
+.encoded = encode_json(.)
+.fingerprint = sha2(.encoded, variant: "SHA-256")
+used = push(used, "encode_json")
+used = push(used, "sha2")
+
+.features_used = used
+.feature_count = length(used)
+.vrl_profile = "vector_0_49_features_v1"

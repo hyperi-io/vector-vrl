@@ -420,10 +420,6 @@ fn get_vrl_performance(
     })
 }
 
-// Include auto-generated bindings from build.rs
-// This will expose ALL Vector APIs discovered from /vector
-include!(concat!(env!("OUT_DIR"), "/auto_bindings.rs"));
-
 /// Vector data processing bindings for Python with real VRL execution
 #[pymodule]
 fn vector_bindings(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -437,9 +433,6 @@ fn vector_bindings(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(execute_vrl, m)?)?;
     m.add_function(wrap_pyfunction!(validate_vrl, m)?)?;
     m.add_function(wrap_pyfunction!(get_vrl_performance, m)?)?;
-
-    // Register ALL auto-discovered Vector APIs (NO HARDCODING!)
-    register_all_auto_bindings(m)?;
 
     Ok(())
 }

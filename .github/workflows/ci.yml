@@ -60,6 +60,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+      # pyo3 0.22 (this crate's pinned version) caps at Python 3.13 - pin
+      # the interpreter pyo3-build-config finds so the build doesn't
+      # depend on whatever python3 the runner image happens to default to.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
       - run: make quality-rust
       - run: make test-rust

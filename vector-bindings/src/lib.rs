@@ -443,3 +443,85 @@ fn vector_bindings(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nesting_depth_within_limit_is_accepted() {
+        let vrl = format!("{}{}{}", "(".repeat(64), "true", ")".repeat(64));
+        assert!(check_nesting_depth(&vrl).is_ok());
+    }
+
+    #[test]
+    fn nesting_depth_over_limit_is_rejected() {
+        let vrl = format!("{}{}{}", "(".repeat(65), "true", ")".repeat(65));
+        assert!(check_nesting_depth(&vrl).is_err());
+    }
+
+    #[test]
+    fn compile_rejects_deeply_nested_vrl_before_parsing() {
+        // Regression test: this exact shape used to segfault the process
+        // (unbounded parser recursion) instead of returning an error.
+        let vrl = format!(".x = {}{}{}", "(".repeat(1000), "true", ")".repeat(1000));
+        let result = compile_vrl_program(&vrl);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("nests"));
+    }
+
+    #[test]
+    fn compile_accepts_ordinary_vrl() {
+        let program = compile_vrl_program(r#".upper = upcase!(to_string!(.message))"#);
+        assert!(program.is_ok());
+    }
+
+    #[test]
+    fn compile_rejects_invalid_vrl_syntax() {
+        let result = compile_vrl_program("this is not valid VRL {{{");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn env_system_network_functions_are_unavailable() {
+        // Regression test for the vrl sandbox escape: these functions must
+        // stay undefined so caller-supplied VRL cannot read the host
+        // environment or make network requests.
+        for call in [
+            r#".x = get_env_var!("HOME")"#,
+            r#".x = get_hostname!()"#,
+            r#".x = http_request!("http://169.254.169.254/")"#,
+            r#".x = dns_lookup!("example.com")"#,
+        ] {
+            let result = compile_vrl_program(call);
+            assert!(result.is_err(), "expected {call:?} to fail to compile");
+        }
+    }
+
+    #[test]
+    fn execute_vrl_on_event_runs_parse_json_and_mutates_event() {
+        let program = compile_vrl_program(
+            r#"
+            parsed, err = parse_json(.message)
+            if err == null {
+                .level = parsed.level
+            }
+            "#,
+        )
+        .expect("valid VRL compiles");
+
+        let output = execute_vrl_on_event(&program, r#"{"message": "{\"level\": \"info\"}"}"#)
+            .expect("execution succeeds");
+        let json = vrl_value_to_json(output);
+        assert_eq!(json.get("level").and_then(|v| v.as_str()), Some("info"));
+    }
+
+    #[test]
+    fn execute_vrl_on_event_reports_runtime_errors() {
+        // parse_json! (fallible-fn-without-handling) aborts at runtime when
+        // the input isn't valid JSON.
+        let program = compile_vrl_program(r#".parsed = parse_json!(.message)"#).expect("compiles");
+        let result = execute_vrl_on_event(&program, r#"{"message": "not json"}"#);
+        assert!(result.is_err());
+    }
+}

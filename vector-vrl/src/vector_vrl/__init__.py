@@ -25,6 +25,7 @@ try:
         VrlResult,
         clear_enrichment_tables,
         execute_vrl,
+        execute_vrl_with_secrets,
         get_vrl_performance,
         list_enrichment_tables,
         register_enrichment_table,
@@ -42,6 +43,7 @@ except ImportError:  # pragma: no cover - only reachable if the wheel shipped wi
         Vector = vector_bindings.Vector
         VrlResult = vector_bindings.VrlResult
         execute_vrl = vector_bindings.execute_vrl
+        execute_vrl_with_secrets = vector_bindings.execute_vrl_with_secrets
         validate_vrl = vector_bindings.validate_vrl
         get_vrl_performance = vector_bindings.get_vrl_performance
         register_enrichment_table = vector_bindings.register_enrichment_table
@@ -72,7 +74,11 @@ except ImportError:  # pragma: no cover - only reachable if the wheel shipped wi
                 """Raise ImportError because VRL bindings are not available."""
                 raise ImportError("VRL bindings not available")
 
-        def execute_vrl(code, data):
+        def execute_vrl(code, data, secrets=None):
+            """Raise ImportError because VRL bindings are not available."""
+            raise ImportError("VRL bindings not available")
+
+        def execute_vrl_with_secrets(code, data, secrets=None):
             """Raise ImportError because VRL bindings are not available."""
             raise ImportError("VRL bindings not available")
 
@@ -161,6 +167,9 @@ __all__ = [
     "Vector",
     "VrlResult",
     "execute_vrl",
+    # Same execution as execute_vrl, but each entry also carries the event's
+    # secret store after the program ran
+    "execute_vrl_with_secrets",
     "validate_vrl",
     "get_vrl_performance",
     "get_bindings_info",

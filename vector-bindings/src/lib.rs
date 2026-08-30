@@ -6,6 +6,7 @@
 #![allow(unsafe_op_in_unsafe_fn, clippy::useless_conversion)]
 
 mod enrichment;
+mod secrets;
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyDictMethods};
@@ -13,11 +14,17 @@ use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 use std::num::Saturating;
 use std::time::Instant;
-use vrl::compiler::prelude::NotNan;
+use vrl::compiler::prelude::{Function, NotNan};
 use vrl::compiler::runtime::{Runtime, Terminate};
 use vrl::compiler::state::RuntimeState;
-use vrl::compiler::{Program, TargetValue, TimeZone, compile};
-use vrl::value::{Secrets, Value};
+use vrl::compiler::{Program, TimeZone, compile};
+use vrl::value::Value;
+
+use crate::secrets::EventTarget;
+
+/// A secret store as it crosses the Python boundary, and as one event's VRL
+/// program sees it.
+type SecretMap = BTreeMap<String, String>;
 
 /// VRL execution result with error details
 #[pyclass]
@@ -74,15 +81,25 @@ fn check_nesting_depth(vrl_code: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Every VRL function a program compiled by this crate can call.
+///
+/// VRL's standard library, plus the enrichment and event-secret functions this
+/// crate adds. Which stdlib functions are in the list depends on the features
+/// the crate was built with - see the `full-stdlib` feature in Cargo.toml.
+fn vrl_functions() -> Vec<Box<dyn Function>> {
+    let mut functions = vrl::stdlib::all();
+    functions.extend(enrichment::functions());
+    functions.extend(secrets::functions());
+    functions
+}
+
 /// Compile VRL code into a runnable program using real Vector VRL compiler
 fn compile_vrl_program(vrl_code: &str) -> Result<Program, String> {
     check_nesting_depth(vrl_code)?;
 
-    // VRL's standard library, plus the enrichment functions this crate adds.
-    // Table names are resolved against the registry at compile time, so a
-    // program naming an unregistered table fails here rather than at runtime.
-    let mut functions = vrl::stdlib::all();
-    functions.extend(enrichment::functions());
+    // Enrichment table names are resolved against the registry at compile time,
+    // so a program naming an unregistered table fails here, not at runtime.
+    let functions = vrl_functions();
 
     // Compile VRL code using VRL's real compiler (v0.27+ API - simplified, no hardcoding!)
     compile(vrl_code, &functions)
@@ -97,8 +114,21 @@ fn compile_vrl_program(vrl_code: &str) -> Result<Program, String> {
         })
 }
 
+/// One event's VRL run: what the program produced, and the secrets it left.
+///
+/// `result` carries the mutated event on success and the runtime error
+/// otherwise. `secrets` is the store as it stood when the program finished,
+/// including after an abort - the VRL may have set secrets before failing.
+pub(crate) struct EventOutcome {
+    pub(crate) result: Result<Value, String>,
+    pub(crate) secrets: SecretMap,
+}
+
 /// Execute VRL program on a single event using Vector's VRL runtime
-fn execute_vrl_on_event(program: &Program, event_data: &str) -> Result<Value, String> {
+///
+/// `secrets` seeds the event's secret store before the program runs; pass an
+/// empty map for an event with no secrets.
+fn execute_vrl_on_event(program: &Program, event_data: &str, secrets: SecretMap) -> EventOutcome {
     // Parse input as JSON or plain text
     let event_value = if event_data.trim().starts_with('{') {
         // Try JSON parsing
@@ -121,12 +151,10 @@ fn execute_vrl_on_event(program: &Program, event_data: &str) -> Result<Value, St
         Value::Object(obj)
     };
 
-    // Wrap in TargetValue for v0.27+ API (no hardcoded types!)
-    let mut target = TargetValue {
-        value: event_value,
-        metadata: Value::Object(BTreeMap::new()),
-        secrets: Secrets::new(),
-    };
+    // EventTarget rather than vrl's TargetValue: its secret store is a map this
+    // crate owns, so `execute_vrl_with_secrets` can enumerate what the program
+    // set. vrl's own Secrets container has no way to list its keys.
+    let mut target = EventTarget::new(event_value, secrets);
 
     // Create VRL runtime with RuntimeState for v0.27+ API
     let timezone = TimeZone::default();
@@ -134,7 +162,7 @@ fn execute_vrl_on_event(program: &Program, event_data: &str) -> Result<Value, St
     let mut runtime = Runtime::new(state);
 
     // Execute VRL program using Vector's runtime
-    match runtime.resolve(&mut target, program, &timezone) {
+    let result = match runtime.resolve(&mut target, program, &timezone) {
         // The VRL program's own return value is discarded here; the mutated
         // `target.value` (the event after any `.field = ...` assignments) is
         // what callers expect back.
@@ -146,6 +174,11 @@ fn execute_vrl_on_event(program: &Program, event_data: &str) -> Result<Value, St
             };
             Err(error_msg)
         }
+    };
+
+    EventOutcome {
+        result,
+        secrets: target.secrets,
     }
 }
 
@@ -325,12 +358,7 @@ impl Vector {
         }
 
         // Compile VRL program using real Vector VRL compiler
-        let program = compile_vrl_program(&vrl_code).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "VRL compilation failed: {}",
-                e
-            ))
-        })?;
+        let program = compile_program(&vrl_code)?;
 
         Python::with_gil(|py| {
             let mut results = Vec::with_capacity(logs.len());
@@ -340,14 +368,16 @@ impl Vector {
                 // fails at runtime still counts its bytes.
                 self.bytes_processed += Saturating(log.len() as u64);
 
-                let outcome = execute_vrl_on_event(&program, &log);
-                if outcome.is_ok() {
+                // No secrets surface on the pipeline API - process_logs seeds an
+                // empty store and discards what the program left behind.
+                let outcome = execute_vrl_on_event(&program, &log, SecretMap::new());
+                if outcome.result.is_ok() {
                     self.events_processed += Saturating(1);
                 } else {
                     self.errors += Saturating(1);
                 }
 
-                results.push(vrl_outcome_to_py_dict(py, outcome, &log)?);
+                results.push(vrl_outcome_to_py_dict(py, outcome.result, &log)?);
             }
 
             Ok(results)
@@ -377,22 +407,83 @@ impl Vector {
 }
 
 /// Execute VRL transformation in-process using real Vector VRL runtime
+///
+/// `secrets` is an optional `dict[str, str]` of event secrets, seeded into
+/// EVERY input event's secret store before the program runs. VRL reads them
+/// with `get_secret(key)`, which returns None for a key that is not set.
+/// Omitting it starts each event with no secrets.
+///
+/// Returns one dict per input event, holding the event's top-level fields on
+/// success, or `error` and `original` on a per-event runtime failure. Secrets
+/// the program set are NOT in that dict - use `execute_vrl_with_secrets` to
+/// read them back.
 #[pyfunction]
-fn execute_vrl(vrl_code: String, input_data: Vec<String>) -> PyResult<Vec<PyObject>> {
-    // Compile VRL program using real Vector VRL compiler
-    let program = compile_vrl_program(&vrl_code).map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("VRL compilation failed: {}", e))
-    })?;
+#[pyo3(signature = (vrl_code, input_data, secrets=None))]
+fn execute_vrl(
+    vrl_code: String,
+    input_data: Vec<String>,
+    secrets: Option<SecretMap>,
+) -> PyResult<Vec<PyObject>> {
+    let program = compile_program(&vrl_code)?;
+    let secrets = secrets.unwrap_or_default();
 
     Python::with_gil(|py| {
         let mut results = Vec::with_capacity(input_data.len());
 
         for input in input_data {
-            let outcome = execute_vrl_on_event(&program, &input);
-            results.push(vrl_outcome_to_py_dict(py, outcome, &input)?);
+            let outcome = execute_vrl_on_event(&program, &input, secrets.clone());
+            results.push(vrl_outcome_to_py_dict(py, outcome.result, &input)?);
         }
 
         Ok(results)
+    })
+}
+
+/// Execute VRL and hand back each event's secret store alongside the event
+///
+/// Same execution as `execute_vrl` - the difference is only what comes back.
+/// Each entry is a dict with two keys:
+///
+/// - `event`: exactly what `execute_vrl` returns for that input.
+/// - `secrets`: a `dict[str, str]` of the event's secrets after the program
+///   ran, being the `secrets` argument plus any `set_secret` calls and minus
+///   any `remove_secret` calls.
+///
+/// Secrets are per-event: each input starts from the same `secrets` argument,
+/// and one event's `set_secret` is invisible to the next.
+///
+/// An event whose program aborts still reports its secrets, as they stood when
+/// the program failed.
+#[pyfunction]
+#[pyo3(signature = (vrl_code, input_data, secrets=None))]
+fn execute_vrl_with_secrets(
+    vrl_code: String,
+    input_data: Vec<String>,
+    secrets: Option<SecretMap>,
+) -> PyResult<Vec<PyObject>> {
+    let program = compile_program(&vrl_code)?;
+    let secrets = secrets.unwrap_or_default();
+
+    Python::with_gil(|py| {
+        let mut results = Vec::with_capacity(input_data.len());
+
+        for input in input_data {
+            let outcome = execute_vrl_on_event(&program, &input, secrets.clone());
+            let entry = PyDict::new_bound(py);
+            entry.set_item("event", vrl_outcome_to_py_dict(py, outcome.result, &input)?)?;
+            entry.set_item("secrets", outcome.secrets)?;
+            results.push(entry.into());
+        }
+
+        Ok(results)
+    })
+}
+
+/// Compile VRL, turning a compilation failure into the ValueError the Python
+/// entry points raise.
+fn compile_program(vrl_code: &str) -> PyResult<Program> {
+    compile_vrl_program(vrl_code).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("VRL compilation failed: {}", e))
     })
 }
 
@@ -511,7 +602,7 @@ fn get_vrl_performance(
         .take(test_data.len() * iter_count as usize)
         .cloned()
         .collect();
-    let _results = execute_vrl(vrl_code.clone(), repeated_data)?;
+    let _results = execute_vrl(vrl_code.clone(), repeated_data, None)?;
     let processing_time = start_time.elapsed();
 
     let total_events = test_data.len() * iter_count as usize;
@@ -543,6 +634,7 @@ fn vector_bindings(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // Add VRL functions with real Vector VRL runtime
     m.add_function(wrap_pyfunction!(execute_vrl, m)?)?;
+    m.add_function(wrap_pyfunction!(execute_vrl_with_secrets, m)?)?;
     m.add_function(wrap_pyfunction!(validate_vrl, m)?)?;
     m.add_function(wrap_pyfunction!(get_vrl_performance, m)?)?;
 
@@ -592,11 +684,44 @@ mod tests {
         assert!(result.is_err());
     }
 
+    /// Every VRL function held back by the sandboxed default build.
+    ///
+    /// `get_env_var` needs enable_env_functions; the next six need
+    /// enable_system_functions; the last three need enable_network_functions.
+    /// All ten arrive together with the `full-stdlib` feature.
+    const FEATURE_GATED_FUNCTIONS: &[&str] = &[
+        "get_env_var",
+        "encode_proto",
+        "get_hostname",
+        "get_timezone_name",
+        "parse_etld",
+        "parse_proto",
+        "validate_json_schema",
+        "dns_lookup",
+        "http_request",
+        "reverse_dns",
+    ];
+
+    fn function_identifiers() -> Vec<&'static str> {
+        vrl_functions().iter().map(|f| f.identifier()).collect()
+    }
+
+    #[cfg(not(feature = "full-stdlib"))]
     #[test]
     fn env_system_network_functions_are_unavailable() {
         // Regression test for the vrl sandbox escape: these functions must
-        // stay undefined so caller-supplied VRL cannot read the host
-        // environment or make network requests.
+        // stay undefined on the default build so caller-supplied VRL cannot
+        // read the host environment or make network requests.
+        let identifiers = function_identifiers();
+        for name in FEATURE_GATED_FUNCTIONS {
+            assert!(
+                !identifiers.contains(name),
+                "{name} must not be compiled into the sandboxed default build"
+            );
+        }
+
+        // And the compiler agrees - an undefined function is a compile error
+        // whatever arguments it is given.
         for call in [
             r#".x = get_env_var!("HOME")"#,
             r#".x = get_hostname!()"#,
@@ -605,6 +730,64 @@ mod tests {
         ] {
             let result = compile_vrl_program(call);
             assert!(result.is_err(), "expected {call:?} to fail to compile");
+        }
+    }
+
+    /// The mirror image of `env_system_network_functions_are_unavailable`.
+    ///
+    /// A test asserting those functions are absent cannot pass on a build that
+    /// deliberately includes them, so the two are mutually exclusive rather
+    /// than one of them being deleted.
+    #[cfg(feature = "full-stdlib")]
+    #[test]
+    fn env_system_network_functions_are_available() {
+        let identifiers = function_identifiers();
+        for name in FEATURE_GATED_FUNCTIONS {
+            assert!(
+                identifiers.contains(name),
+                "{name} must be compiled in under the full-stdlib feature"
+            );
+        }
+    }
+
+    /// Three of the ten, actually run. Chosen because they need no descriptor
+    /// file, no schema and no network - the other seven are proved present by
+    /// their identifiers above.
+    #[cfg(feature = "full-stdlib")]
+    #[test]
+    fn full_stdlib_functions_execute() {
+        let program = compile_vrl_program(
+            r#"
+            .path = get_env_var!("PATH")
+            .host = get_hostname!()
+            .etld = parse_etld!("sub.example.com").etld
+            "#,
+        )
+        .expect("the gated functions compile under full-stdlib");
+
+        let outcome = execute_vrl_on_event(&program, r#"{"message":"seed"}"#, SecretMap::new());
+        let json = vrl_value_to_json(outcome.result.expect("execution succeeds"));
+        assert!(
+            json.get("path")
+                .and_then(|v| v.as_str())
+                .is_some_and(|p| !p.is_empty()),
+            "get_env_var returned nothing usable: {json}"
+        );
+        assert!(
+            json.get("host")
+                .and_then(|v| v.as_str())
+                .is_some_and(|h| !h.is_empty()),
+            "get_hostname returned nothing usable: {json}"
+        );
+        assert_eq!(json.get("etld").and_then(|v| v.as_str()), Some("com"));
+    }
+
+    #[test]
+    fn secret_functions_are_always_available() {
+        // Unlike the ten above, the event-secret functions are in every build.
+        let identifiers = function_identifiers();
+        for name in ["get_secret", "set_secret", "remove_secret"] {
+            assert!(identifiers.contains(&name), "{name} must be compiled in");
         }
     }
 
@@ -620,9 +803,12 @@ mod tests {
         )
         .expect("valid VRL compiles");
 
-        let output = execute_vrl_on_event(&program, r#"{"message": "{\"level\": \"info\"}"}"#)
-            .expect("execution succeeds");
-        let json = vrl_value_to_json(output);
+        let outcome = execute_vrl_on_event(
+            &program,
+            r#"{"message": "{\"level\": \"info\"}"}"#,
+            SecretMap::new(),
+        );
+        let json = vrl_value_to_json(outcome.result.expect("execution succeeds"));
         assert_eq!(json.get("level").and_then(|v| v.as_str()), Some("info"));
     }
 
@@ -631,7 +817,26 @@ mod tests {
         // parse_json! (fallible-fn-without-handling) aborts at runtime when
         // the input isn't valid JSON.
         let program = compile_vrl_program(r#".parsed = parse_json!(.message)"#).expect("compiles");
-        let result = execute_vrl_on_event(&program, r#"{"message": "not json"}"#);
-        assert!(result.is_err());
+        let outcome =
+            execute_vrl_on_event(&program, r#"{"message": "not json"}"#, SecretMap::new());
+        assert!(outcome.result.is_err());
+    }
+
+    #[test]
+    fn a_failed_event_still_reports_the_secrets_it_set() {
+        let program = compile_vrl_program(
+            r#"
+            set_secret("touched", "yes")
+            .parsed = parse_json!(.message)
+            "#,
+        )
+        .expect("compiles");
+        let outcome =
+            execute_vrl_on_event(&program, r#"{"message": "not json"}"#, SecretMap::new());
+        assert!(outcome.result.is_err(), "the program must abort");
+        assert_eq!(
+            outcome.secrets.get("touched").map(String::as_str),
+            Some("yes")
+        );
     }
 }

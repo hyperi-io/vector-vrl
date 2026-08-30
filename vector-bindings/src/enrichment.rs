@@ -726,7 +726,9 @@ mod tests {
 
     fn run(vrl: &str) -> Result<serde_json::Value, String> {
         let program = compile_vrl_program(vrl)?;
-        execute_vrl_on_event(&program, r#"{"message":"seed"}"#).map(vrl_value_to_json)
+        execute_vrl_on_event(&program, r#"{"message":"seed"}"#, BTreeMap::new())
+            .result
+            .map(vrl_value_to_json)
     }
 
     #[test]

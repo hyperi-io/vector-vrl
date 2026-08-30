@@ -7,8 +7,8 @@ when called.
 Two import paths, same objects:
 
 ```python
-from vector-vrl import execute_vrl, validate_vrl, get_vrl_performance, Vector, VrlResult
-from vector-vrl._bindings import execute_vrl   # equivalent
+from vector_vrl import execute_vrl, validate_vrl, get_vrl_performance, Vector, VrlResult
+from vector_vrl._bindings import execute_vrl   # equivalent
 ```
 
 `vector-vrl/__init__.py` re-exports from `._bindings`, falls back to a
@@ -16,8 +16,8 @@ top-level `vector_bindings` module, and failing both installs stubs that
 raise `ImportError` on call. Check which you got:
 
 ```python
-import vector-vrl
-vector-vrl.get_bindings_info()
+import vector_vrl
+vector_vrl.get_bindings_info()
 # {'available': True, 'source': 'bundled', 'version': '1.0.5', 'bundled': True}
 ```
 
@@ -26,12 +26,15 @@ vector-vrl.get_bindings_info()
 ## execute_vrl
 
 ```python
-execute_vrl(vrl_code: str, input_data: list[str]) -> list[dict]
+execute_vrl(vrl_code: str, input_data: list[str], secrets: dict[str, str] | None = None) -> list[dict]
 ```
 
 Compiles `vrl_code` once, then runs it over every string in `input_data`.
 Returns one dict per input, in order. An empty input list returns an empty
 list.
+
+`secrets` seeds every event's secret store before the program runs - see
+[Event secrets](#event-secrets). Omit it and each event starts with none.
 
 Raises `ValueError` if the VRL does not compile - that is a whole-batch
 failure, because compilation happens before any event is touched. Runtime
@@ -89,6 +92,60 @@ A VRL runtime error replaces that event's dict entirely. You get `error` and
 
 Note there is no `success` key here. Detect failure with
 `"error" in result`. `Vector.process_logs` returns exactly this shape too.
+
+## Event secrets
+
+Vector attaches a secret store to every event, separate from the event's
+fields, and three VRL functions read and write it. All three are compiled in
+on every build:
+
+| VRL | Behaviour |
+|---|---|
+| `get_secret(key)` | The secret's value, or `null` when it is not set. Infallible - no `!` needed |
+| `set_secret(key, secret)` | Stores it, replacing any value already under that key. Returns `null` |
+| `remove_secret(key)` | Drops it. Removing a key that is not set is not an error |
+
+These match Vector 0.58.0's own semantics. Secrets never appear in the event
+dict - they are a separate channel.
+
+```python
+>>> execute_vrl('.k = get_secret("api_key")', ['{"x":1}'], {"api_key": "abc123"})
+[{'k': 'abc123', 'x': 1}]
+```
+
+### execute_vrl_with_secrets
+
+```python
+execute_vrl_with_secrets(vrl_code: str, input_data: list[str], secrets: dict[str, str] | None = None) -> list[dict]
+```
+
+The same execution as `execute_vrl` - only the return shape differs. Each
+entry is a dict of two keys: `event` is exactly what `execute_vrl` would
+have returned for that input, and `secrets` is the event's secret store
+after the program ran.
+
+```python
+>>> execute_vrl_with_secrets('set_secret("token", "s3cr3t")', ['{"x":1}'])
+[{'event': {'x': 1}, 'secrets': {'token': 's3cr3t'}}]
+```
+
+Secrets are PER EVENT. Every input starts from the same `secrets` argument,
+so one event's `set_secret` is invisible to the next:
+
+```python
+>>> execute_vrl_with_secrets(
+...     'if .n == 1 { set_secret("leak", "yes") }\n.seen = get_secret("leak")',
+...     ['{"n":1}', '{"n":2}'],
+... )
+[{'event': {'n': 1, 'seen': 'yes'}, 'secrets': {'leak': 'yes'}},
+ {'event': {'n': 2, 'seen': None}, 'secrets': {}}]
+```
+
+An event whose program aborts still reports its secrets, as they stood when
+it failed - so `secrets` is populated even alongside an `error` event.
+
+`Vector.process_logs` has no secrets surface: it seeds an empty store and
+discards whatever the program left behind.
 
 ## validate_vrl
 
@@ -268,18 +325,25 @@ its VRL from `file:` is listed in `skipped` rather than guessed at.
 
 ### Why some transforms come back unchecked
 
-Nine VRL functions a real Vector deployment has do not exist in this build, so
-VRL calling them reports `call to undefined function`:
+Two groups of VRL this build cannot judge on its own:
 
-- `get_enrichment_table_record`, `find_enrichment_table_records`, `get_secret`,
-  `set_secret`, `remove_secret` - Vector registers these from its own config
-  (`enrichment_tables:`, secret backends), which is declared outside VRL.
-- `get_env_var`, `get_hostname`, `http_request`, `dns_lookup` - deliberately
-  not compiled in, see VRL restrictions below.
+- `get_enrichment_table_record` and `find_enrichment_table_records` DO
+  compile here, but only against a table registered through
+  `register_enrichment_table`. Vector declares its tables in
+  `enrichment_tables:` outside VRL, so a config naming a table this process
+  was never given is unchecked - register it to have it checked.
+- The ten functions the sandboxed default build leaves out (`get_env_var`,
+  `get_hostname`, `http_request`, `dns_lookup` and six more - see VRL
+  restrictions below) report `call to undefined function`.
 
 VRL calling either group is not a broken config, so those transforms come back
 with `ok` True and an `unchecked_reason` naming the function, never in
 `failures`. Use `validate_config_with_vector` to check them for real.
+
+The event-secret functions used to be in this list. They are compiled in now,
+so a config using `get_secret`, `set_secret` or `remove_secret` is checked
+like any other - the secret BACKEND is still declared outside VRL and still
+invisible here.
 
 ## validate_config_with_vector
 
@@ -319,10 +383,13 @@ True
 
 Two guards apply to every entry point that compiles VRL.
 
-Environment and network functions are not compiled in, so caller-supplied
-VRL cannot read the host or reach the network. `get_env_var`,
-`get_hostname`, `http_request` and `dns_lookup` all fail to compile with
-`undefined function`. The reasoning is in
+Environment, system and network functions are not compiled in, so
+caller-supplied VRL cannot read the host or reach the network. Ten of them
+fail to compile with `undefined function`: `get_env_var`, `encode_proto`,
+`parse_proto`, `parse_etld`, `validate_json_schema`, `get_hostname`,
+`get_timezone_name`, `http_request`, `dns_lookup` and `reverse_dns`. That is
+what the published wheel ships; a source build can turn all ten on with the
+`full-stdlib` Cargo feature. The reasoning is in
 [architecture.md](architecture.md) under "VRL execution's security
 posture".
 
@@ -342,7 +409,7 @@ Both are covered by tests in `vector-bindings/src/lib.rs` and
 
 ## The subprocess surface
 
-`vector-vrl.__all__` also carries `THGPerformanceAssessor`, `THGMetrics`,
+`vector_vrl.__all__` also carries `THGPerformanceAssessor`, `THGMetrics`,
 `THGResult`, `quick_thg_assessment`, `assess_vrl_performance`,
 `execute_vector_pipeline`, `VectorTestRunner`, `ProductionPatterns`,
 `production_patterns`, and the `get_apache_combined` / `get_nginx_access` /

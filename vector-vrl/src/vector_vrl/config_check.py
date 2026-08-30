@@ -36,20 +36,21 @@ _ENRICHMENT = (
     "get_enrichment_table_record",
     "find_enrichment_table_records",
 )
-# Secret backends are declared in the Vector config the same way, and these
-# functions are not linked in at all.
-_VECTOR_PROVIDED = (
-    "get_secret",
-    "set_secret",
-    "remove_secret",
-)
-# Left out deliberately so caller-supplied VRL cannot read the host or reach
-# the network.
+# Left out of the default build so caller-supplied VRL cannot read the host or
+# reach the network. Present when the crate was built with its `full-stdlib`
+# feature, in which case no undefined-function error names them and this list
+# is simply never consulted.
 _SANDBOXED = (
     "get_env_var",
+    "encode_proto",
+    "parse_proto",
+    "parse_etld",
+    "validate_json_schema",
     "get_hostname",
+    "get_timezone_name",
     "http_request",
     "dns_lookup",
+    "reverse_dns",
 )
 
 
@@ -69,12 +70,6 @@ def _uncompilable_reason(vrl: str, error: str | None) -> str | None:
 
     if "undefined function" not in error:
         return None
-    used = [fn for fn in _VECTOR_PROVIDED if fn in vrl]
-    if used:
-        return (
-            f"uses {', '.join(used)}, which Vector provides from its own config "
-            "(secret backends) and this build does not link"
-        )
     used = [fn for fn in _SANDBOXED if fn in vrl]
     if used:
         return (

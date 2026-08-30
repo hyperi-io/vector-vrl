@@ -21,6 +21,12 @@ quality:
 test:
   enabled: true
   coverage: false
+  rust:
+    # Both feature sets, run in turn. The sandbox regression test
+    # (env_system_network_functions_are_unavailable) exists only on the
+    # default build and its mirror only under full-stdlib, so a single
+    # --all-features run would silently skip the sandbox one.
+    features: default|full-stdlib
 build:
   enabled: true
   strategies:

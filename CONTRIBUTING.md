@@ -106,7 +106,7 @@ and says why rather than enshrining the wrong values.
 A test that needs the compiled `.so` should skip cleanly without it:
 
 ```python
-pytest.importorskip("vector-vrl._bindings")
+pytest.importorskip("vector_vrl._bindings")
 ```
 
 ## Commit messages

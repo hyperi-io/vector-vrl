@@ -137,11 +137,10 @@ class TestFunctionsThisBuildCannotCompile:
     """
 
     ENRICHMENT = '. = get_enrichment_table_record!("geoip", {"ip": .ip})'
-    SECRET = '.k = get_secret("datadog_api_key")'
     SANDBOXED = ".h = get_hostname!()"
 
     @pytest.mark.parametrize(
-        "vrl", [ENRICHMENT, SECRET, SANDBOXED], ids=["enrichment", "secret", "sandbox"]
+        "vrl", [ENRICHMENT, SANDBOXED], ids=["enrichment", "sandbox"]
     )
     def test_is_unchecked_not_failed(self, vrl: str):
         result = validate_config({"transforms": {"t": _remap(vrl)}})
@@ -149,6 +148,18 @@ class TestFunctionsThisBuildCannotCompile:
         assert result.failures == ()
         assert [u.name for u in result.unchecked] == ["t"]
         assert result.checked[0].error is None
+
+    def test_secrets_vrl_is_genuinely_checked_now(self):
+        """The secret functions are compiled in, so a config using them is judged.
+
+        This was unchecked until the three were implemented; if it ever goes
+        back to unchecked, something dropped them from the build.
+        """
+        result = validate_config(
+            {"transforms": {"t": _remap('.k = get_secret("datadog_api_key")')}}
+        )
+        assert result.ok
+        assert result.unchecked == ()
 
     def test_the_reason_names_the_offending_function(self):
         result = validate_config({"transforms": {"t": _remap(self.ENRICHMENT)}})

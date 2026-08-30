@@ -1,0 +1,226 @@
+# Every VRL function Vector 0.58.0 exposes, and what this build does with it.
+#
+# Established by mining 45,111 identifier-shaped strings from the vector
+# binary and probing every one, so the list is exhaustive rather than a
+# sample. tests/unit/test_function_coverage.py asserts reality matches this
+# file in BOTH directions - a function that starts or stops compiling fails
+# the suite, so the exclusions cannot quietly rot.
+#
+# name<TAB>status<TAB>reason
+#   supported            compiles in the default, sandboxed build
+#   feature:full-stdlib  compiles only with the full-stdlib Cargo feature
+#   unsupported          cannot work standalone, reason given
+
+abs	supported	
+aggregate_vector_metrics	unsupported	reads a running Vector's live metric registry
+append	supported	
+array	supported	
+assert	supported	
+assert_eq	supported	
+basename	supported	
+bool	supported	
+camelcase	supported	
+ceil	supported	
+chunks	supported	
+community_id	supported	
+compact	supported	
+contains	supported	
+contains_all	supported	
+crc	supported	
+decode_base16	supported	
+decode_base64	supported	
+decode_charset	supported	
+decode_gzip	supported	
+decode_lz4	supported	
+decode_mime_q	supported	
+decode_percent	supported	
+decode_punycode	supported	
+decode_snappy	supported	
+decode_zlib	supported	
+decode_zstd	supported	
+decrypt	supported	
+decrypt_ip	supported	
+del	supported	
+dirname	supported	
+dns_lookup	feature:full-stdlib	vrl enable_network_functions
+downcase	supported	
+encode_base16	supported	
+encode_base64	supported	
+encode_charset	supported	
+encode_csv	supported	
+encode_gzip	supported	
+encode_json	supported	
+encode_key_value	supported	
+encode_logfmt	supported	
+encode_lz4	supported	
+encode_percent	supported	
+encode_proto	feature:full-stdlib	vrl enable_system_functions
+encode_punycode	supported	
+encode_snappy	supported	
+encode_zlib	supported	
+encode_zstd	supported	
+encrypt	supported	
+encrypt_ip	supported	
+ends_with	supported	
+exists	supported	
+filter	supported	
+find	supported	
+find_enrichment_table_records	supported	
+find_vector_metrics	unsupported	reads a running Vector's live metric registry
+flatten	supported	
+float	supported	
+floor	supported	
+for_each	supported	
+format_int	supported	
+format_number	supported	
+format_timestamp	supported	
+from_entries	supported	
+from_unix_timestamp	supported	
+get	supported	
+get_enrichment_table_record	supported	
+get_env_var	feature:full-stdlib	vrl enable_env_functions
+get_hostname	feature:full-stdlib	vrl enable_system_functions
+get_secret	supported	
+get_timezone_name	feature:full-stdlib	vrl enable_system_functions
+get_vector_metric	unsupported	reads a running Vector's live metric registry
+haversine	supported	
+hmac	supported	
+http_request	feature:full-stdlib	vrl enable_network_functions
+includes	supported	
+int	supported	
+ip_aton	supported	
+ip_cidr_contains	supported	
+ip_ntoa	supported	
+ip_ntop	supported	
+ip_pton	supported	
+ip_subnet	supported	
+ip_to_ipv6	supported	
+ipv6_to_ipv4	supported	
+is_array	supported	
+is_boolean	supported	
+is_empty	supported	
+is_float	supported	
+is_integer	supported	
+is_ipv4	supported	
+is_ipv6	supported	
+is_json	supported	
+is_null	supported	
+is_nullish	supported	
+is_object	supported	
+is_regex	supported	
+is_string	supported	
+is_timestamp	supported	
+join	supported	
+kebabcase	supported	
+keys	supported	
+length	supported	
+log	supported	
+map_keys	supported	
+map_values	supported	
+match	supported	
+match_any	supported	
+match_array	supported	
+match_datadog_query	supported	
+md5	supported	
+merge	supported	
+mod	supported	
+now	supported	
+object	supported	
+object_from_array	supported	
+parse_apache_log	supported	
+parse_aws_alb_log	supported	
+parse_aws_cloudwatch_log_subscription_message	supported	
+parse_aws_vpc_flow_log	supported	
+parse_bytes	supported	
+parse_cbor	supported	
+parse_cef	supported	
+parse_common_log	supported	
+parse_csv	supported	
+parse_dnstap	unsupported	needs dnsmsg-parser, which upstream does not publish to crates.io
+parse_duration	supported	
+parse_etld	feature:full-stdlib	vrl enable_system_functions
+parse_float	supported	
+parse_glog	supported	
+parse_grok	supported	
+parse_groks	supported	
+parse_influxdb	supported	
+parse_int	supported	
+parse_json	supported	
+parse_key_value	supported	
+parse_klog	supported	
+parse_linux_authorization	supported	
+parse_logfmt	supported	
+parse_nginx_log	supported	
+parse_proto	feature:full-stdlib	vrl enable_system_functions
+parse_query_string	supported	
+parse_regex	supported	
+parse_regex_all	supported	
+parse_ruby_hash	supported	
+parse_syslog	supported	
+parse_timestamp	supported	
+parse_tokens	supported	
+parse_url	supported	
+parse_user_agent	supported	
+parse_xml	supported	
+parse_yaml	supported	
+pascalcase	supported	
+pop	supported	
+push	supported	
+random_bool	supported	
+random_bytes	supported	
+random_float	supported	
+random_int	supported	
+redact	supported	
+remove	supported	
+remove_secret	supported	
+replace	supported	
+replace_with	supported	
+reverse_dns	feature:full-stdlib	vrl enable_network_functions
+round	supported	
+screamingsnakecase	supported	
+seahash	supported	
+set	supported	
+set_secret	supported	
+set_semantic_meaning	unsupported	needs the MeaningList Vector's remap transform supplies
+sha1	supported	
+sha2	supported	
+sha3	supported	
+shannon_entropy	supported	
+sieve	supported	
+slice	supported	
+snakecase	supported	
+split	supported	
+split_path	supported	
+starts_with	supported	
+string	supported	
+strip_ansi_escape_codes	supported	
+strip_whitespace	supported	
+strlen	supported	
+tag_types_externally	supported	
+tally	supported	
+tally_value	supported	
+timestamp	supported	
+to_bool	supported	
+to_entries	supported	
+to_float	supported	
+to_int	supported	
+to_regex	supported	
+to_string	supported	
+to_syslog_facility	supported	
+to_syslog_facility_code	supported	
+to_syslog_level	supported	
+to_syslog_severity	supported	
+to_unix_timestamp	supported	
+truncate	supported	
+type_def	supported	
+unflatten	supported	
+unique	supported	
+unnest	supported	
+upcase	supported	
+uuid_from_friendly_id	supported	
+uuid_v4	supported	
+uuid_v7	supported	
+validate_json_schema	feature:full-stdlib	vrl enable_system_functions
+values	supported	
+xxhash	supported	
+zip	supported	

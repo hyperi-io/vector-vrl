@@ -21,11 +21,28 @@ csv = "1.4"
 maxminddb = "0.30"
 # VRL - synced from Vector's workspace dependencies (NO HARDCODING).
 # stdlib-base only, NOT the default `stdlib`/`cli`: this crate executes
-# caller-supplied VRL text, so enable_env_functions/enable_system_functions/
-# enable_network_functions (get_env_var, http_request, dns_lookup,
-# get_hostname) must stay off. enable_crypto_functions is safe to keep.
+# caller-supplied VRL text, so the three host-reaching feature groups stay
+# off by default. enable_crypto_functions is safe to keep.
+#
+# Held back by enable_env_functions:     get_env_var
+# Held back by enable_system_functions:  encode_proto, parse_proto, parse_etld,
+#                                        validate_json_schema, get_hostname,
+#                                        get_timezone_name
+# Held back by enable_network_functions: http_request, dns_lookup, reverse_dns
+#
+# The `full-stdlib` feature below turns all ten on for callers who control
+# their own VRL source.
 vrl = { git = "https://github.com/vectordotdev/vrl.git", branch = "main", default-features = false, features = ["stdlib-base", "enable_crypto_functions"] }
 
 [features]
 default = []
 abi3 = ["pyo3/abi3-py38"]
+# Opt in to VRL's complete stdlib, adding the ten functions the sandboxed
+# default holds back. `vrl/stdlib` is additive over the features already
+# named above, so this unions in enable_env_functions, enable_system_functions
+# and enable_network_functions.
+#
+# A build with this on can read the host environment, resolve DNS and make
+# arbitrary outbound HTTP requests from VRL source. Enable it only where the
+# VRL text is trusted; the published wheel is built without it.
+full-stdlib = ["vrl/stdlib"]

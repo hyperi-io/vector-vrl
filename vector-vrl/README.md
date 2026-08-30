@@ -19,7 +19,7 @@ pip install vector-vrl
 ```
 
 ```python
-from vector-vrl import execute_vrl, validate_vrl
+from vector_vrl import execute_vrl, validate_vrl
 
 vrl = """
 parsed, err = parse_json(.message)
@@ -66,18 +66,20 @@ iterations=500)`, so you can reproduce it on your own hardware in one line.
 It measures the in-process runtime, and makes no claim about the `vector`
 binary.
 
-## Safe to hand untrusted VRL
+## Safer to hand untrusted VRL
 
-Two guards apply to every entry point that compiles VRL, unconditionally and
-with no way to switch them off:
+Two guards apply to every entry point that compiles VRL:
 
-- **No host, no network.** `get_env_var`, `get_hostname`, `http_request` and
-  `dns_lookup` are not compiled in. Caller-supplied VRL cannot read your
-  environment or reach out of the process - it fails to compile instead.
+- **No host, no network.** `get_env_var`, `get_hostname`, `http_request`,
+  `dns_lookup` and six more are not compiled in. Caller-supplied VRL cannot
+  read your environment or reach out of the process - it fails to compile
+  instead. This is what the published wheel ships. Someone building the crate
+  from source can turn those ten functions on with the `full-stdlib` Cargo
+  feature; only do that where you control the VRL text.
 - **No nesting bomb.** VRL source may not nest brackets past 64 levels. Past
   a few hundred the parser's own recursion overflows the stack and kills the
   process, which no Python `except` can catch, so the check runs before the
-  parser ever sees the input.
+  parser ever sees the input. There is no way to switch this one off.
 
 That combination is what makes it reasonable to accept VRL from a user - a
 multi-tenant playground, a customer-supplied transform, a config someone
@@ -87,7 +89,8 @@ pasted in.
 
 | | |
 |---|---|
-| `execute_vrl(vrl, events)` | Compile once, run over a batch, get the transformed events back |
+| `execute_vrl(vrl, events, secrets=None)` | Compile once, run over a batch, get the transformed events back |
+| `execute_vrl_with_secrets(vrl, events, secrets=None)` | The same run, but each entry carries the event's secret store as well |
 | `validate_vrl(vrl)` | Compile without running. Returns a `VrlResult`, never raises on bad VRL |
 | `get_vrl_performance(vrl, events, iterations=100)` | Run it repeatedly, get events/sec |
 | `Vector` | Batch runner holding state across calls - `.initialize()`, `.process_logs()`, `.get_stats()` |

@@ -52,12 +52,24 @@ That is unrelated to `vector-bindings` or `vector-vrl` - neither reads it.
 
 `vector-bindings` deliberately restricts the `vrl` crate's feature set:
 `stdlib-base` + `enable_crypto_functions` only, `default-features = false`.
-The crate's own default feature set also turns on functions that read the
-host environment and make outbound network requests (`get_env_var`,
-`http_request`, `dns_lookup`, `get_hostname`) - since this crate compiles
-and runs whatever VRL text a Python caller hands it, those stay off. If you
-add a dependency on a broader `vrl` feature set, check what it re-enables
-before you ship it.
+`vrl`'s own default feature set also turns on functions that read the host
+environment, resolve DNS and make outbound network requests - since this
+crate compiles and runs whatever VRL text a Python caller hands it, those
+stay off. Ten VRL functions are held back that way:
+
+| vrl feature | Functions it would add |
+|---|---|
+| `enable_env_functions` | `get_env_var` |
+| `enable_system_functions` | `encode_proto`, `parse_proto`, `parse_etld`, `validate_json_schema`, `get_hostname`, `get_timezone_name` |
+| `enable_network_functions` | `http_request`, `dns_lookup`, `reverse_dns` |
+
+The crate's own `full-stdlib` Cargo feature (`full-stdlib = ["vrl/stdlib"]`)
+turns all ten on for callers who control their own VRL source. It is OFF by
+default and the published wheel is built without it. Note that the feature's
+mere existence pulls `reqwest` and its TLS stack into `Cargo.lock`, because
+Cargo resolves the lockfile over the union of all features - a default build
+still links none of it. If you add a dependency on a broader `vrl` feature
+set, check what it re-enables before you ship it.
 
 A VRL source string also can't nest more than 64 levels deep
 (`MAX_VRL_NESTING_DEPTH` in `lib.rs`) - past a few hundred levels the

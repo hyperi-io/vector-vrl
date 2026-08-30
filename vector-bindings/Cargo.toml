@@ -13,6 +13,12 @@ crate-type = ["cdylib"]
 [dependencies]
 pyo3 = { version = "0.22", features = ["extension-module"] }
 serde_json = { version = "1.0.142", default-features = false, features = ["std"] }
+# Enrichment tables. `csv` parses a registered `file` table; it is already in
+# the tree via vrl's stdlib-base, so declaring it adds no new dependency.
+csv = "1.4"
+# MaxMind DB reader for registered `geoip` tables. Vector's own enrichment
+# lib is unpublished, so the GeoIP2/GeoLite2 reader is taken direct.
+maxminddb = "0.30"
 # VRL - synced from Vector's workspace dependencies (NO HARDCODING).
 # stdlib-base only, NOT the default `stdlib`/`cli`: this crate executes
 # caller-supplied VRL text, so enable_env_functions/enable_system_functions/

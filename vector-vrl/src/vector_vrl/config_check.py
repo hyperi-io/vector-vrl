@@ -26,20 +26,25 @@ __all__ = [
     "validate_config_with_vector",
 ]
 
-# VRL functions a real Vector deployment has but this build cannot compile.
-# Vector registers the first group from its own config - enrichment tables and
-# secret backends are declared in YAML, outside VRL, and the compiler only
-# knows them once Vector has loaded that config. The second group is left out
-# deliberately so caller-supplied VRL cannot read the host or reach the
-# network. VRL calling either group is not a broken config, so it is reported
-# as unchecked rather than failed.
-_VECTOR_PROVIDED = (
+# VRL functions this build cannot judge on its own.
+#
+# The enrichment functions DO compile here, but only against tables registered
+# through `register_enrichment_table`. Vector declares its tables in YAML
+# outside VRL, so a config naming a table this process was never given is
+# unchecked rather than wrong - register the table to have it checked.
+_ENRICHMENT = (
     "get_enrichment_table_record",
     "find_enrichment_table_records",
+)
+# Secret backends are declared in the Vector config the same way, and these
+# functions are not linked in at all.
+_VECTOR_PROVIDED = (
     "get_secret",
     "set_secret",
     "remove_secret",
 )
+# Left out deliberately so caller-supplied VRL cannot read the host or reach
+# the network.
 _SANDBOXED = (
     "get_env_var",
     "get_hostname",
@@ -49,14 +54,26 @@ _SANDBOXED = (
 
 
 def _uncompilable_reason(vrl: str, error: str | None) -> str | None:
-    """Name why this build cannot compile `vrl`, or None if it is a real error."""
-    if not error or "undefined function" not in error:
+    """Name why this build cannot check `vrl`, or None if it is a real error."""
+    if not error:
+        return None
+
+    if "unknown enrichment table" in error:
+        used = [fn for fn in _ENRICHMENT if fn in vrl]
+        if used:
+            return (
+                f"uses {', '.join(used)} against an enrichment table this process "
+                "has not registered - Vector declares its tables in its own config; "
+                "call register_enrichment_table to have this checked"
+            )
+
+    if "undefined function" not in error:
         return None
     used = [fn for fn in _VECTOR_PROVIDED if fn in vrl]
     if used:
         return (
             f"uses {', '.join(used)}, which Vector provides from its own config "
-            "(enrichment tables / secret backends) and this build does not link"
+            "(secret backends) and this build does not link"
         )
     used = [fn for fn in _SANDBOXED if fn in vrl]
     if used:

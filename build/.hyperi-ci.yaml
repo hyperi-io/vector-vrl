@@ -21,7 +21,7 @@ test:
   enabled: true
   # Flat module layout (build_system.py, common.py, ... - no src/ package),
   # so hyperi-ci's fixed `--cov=src` convention has nothing to measure here
-  # regardless of how well-tested this component is. vectordotdev/ (the
+  # regardless of how well-tested this component is. vector-vrl/ (the
   # published package) keeps full coverage enforcement; this is scoped to
   # the internal orchestration CLI only.
   coverage: false

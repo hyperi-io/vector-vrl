@@ -230,6 +230,91 @@ before any event is touched and moves no counter.
 
 `config` is still stored and never used - see the constraints above.
 
+## validate_config
+
+```python
+validate_config(source: dict | str | Path) -> ConfigCheck
+```
+
+Compiles the `source` of every `remap` transform in a Vector config. Runs
+in-process against the real compiler, and needs no `vector` binary.
+
+`source` is either an already-parsed dict, or a path to a `.yaml`/`.yml`/
+`.toml`/`.json` config. TOML and JSON parse with the stdlib; YAML needs
+`pip install vector-vrl[yaml]` and raises `ModuleNotFoundError` naming that
+extra otherwise. An unsupported suffix, or a file that does not parse to a
+mapping, raises `ValueError`.
+
+```python
+>>> r = validate_config({"transforms": {"t": {"type": "remap", "source": ".a = 1"}}})
+>>> r.ok
+True
+```
+
+`ConfigCheck` carries:
+
+| Attribute | Meaning |
+|---|---|
+| `ok` | every checked transform compiled |
+| `checked` | one `TransformCheck` per remap with inline `source` |
+| `failures` | the checked ones that did not compile |
+| `unchecked` | the checked ones this build could not judge |
+| `skipped` | remap transform names whose VRL lives in an external `file:` |
+
+`TransformCheck` is `name`, `ok`, `error`, `unchecked_reason`.
+
+Transforms that are not `type: remap` are ignored entirely. A remap reading
+its VRL from `file:` is listed in `skipped` rather than guessed at.
+
+### Why some transforms come back unchecked
+
+Nine VRL functions a real Vector deployment has do not exist in this build, so
+VRL calling them reports `call to undefined function`:
+
+- `get_enrichment_table_record`, `find_enrichment_table_records`, `get_secret`,
+  `set_secret`, `remove_secret` - Vector registers these from its own config
+  (`enrichment_tables:`, secret backends), which is declared outside VRL.
+- `get_env_var`, `get_hostname`, `http_request`, `dns_lookup` - deliberately
+  not compiled in, see VRL restrictions below.
+
+VRL calling either group is not a broken config, so those transforms come back
+with `ok` True and an `unchecked_reason` naming the function, never in
+`failures`. Use `validate_config_with_vector` to check them for real.
+
+## validate_config_with_vector
+
+```python
+validate_config_with_vector(
+    path: str | Path,
+    *,
+    vector_binary: str = "vector",
+    no_environment: bool = True,
+    deny_warnings: bool = False,
+    timeout: float = 60.0,
+) -> VectorValidation
+```
+
+Runs `vector validate` on a config file. Checks everything `validate_config`
+cannot - sources, sinks, wiring between components, component options, and the
+VRL whose enrichment tables or secrets are declared in the config.
+
+One-shot: Vector exits as soon as it has answered. This never starts a daemon
+and never moves data. `no_environment` passes `--no-environment`, skipping the
+component and health checks that would open network connections, so checking a
+file does not dial the configured sinks.
+
+Raises `FileNotFoundError` when the binary is not on PATH, and
+`subprocess.TimeoutExpired` if Vector outlives `timeout`.
+
+`VectorValidation` is `ok`, `returncode`, and `output` - Vector's own report,
+which names the offending component on failure.
+
+```python
+>>> r = validate_config_with_vector("vector.yaml")
+>>> r.ok or r.output
+True
+```
+
 ## VRL restrictions
 
 Two guards apply to every entry point that compiles VRL.

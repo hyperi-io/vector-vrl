@@ -5,6 +5,8 @@
 // / plan Decision Log, pyo3 0.22 vs Python 3.14 gap).
 #![allow(unsafe_op_in_unsafe_fn, clippy::useless_conversion)]
 
+mod enrichment;
+
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyDictMethods};
 use serde_json::Value as JsonValue;
@@ -76,8 +78,11 @@ fn check_nesting_depth(vrl_code: &str) -> Result<(), String> {
 fn compile_vrl_program(vrl_code: &str) -> Result<Program, String> {
     check_nesting_depth(vrl_code)?;
 
-    // Get all VRL standard library functions
-    let functions = vrl::stdlib::all();
+    // VRL's standard library, plus the enrichment functions this crate adds.
+    // Table names are resolved against the registry at compile time, so a
+    // program naming an unregistered table fails here rather than at runtime.
+    let mut functions = vrl::stdlib::all();
+    functions.extend(enrichment::functions());
 
     // Compile VRL code using VRL's real compiler (v0.27+ API - simplified, no hardcoding!)
     compile(vrl_code, &functions)
@@ -145,7 +150,7 @@ fn execute_vrl_on_event(program: &Program, event_data: &str) -> Result<Value, St
 }
 
 /// Convert JSON value to VRL value
-fn json_to_vrl_value(json: JsonValue) -> Value {
+pub(crate) fn json_to_vrl_value(json: JsonValue) -> Value {
     match json {
         JsonValue::Null => Value::Null,
         JsonValue::Bool(b) => Value::Boolean(b),
@@ -410,6 +415,72 @@ fn validate_vrl(vrl_code: String) -> PyResult<VrlResult> {
     }
 }
 
+/// Register an enrichment table under `name` for VRL to look up.
+///
+/// `kind` is "file" (a CSV whose first row is the header) or "geoip" (a
+/// GeoIP2/GeoLite2 .mmdb). The file is read here, so a bad path or a malformed
+/// CSV raises immediately rather than at VRL runtime. Registering an existing
+/// name replaces that table.
+///
+/// Registration must happen before the VRL that uses the table is compiled -
+/// an unknown table name is a compile-time error.
+#[pyfunction]
+#[pyo3(signature = (name, kind, path, delimiter=None))]
+fn register_enrichment_table(
+    name: String,
+    kind: String,
+    path: String,
+    delimiter: Option<String>,
+) -> PyResult<()> {
+    let delimiter = match delimiter {
+        None => b',',
+        Some(d) => {
+            let bytes = d.as_bytes();
+            match bytes {
+                [single] => *single,
+                _ => {
+                    return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                        "delimiter must be a single ASCII character, got {d:?}"
+                    )));
+                }
+            }
+        }
+    };
+
+    enrichment::register_table(&name, &kind, std::path::Path::new(&path), delimiter)
+        .map_err(PyErr::new::<pyo3::exceptions::PyValueError, _>)
+}
+
+/// Drop every registered enrichment table.
+///
+/// Programs already compiled keep the table data they captured; only later
+/// compilations see the emptied registry.
+#[pyfunction]
+fn clear_enrichment_tables() {
+    enrichment::clear_tables();
+}
+
+/// List the registered enrichment tables, name-ordered.
+///
+/// Each entry is a dict with `name`, `kind`, `path` and `rows` - `rows` is the
+/// loaded row count for a "file" table and None for a "geoip" table.
+#[pyfunction]
+fn list_enrichment_tables() -> PyResult<Vec<PyObject>> {
+    let tables = enrichment::list_tables();
+    Python::with_gil(|py| {
+        let mut out = Vec::with_capacity(tables.len());
+        for (name, kind, path, rows) in tables {
+            let entry = PyDict::new_bound(py);
+            entry.set_item("name", name)?;
+            entry.set_item("kind", kind)?;
+            entry.set_item("path", path)?;
+            entry.set_item("rows", rows)?;
+            out.push(entry.into());
+        }
+        Ok(out)
+    })
+}
+
 /// Get THG performance metrics for VRL code using real VRL execution
 #[pyfunction]
 #[pyo3(signature = (vrl_code, test_data, iterations=None))]
@@ -474,6 +545,11 @@ fn vector_bindings(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(execute_vrl, m)?)?;
     m.add_function(wrap_pyfunction!(validate_vrl, m)?)?;
     m.add_function(wrap_pyfunction!(get_vrl_performance, m)?)?;
+
+    // Enrichment table registry - VRL names a table key, never a path.
+    m.add_function(wrap_pyfunction!(register_enrichment_table, m)?)?;
+    m.add_function(wrap_pyfunction!(clear_enrichment_tables, m)?)?;
+    m.add_function(wrap_pyfunction!(list_enrichment_tables, m)?)?;
 
     Ok(())
 }

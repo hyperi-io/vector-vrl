@@ -5,7 +5,7 @@
 # the default rules first. hyperi-ci's gitleaks stage looks for this file
 # relative to its own working directory, not the repo root, so an identical
 # copy lives in every component directory that runs `hyperi-ci run quality`
-# (vector-bindings/, vectordotdev/, build/) alongside this root copy.
+# (vector-bindings/, vector-vrl/, build/) alongside this root copy.
 [extend]
 useDefault = true
 

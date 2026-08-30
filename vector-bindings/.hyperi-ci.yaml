@@ -6,7 +6,7 @@
 # Copyright: (c) 2026 HyperSec
 #
 # Internal crate: builds and tests here, does NOT publish standalone.
-# The publishable artefact is ../vectordotdev (maturin wraps this crate).
+# The publishable artefact is ../vector-vrl (maturin wraps this crate).
 #
 # Override defaults with HYPERCI_* env vars.
 # Reference: config/defaults.yaml in hyperi-ci.

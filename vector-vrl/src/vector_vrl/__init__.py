@@ -23,8 +23,11 @@ try:
     from ._bindings import (
         Vector,
         VrlResult,
+        clear_enrichment_tables,
         execute_vrl,
         get_vrl_performance,
+        list_enrichment_tables,
+        register_enrichment_table,
         validate_vrl,
     )
 
@@ -41,6 +44,9 @@ except ImportError:  # pragma: no cover - only reachable if the wheel shipped wi
         execute_vrl = vector_bindings.execute_vrl
         validate_vrl = vector_bindings.validate_vrl
         get_vrl_performance = vector_bindings.get_vrl_performance
+        register_enrichment_table = vector_bindings.register_enrichment_table
+        clear_enrichment_tables = vector_bindings.clear_enrichment_tables
+        list_enrichment_tables = vector_bindings.list_enrichment_tables
 
         _bindings_source = "external"
         _bindings_available = True
@@ -75,6 +81,18 @@ except ImportError:  # pragma: no cover - only reachable if the wheel shipped wi
             raise ImportError("VRL bindings not available")
 
         def get_vrl_performance(code, data, iterations=None):
+            """Raise ImportError because VRL bindings are not available."""
+            raise ImportError("VRL bindings not available")
+
+        def register_enrichment_table(name, kind, path, delimiter=None):
+            """Raise ImportError because VRL bindings are not available."""
+            raise ImportError("VRL bindings not available")
+
+        def clear_enrichment_tables():
+            """Raise ImportError because VRL bindings are not available."""
+            raise ImportError("VRL bindings not available")
+
+        def list_enrichment_tables():
             """Raise ImportError because VRL bindings are not available."""
             raise ImportError("VRL bindings not available")
 
@@ -146,6 +164,10 @@ __all__ = [
     "validate_vrl",
     "get_vrl_performance",
     "get_bindings_info",
+    # Enrichment tables, registered before the VRL that uses them is compiled
+    "register_enrichment_table",
+    "clear_enrichment_tables",
+    "list_enrichment_tables",
     # Vector-config checking
     "validate_config",
     "validate_config_with_vector",

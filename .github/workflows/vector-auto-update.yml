@@ -1,4 +1,4 @@
-# Project:   vectordotdev
+# Project:   vector-vrl
 # File:      .github/workflows/vector-auto-update.yml
 # Purpose:   Daily check for a new Vector release (7-day release-age
 #            cooldown - build/vector_pin.py skips anything newer); try it,
@@ -75,7 +75,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          NEW_VERSION=$(grep -oP '_VECTOR_TAG = "\K[^"]+' vectordotdev/tests/conftest.py)
+          NEW_VERSION=$(grep -oP '_VECTOR_TAG = "\K[^"]+' vector-vrl/tests/conftest.py)
           git commit -am "fix: bump pinned Vector version to ${NEW_VERSION}"
           git push origin HEAD:main
           gh workflow run ci.yml --ref main

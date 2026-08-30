@@ -1,20 +1,30 @@
-"""Compile the VRL inside a Vector config without running Vector.
+"""Check a Vector config, at two levels.
 
-The common way a Vector config breaks is a `remap` transform whose VRL does
-not compile. That is checkable here against the real compiler. Everything
-else in a Vector config - sources, sinks, wiring, type compatibility - is
-NOT checked, because this package does not link the `vector` crate.
+`validate_config` compiles the VRL inside every `remap` transform in-process,
+needing no `vector` binary. It cannot see sources, sinks, wiring, or the
+enrichment tables and secret backends Vector registers from its own config.
+
+`validate_config_with_vector` shells out to `vector validate`, which checks all
+of that. It needs the binary, and runs it one-shot - never as a daemon.
 """
 
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-__all__ = ["ConfigCheck", "TransformCheck", "validate_config"]
+__all__ = [
+    "ConfigCheck",
+    "TransformCheck",
+    "VectorValidation",
+    "validate_config",
+    "validate_config_with_vector",
+]
 
 # VRL functions a real Vector deployment has but this build cannot compile.
 # Vector registers the first group from its own config - enrichment tables and
@@ -182,4 +192,78 @@ def validate_config(source: dict[str, Any] | str | Path) -> ConfigCheck:
         ok=all(c.ok for c in checked),
         checked=tuple(checked),
         skipped=tuple(skipped),
+    )
+
+
+@dataclass(frozen=True)
+class VectorValidation:
+    """The result of one `vector validate` run."""
+
+    ok: bool
+    returncode: int
+    output: str
+
+
+def validate_config_with_vector(
+    path: str | Path,
+    *,
+    vector_binary: str = "vector",
+    no_environment: bool = True,
+    deny_warnings: bool = False,
+    timeout: float = 60.0,
+) -> VectorValidation:
+    """Validate a whole Vector config by running `vector validate`.
+
+    Checks everything `validate_config` cannot: sources, sinks, wiring, and the
+    VRL that depends on enrichment tables or secret backends declared in the
+    config. Vector exits as soon as it has answered - this never starts a
+    daemon and never moves data.
+
+    Args:
+        path: The Vector config file. Vector detects the format from the name.
+        vector_binary: Binary to run, resolved on PATH unless given a path.
+        no_environment: Pass `--no-environment`, skipping the component and
+            health checks that would open network connections. Turn it off
+            only when reaching the configured sinks is the point.
+        deny_warnings: Pass `--deny-warnings`, failing on warnings too.
+        timeout: Seconds to wait before giving up on the binary.
+
+    Returns:
+        A VectorValidation. `output` carries Vector's own report, which names
+        the offending component when it fails.
+
+    Raises:
+        FileNotFoundError: `vector_binary` is not on PATH.
+        subprocess.TimeoutExpired: Vector did not finish within `timeout`.
+
+    """
+    exe = shutil.which(vector_binary) or (
+        vector_binary if Path(vector_binary).is_file() else None
+    )
+    if exe is None:
+        raise FileNotFoundError(
+            f"no {vector_binary!r} binary on PATH - install Vector "
+            "(https://vector.dev/docs/setup/installation/) or use "
+            "validate_config() for the in-process VRL check instead"
+        )
+
+    cmd = [exe, "validate"]
+    if no_environment:
+        cmd.append("--no-environment")
+    if deny_warnings:
+        cmd.append("--deny-warnings")
+    cmd.append(str(path))
+
+    run = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=timeout,
+    )
+    return VectorValidation(
+        ok=run.returncode == 0,
+        returncode=run.returncode,
+        output=(run.stdout + run.stderr).strip(),
     )

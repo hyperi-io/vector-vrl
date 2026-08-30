@@ -9,7 +9,13 @@ import time
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
-from .config_check import ConfigCheck, TransformCheck, validate_config
+from .config_check import (
+    ConfigCheck,
+    TransformCheck,
+    VectorValidation,
+    validate_config,
+    validate_config_with_vector,
+)
 
 # Import from bundled vector-bindings extension
 try:
@@ -140,10 +146,12 @@ __all__ = [
     "validate_vrl",
     "get_vrl_performance",
     "get_bindings_info",
-    # Vector-config VRL checking
+    # Vector-config checking
     "validate_config",
+    "validate_config_with_vector",
     "ConfigCheck",
     "TransformCheck",
+    "VectorValidation",
     # THG Performance Assessment
     "THGPerformanceAssessor",
     "THGMetrics",

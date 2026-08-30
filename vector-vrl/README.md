@@ -91,18 +91,32 @@ pasted in.
 | `validate_vrl(vrl)` | Compile without running. Returns a `VrlResult`, never raises on bad VRL |
 | `get_vrl_performance(vrl, events, iterations=100)` | Run it repeatedly, get events/sec |
 | `Vector` | Batch runner holding state across calls - `.initialize()`, `.process_logs()`, `.get_stats()` |
-| `validate_config(path\|dict)` | Compile every `remap` transform's VRL in a Vector config (YAML/TOML/JSON) |
+| `validate_config(path\|dict)` | Compile every `remap` transform's VRL in a Vector config (YAML/TOML/JSON), in-process |
+| `validate_config_with_vector(path)` | Full config check by running `vector validate` - needs the binary, never a daemon |
 
 `Vector` runs the VRL step alone. Its `config` argument is stored but never
 applied - there is no sources/transforms/sinks pipeline here. If you want the
 full pipeline, run Vector itself.
 
-`validate_config` is a VRL check, not a Vector config check. It compiles the
-`source` of every `remap` transform and reports each one by name; a remap
-reading its VRL from `file:` is listed as skipped rather than guessed at.
-It says nothing about sources, sinks, wiring or type compatibility - for
-that, run `vector validate`. YAML needs `pip install vector-vrl[yaml]`;
-TOML and JSON need nothing.
+### Checking a Vector config
+
+There are two levels, and the difference matters.
+
+`validate_config` is in-process and needs no `vector` binary. It compiles the
+`source` of every `remap` transform and reports each by name. It says nothing
+about sources, sinks or wiring, and it cannot judge VRL that calls
+`get_enrichment_table_record` or `get_secret` - those are registered by Vector
+from `enrichment_tables:` and secret backends declared in the config, outside
+VRL, so this build has never heard of them. Rather than call a valid config
+broken, it reports those transforms as `unchecked` with a reason. YAML needs
+`pip install vector-vrl[yaml]`; TOML and JSON need nothing.
+
+`validate_config_with_vector` runs `vector validate --no-environment` and
+checks the lot - wiring, component options, and the enrichment-backed VRL the
+in-process check has to skip. It needs Vector installed, and it is one-shot:
+Vector exits as soon as it has answered, never running as a daemon and never
+moving data. `--no-environment` also keeps it offline, so it will not dial your
+sinks just to check the file.
 
 Exact signatures, return shapes, and the rough edges worth knowing (nested
 objects come back as JSON strings, a per-event runtime error replaces that

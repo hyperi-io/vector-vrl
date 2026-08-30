@@ -1,7 +1,7 @@
 # Contributing
 
 One repo, three components that build separately. Read
-[ARCHITECTURE.md](ARCHITECTURE.md) before you start - the thing that
+[docs/architecture.md](docs/architecture.md) before you start - the thing that
 catches people out is that there is no single venv or `pip install -e .`
 covering the tree.
 
@@ -19,7 +19,7 @@ is enough.
    per-component commands.
 3. Commit however your workflow does it. Open a PR against `main`.
 
-Lint config lives in each component's manifest (`vectordotdev/pyproject.toml`
+Lint config lives in each component's manifest (`vector-vrl/pyproject.toml`
 for ruff, `vector-bindings/clippy.toml` and `rustfmt.toml` for the Rust
 side), so your editor picks it up without extra setup.
 
@@ -37,22 +37,22 @@ they will re-validate.
 ## Maintainers - the strict path
 
 Each component carries its own commit-msg/pre-push hooks
-(`vectordotdev/.githooks/`, `vector-bindings/.githooks/`, `build/.githooks/`
+(`vector-vrl/.githooks/`, `vector-bindings/.githooks/`, `build/.githooks/`
 - there is no single root `.githooks/`). Point git at the one for the
 component you are working in:
 
 ```bash
-git config core.hooksPath vectordotdev/.githooks   # or vector-bindings/, build/
+git config core.hooksPath vector-vrl/.githooks   # or vector-bindings/, build/
 ```
 
 Then:
 
 1. Land changes on `main` via PR or direct push - your call. `git push`
    works as normal, nothing wraps it.
-2. To publish `vectordotdev` to PyPI, push to `main` with a `Publish: true`
+2. To publish `vector-vrl` to PyPI, push to `main` with a `Publish: true`
    trailer on the HEAD commit message (or trigger the workflow manually via
    `workflow_dispatch`). `.github/workflows/ci.yml`'s `plan` job checks for
-   that trailer and gates the `publish-vectordotdev` job on it - every other
+   that trailer and gates the `publish-vector-vrl` job on it - every other
    push only runs quality + test.
 
 ## Before you push
@@ -73,7 +73,7 @@ You can run a single side while iterating:
 
 ```bash
 make quality-rust      # vector-bindings
-make quality-python    # vectordotdev + build
+make quality-python    # vector-vrl + build
 make test-rust
 make test-python
 ```
@@ -85,7 +85,7 @@ make test-python
   the public API, so update
   [docs/reference-python-api.md](docs/reference-python-api.md) in the same
   commit.
-- `vectordotdev/` - the Python package that ships to PyPI. Building it
+- `vector-vrl/` - the Python package that ships to PyPI. Building it
   compiles the Rust crate, because `pyproject.toml` points maturin at
   `../vector-bindings/Cargo.toml`.
 - `build/` - a standalone orchestration CLI with its own `pyproject.toml`
@@ -99,14 +99,14 @@ and not tracked in this repo.
 
 No mocks. Tests run against the compiled bindings or a real Vector
 subprocess, never a stub. If you are adding coverage for the bindings, the
-model to copy is `vectordotdev/tests/unit/test_vector_class.py` - it asserts
+model to copy is `vector-vrl/tests/unit/test_vector_class.py` - it asserts
 observed behaviour, and where behaviour is known-wrong it asserts the SHAPE
 and says why rather than enshrining the wrong values.
 
 A test that needs the compiled `.so` should skip cleanly without it:
 
 ```python
-pytest.importorskip("vectordotdev._bindings")
+pytest.importorskip("vector-vrl._bindings")
 ```
 
 ## Commit messages
@@ -123,6 +123,6 @@ contact.
 
 This crate compiles and runs VRL text supplied by its caller, so anything
 that widens what that VRL can reach is a security change, not a feature.
-The reasoning and the current restrictions are in ARCHITECTURE.md under
+The reasoning and the current restrictions are in docs/architecture.md under
 "VRL execution's security posture". Read it before touching the `vrl`
 dependency's feature list.

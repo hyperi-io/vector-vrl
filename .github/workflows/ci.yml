@@ -1,21 +1,20 @@
-# Project:   vectordotdev
+# Project:   vector-vrl
 # File:      .github/workflows/ci.yml
 # Purpose:   CI for the 3-component repo (vector-bindings Rust crate,
-#            vectordotdev Python package, build/ orchestration tooling).
+#            vector-vrl Python package, build/ orchestration tooling).
 #
-# hyperi-ci has no multi-component/hybrid-repo model (one language, one
-# root per project) and its reusable GitHub Actions workflows assume the
-# checkout root IS the project, so this repo cannot use them directly.
-# Each component keeps its own .hyperi-ci.yaml, and every quality/test/
-# build step below runs through the Makefile, which wraps
-# `hyperi-ci run <stage> -C <dir>` per component - the same ruff/ty/
-# bandit/pip-audit/vulture and cargo fmt/clippy/audit/deny/osv-scanner
-# checks any hyperi-ci-managed project gets, just orchestrated by hand
-# across the 3 components instead of hyperi-ci's single-project pipeline.
+# hyperi-ci's reusable python-ci.yml assumes the checkout root IS the project
+# and has no wheel matrix, so this repo cannot call it the way scalo-py does.
+# Everything it would have given us is reused piece by piece instead: the
+# predict-version and setup-semantic-release composite actions, and the
+# hyperi-ci CLI for check-commits / stamp-version / publish / release-commit
+# / release-notify. Only the cross-component fan-out and the wheel matrix are
+# bespoke.
 #
-# Publish is gated: only a push to main whose HEAD commit message
-# contains "Publish: true", or an explicit workflow_dispatch, builds and
-# publishes to pypi.org. Every other push/PR only runs quality + test.
+# Version, CHANGELOG.md and git tags are semantic-release's, never hand-set.
+# A push to main whose HEAD commit carries a `Publish: true` trailer (or a
+# workflow_dispatch with from-head/tag) tags and publishes; everything else
+# validates only.
 
 name: CI
 
@@ -24,45 +23,92 @@ on:
     branches: ["**"]
   pull_request:
     branches: [main]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      tag:
+        type: string
+        required: false
+        default: ""
+        description: "Tag to re-publish (existing tag). Omit + set from-head to release HEAD."
+      from-head:
+        type: string
+        required: false
+        default: ""
+        description: "'true' to release/retry the current HEAD - the CI creates the tag."
+      bump:
+        type: string
+        required: false
+        default: "auto"
+        description: "Version resolution for from-head: auto | patch | minor | X.Y.Z."
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.tag || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
+env:
+  HYPERCI_INSTALL: ${{ vars.HYPERCI_INSTALL_OVERRIDE || 'uvx --no-cache --refresh hyperi-ci' }}
+
 jobs:
   plan:
     name: Plan
+    if: github.event.pull_request.head.repo.fork != true
     runs-on: ubuntu-latest
+    # predict-version runs semantic-release, whose git plugin verifies push
+    # access on a publish predict.
+    permissions:
+      contents: write
     outputs:
-      will-publish: ${{ steps.gate.outputs.will-publish }}
+      run-checks: ${{ steps.predict.outputs.run-checks }}
+      run-build: ${{ steps.predict.outputs.run-build }}
+      will-publish: ${{ steps.predict.outputs.will-publish }}
+      next-version: ${{ steps.predict.outputs.version }}
     steps:
-      - name: Compute publish gate
-        id: gate
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "will-publish=true" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.ref }}" == "refs/heads/main" && "${{ github.event_name }}" == "push" ]] \
-               && [[ "${{ contains(github.event.head_commit.message, 'Publish: true') }}" == "true" ]]; then
-            echo "will-publish=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "will-publish=false" >> "$GITHUB_OUTPUT"
-          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0 # semantic-release's dry-run reads full history
 
-  quality-test-rust:
-    name: vector-bindings (quality + test)
+      - name: Predict version + derive gates
+        id: predict
+        uses: hyperi-io/hyperi-ci/.github/actions/predict-version@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ inputs.tag }}
+          from-head: ${{ inputs.from-head }}
+          bump: ${{ inputs.bump }}
+
+  commit-check:
+    name: Commit messages
+    # The version bump is derived from these messages, so they are validated on
+    # every merge to main rather than only on publish-worthy pushes.
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - run: ${{ env.HYPERCI_INSTALL }} check-commits
+
+  quality-test-rust:
+    name: vector-bindings (quality + test)
+    needs: [plan]
+    if: needs.plan.outputs.run-checks == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # gitleaks scans history
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
-      # pyo3 0.22 (this crate's pinned version) caps at Python 3.13 - pin
-      # the interpreter pyo3-build-config finds so the build doesn't
-      # depend on whatever python3 the runner image happens to default to.
+      # pyo3 0.22 caps at Python 3.13 - pin the interpreter pyo3-build-config
+      # finds so the build does not depend on the runner image's default.
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -71,67 +117,218 @@ jobs:
       - run: make test-rust
 
   quality-test-python:
-    name: vectordotdev + build/ (quality + test)
+    name: vector-vrl + build/ (quality + test)
+    needs: [plan]
+    if: needs.plan.outputs.run-checks == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # gitleaks scans history
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
       - run: make quality-python
       - run: make test-python
 
-  build-vectordotdev:
+  build-wheels:
     name: Build wheel (${{ matrix.name }})
     needs: [plan, quality-test-rust, quality-test-python]
+    if: needs.plan.outputs.run-build == 'true'
     strategy:
       fail-fast: false
       matrix:
         include:
-          # manylinux: maturin-action builds inside a manylinux container,
-          # so the wheel is tagged manylinux_*_<arch>, not the bare
-          # linux_<arch> tag PyPI has never accepted for uploads.
+          # maturin-action builds inside a manylinux container, so the wheel is
+          # tagged manylinux_*_<arch>, not the bare linux_<arch> tag PyPI has
+          # never accepted for uploads.
           - name: linux-x86_64
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-          # Native arm64 runner (GA, free on public repos) - no QEMU
-          # cross-compilation, the manylinux container runs natively.
+          # Native arm64 runner - no QEMU, the manylinux container runs natively.
           - name: linux-aarch64
             os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-          # One universal2 wheel covers both Mac architectures - macos-latest
-          # is Apple Silicon; maturin cross-builds the x86_64 slice and
-          # lipo-combines both into a single file.
+          # One universal2 wheel covers both Mac architectures.
           - name: macos-universal2
             os: macos-latest
             target: universal2-apple-darwin
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: Stamp the predicted version
+        # Version-first: the wheel must carry the version about to be tagged,
+        # because `vector_vrl.__version__` reads its own package metadata.
+        # Skipped on a plain `tag` dispatch, where the tag's tree is correct.
+        if: needs.plan.outputs.will-publish == 'true' && (github.event_name == 'push' || inputs.from-head == 'true')
+        env:
+          VERSION: ${{ needs.plan.outputs.next-version }}
+        run: ${{ env.HYPERCI_INSTALL }} stamp-version "$VERSION" -C vector-vrl
+
       - uses: PyO3/maturin-action@fdd104694b233054d6e985e29b3af9f126af7ac6 # v1.9.0
         with:
-          working-directory: vectordotdev
+          working-directory: vector-vrl
           target: ${{ matrix.target }}
           args: --release --out dist
           manylinux: auto # ignored on macOS
+
+      # Installs the wheel just built ON THIS RUNNER into a throwaway venv and
+      # exercises the real public API through it, not the dev tree's own .so.
+      # A platform whose wheel fails this never reaches publish.
+      - run: python3 build/wheel_smoke_check.py vector-vrl/dist
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: vectordotdev-wheel-${{ matrix.name }}
-          path: vectordotdev/dist/*
+          name: vector-vrl-wheel-${{ matrix.name }}
+          path: vector-vrl/dist/*
           retention-days: 7
 
-  publish-vectordotdev:
-    name: Publish to pypi.org (gated)
-    needs: [plan, build-vectordotdev]
+  tag-and-publish:
+    name: Tag & Publish
+    needs: [plan, build-wheels]
     if: needs.plan.outputs.will-publish == 'true'
     runs-on: ubuntu-latest
     environment: pypi-publish
     permissions:
+      contents: write # semantic-release tag + release-commit
+      issues: write # release-notify
+      pull-requests: write
       id-token: write # PyPI Trusted Publishing (OIDC) - no stored token
+    env:
+      # The `secrets` context is not readable from a step-level `if`, and the
+      # release identity turns on whether this repo can see the App key.
+      RELEASE_APP_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          pattern: vectordotdev-wheel-*
-          path: vectordotdev/dist/
-          merge-multiple: true
+          # On push or a from-head dispatch, check out main HEAD so the tag is
+          # created there. On a tag dispatch the tag already exists.
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Mint the release bot token
+        # A GITHUB_TOKEN push triggers no workflows and cannot be excepted from
+        # a branch ruleset, so the tag and the release commit go out as the app
+        # when its key is visible to this repo.
+        id: bot
+        if: env.RELEASE_APP_KEY != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.GH_APP_CLIENT_ID }}
+          private-key: ${{ env.RELEASE_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+
+      - name: Report the release identity
+        # A silent fall back to github-actions is what makes a missing ruleset
+        # bypass look like a working release, so say which identity is in use.
+        run: |
+          if [ "${{ steps.bot.outcome }}" = "success" ]; then
+            echo "Tagging and pushing as the release app."
+          else
+            echo "::warning::GH_APP_PRIVATE_KEY is not visible to this repo - tagging as github-actions. Required status checks cannot be bypassed, and the release push will trigger no workflows."
+          fi
+
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
-      - working-directory: vectordotdev
-        run: uvx hyperi-ci run publish -C .
+
+      - name: Setup semantic-release (shared toolchain)
+        if: ${{ github.event_name == 'push' || (inputs.from-head == 'true' && inputs.bump == 'auto') }}
+        uses: hyperi-io/hyperi-ci/.github/actions/setup-semantic-release@main
+
+      - name: Guard - the predicted tag must not already exist off-HEAD
+        # A collision means semantic-release mispredicted (it is blind to tags
+        # not reachable from HEAD); proceeding would rewrite release history.
+        if: ${{ github.event_name == 'push' || (inputs.from-head == 'true' && inputs.bump == 'auto') }}
+        run: |
+          predicted="v${{ needs.plan.outputs.next-version }}"
+          if git rev-parse -q --verify "refs/tags/${predicted}^{commit}" >/dev/null 2>&1
+          then
+            existing=$(git rev-parse "refs/tags/${predicted}^{commit}")
+            head=$(git rev-parse "HEAD^{commit}")
+            if [ "$existing" != "$head" ]
+            then
+              echo "::error::Predicted ${predicted} already exists at ${existing} but HEAD is ${head}. Refusing to auto-tag. Ship past it with 'hyperi-ci publish --version X.Y.Z'."
+              exit 1
+            fi
+            echo "${predicted} already exists at HEAD - nothing to tag."
+          fi
+
+      - name: Tag (semantic-release)
+        # Analyses commits, tags HEAD and renders CHANGELOG.md. The version it
+        # picks is the same one plan predicted, so the wheels already carry it.
+        if: ${{ github.event_name == 'push' || (inputs.from-head == 'true' && inputs.bump == 'auto') }}
+        env:
+          GITHUB_TOKEN: ${{ steps.bot.outputs.token || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.bot.outputs.token || secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
+
+      - name: Tag HEAD (forced bump / explicit version)
+        # semantic-release cannot force a version; tag-head resolves `last tag +
+        # bump`, or an exact X.Y.Z, and tags HEAD via the API.
+        id: forcedtag
+        if: ${{ inputs.from-head == 'true' && inputs.bump != 'auto' && inputs.bump != '' }}
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token || secrets.GITHUB_TOKEN }}
+        run: ${{ env.HYPERCI_INSTALL }} tag-head --bump ${{ inputs.bump }}
+
+      - name: Download the built wheels
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v7.0.0
+        with:
+          pattern: vector-vrl-wheel-*
+          path: vector-vrl/dist/
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        id: publish
+        working-directory: vector-vrl
+        env:
+          HYPERCI_VERSION: ${{ steps.forcedtag.outputs.version || needs.plan.outputs.next-version }}
+        run: ${{ env.HYPERCI_INSTALL }} run publish -C .
+
+      - name: Stamp the released version
+        # This job checked out the pre-release tree, and the build's stamp ran
+        # on a different runner, so VERSION has not moved here yet.
+        if: steps.publish.outcome == 'success'
+        continue-on-error: true
+        env:
+          RELEASE_VERSION: ${{ steps.forcedtag.outputs.version || needs.plan.outputs.next-version }}
+        run: ${{ env.HYPERCI_INSTALL }} stamp-version "$RELEASE_VERSION"
+
+      - name: Commit the rendered release artefacts
+        # Puts VERSION + CHANGELOG.md back on main as an UNTAGGED commit, so no
+        # tag points at machine-authored history. Never fails a shipped release.
+        if: steps.publish.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token || secrets.GITHUB_TOKEN }}
+        run: >-
+          ${{ env.HYPERCI_INSTALL }} release-commit
+          "${{ steps.forcedtag.outputs.version || needs.plan.outputs.next-version }}"
+
+      - name: Announce the release
+        if: steps.publish.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          ${{ env.HYPERCI_INSTALL }} release-notify
+          "${{ steps.forcedtag.outputs.version || needs.plan.outputs.next-version }}"
+          --outcome success
+
+      - name: Record a failed release
+        if: failure()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          ${{ env.HYPERCI_INSTALL }} release-notify
+          "${{ steps.forcedtag.outputs.version || needs.plan.outputs.next-version }}"
+          --outcome failure
+          --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

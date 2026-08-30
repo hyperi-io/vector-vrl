@@ -1,0 +1,16 @@
+# Gitleaks configuration -- allowlist false positives.
+#
+# A config defining only allowlists leaves gitleaks with an EMPTY ruleset
+# (matches nothing at all), so [extend] useDefault = true is required to load
+# the default rules first. hyperi-ci's gitleaks stage looks for this file
+# relative to its own working directory, not the repo root, so an identical
+# copy lives in every component directory that runs `hyperi-ci run quality`
+# (vector-bindings/, vectordotdev/, build/) alongside this root copy.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "vector/ is upstream Vector's own source tree (gitignored, read-only). Its test fixtures are Vector's own public dummy credentials, not secrets belonging to this repo."
+paths = [
+  '''^vector/''',
+]

@@ -49,11 +49,11 @@ that yourself and get the same result.
 `--clean` removes three paths from the REPO ROOT, not from `build/`:
 `target`, `.tmp`, and `vector`.
 
-That last one is the upstream Vector clone that `build.rs` needs for API
-auto-discovery. It is gitignored, so nothing warns you and nothing restores
-it. After a `--clean` you have to re-clone it, and until you do, builds keep
-succeeding with zero auto-discovered classes. See
-[how-to-build-and-test.md](how-to-build-and-test.md#the-vector-checkout).
+That last one is the upstream Vector clone this orchestrator compiles Vector
+from source against. It is gitignored, so nothing warns you and nothing
+restores it - after a `--clean` you have to re-clone it before the next run
+that needs it. `vector-bindings` itself needs no such checkout; see
+[how-to-build-and-test.md](how-to-build-and-test.md).
 
 ## What it does when you just run it
 
@@ -78,6 +78,6 @@ Exit code is 0 on success, 1 on failure.
 root Makefile:
 
 ```bash
-make quality-python    # covers vectordotdev and build
+make quality-python    # covers vector-vrl and build
 make test-python
 ```

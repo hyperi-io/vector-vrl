@@ -1,0 +1,87 @@
+# Test configuration for Syslog format using regex2vrl
+data_dir: ".tmp/test_data"
+
+sources:
+  syslog_logs:
+    type: generator
+    format: shuffle
+    interval: 0.1
+    count: 5
+    lines:
+      - 'Jan 15 10:30:45 server01 sshd[1234]: Accepted password for user from 192.168.1.100 port 22 ssh2'
+      - 'Jan 15 10:30:46 server01 nginx: 192.168.1.101 - GET /health 200'
+      - 'Jan 15 10:30:47 web-server kernel: [12345.678] oom-killer activated'
+      - 'Jan 15 10:30:48 db-server postgres[5678]: database connection established'
+
+transforms:
+  parse_syslog:
+    type: remap
+    inputs: ["syslog_logs"]
+    source: |
+      # Syslog format - regex2vrl generated for performance
+      message_str = string!(.message)
+
+      # Parse syslog format for 350+ THG performance
+      # Format: MMM dd HH:mm:ss hostname program[pid]: message
+      parts = split(message_str, " ")
+
+      if length(parts) >= 5 {
+        # Parse timestamp (first 3 parts)
+        month_day_time = join(parts[0:3], " ")
+        .timestamp = parse_timestamp!(month_day_time + " " + format_timestamp!(now(), format: "%Y"), format: "%b %d %H:%M:%S %Y")
+
+        # Hostname
+        .hostname = parts[3]
+
+        # Program and PID extraction
+        program_part = parts[4]
+        if contains(program_part, "[") && contains(program_part, "]") {
+          .program = split(program_part, "[")[0]
+          pid_part = split(program_part, "[")[1] ?? ""
+          .pid = to_int!(trim(split(pid_part, "]")[0], ":"))
+        } else {
+          .program = trim(program_part, ":")
+        }
+
+        # Message is everything after the program field
+        if length(parts) > 5 {
+          .syslog_message = join(parts[5:], " ")
+        }
+
+        # Determine severity based on program
+        if .program == "kernel" {
+          .severity = "warning"
+        } else if contains(.syslog_message, "error") || contains(.syslog_message, "failed") {
+          .severity = "error"
+        } else if contains(.syslog_message, "warning") || contains(.syslog_message, "warn") {
+          .severity = "warning"
+        } else {
+          .severity = "info"
+        }
+      }
+
+sinks:
+  test_output:
+    type: file
+    inputs: ["parse_syslog"]
+    path: ".tmp/test_output/syslog_parsed.jsonl"
+    encoding:
+      codec: json
+
+tests:
+  - name: syslog_parsing
+    input:
+      insert_at: parse_syslog
+      type: raw
+      value: 'Jan 15 10:30:45 server01 sshd[1234]: Accepted password for user'
+    outputs:
+      - extract_from: parse_syslog
+        conditions:
+          - type: vrl
+            source: '.hostname == "server01"'
+          - type: vrl
+            source: '.program == "sshd"'
+          - type: vrl
+            source: '.pid == 1234'
+          - type: vrl
+            source: 'exists(.timestamp)'

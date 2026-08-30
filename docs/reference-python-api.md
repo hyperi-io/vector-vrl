@@ -7,17 +7,17 @@ when called.
 Two import paths, same objects:
 
 ```python
-from vectordotdev import execute_vrl, validate_vrl, get_vrl_performance, Vector, VrlResult
-from vectordotdev._bindings import execute_vrl   # equivalent
+from vector-vrl import execute_vrl, validate_vrl, get_vrl_performance, Vector, VrlResult
+from vector-vrl._bindings import execute_vrl   # equivalent
 ```
 
-`vectordotdev/__init__.py` re-exports from `._bindings`, falls back to a
+`vector-vrl/__init__.py` re-exports from `._bindings`, falls back to a
 top-level `vector_bindings` module, and failing both installs stubs that
 raise `ImportError` on call. Check which you got:
 
 ```python
-import vectordotdev
-vectordotdev.get_bindings_info()
+import vector-vrl
+vector-vrl.get_bindings_info()
 # {'available': True, 'source': 'bundled', 'version': '1.0.5', 'bundled': True}
 ```
 
@@ -118,8 +118,16 @@ Four read-only attributes:
 | `error` | `str \| None` | `None` | compiler message |
 | `error_type` | `str \| None` | `None` | `"compilation_error"` |
 
-`repr()` gives `VrlResult(success=..., output=..., error=...)`. Only
-`validate_vrl` returns one - it is not the return type of `execute_vrl`.
+`repr()` is Rust's derived `Debug` format, not Python-native - lowercase
+`true`/`false` and an `Option` wrapping (`Some("...")` or `None`), not a bare
+Python string:
+
+```python
+>>> repr(validate_vrl('.level = upcase!(.level)'))
+'VrlResult(success=true, output=Some("VRL syntax valid"), error=None)'
+```
+
+Only `validate_vrl` returns one - it is not the return type of `execute_vrl`.
 
 ## get_vrl_performance
 
@@ -230,7 +238,7 @@ Environment and network functions are not compiled in, so caller-supplied
 VRL cannot read the host or reach the network. `get_env_var`,
 `get_hostname`, `http_request` and `dns_lookup` all fail to compile with
 `undefined function`. The reasoning is in
-[ARCHITECTURE.md](../ARCHITECTURE.md) under "VRL execution's security
+[architecture.md](architecture.md) under "VRL execution's security
 posture".
 
 VRL source may not nest brackets more than 64 levels deep
@@ -245,37 +253,11 @@ limit you get a message containing `nests`:
 ```
 
 Both are covered by tests in `vector-bindings/src/lib.rs` and
-`vectordotdev/tests/unit/test_vector_class.py`.
-
-## Auto-discovered classes
-
-The extension also exports one class per public Vector struct or enum found
-in the `vector/` checkout at build time - 96 of them in the build this was
-written against.
-
-```python
->>> from vectordotdev._bindings import LogEvent
->>> e = LogEvent(); [x for x in dir(e) if not x.startswith('_')]
-['data']
-```
-
-They are PLACEHOLDERS. Every struct becomes a class with one settable
-`data: str` field and no connection to the Rust type it is named after.
-Do not build on them. See
-[explanation-auto-discovery.md](explanation-auto-discovery.md) and
-[issue #15](https://github.com/hyperi-io/vectordotdev/issues/15).
-
-The count is readable at runtime:
-
-```python
->>> from vectordotdev._bindings import vector_bindings
->>> vector_bindings.__auto_count__
-96
-```
+`vector-vrl/tests/unit/test_vector_class.py`.
 
 ## The subprocess surface
 
-`vectordotdev.__all__` also carries `THGPerformanceAssessor`, `THGMetrics`,
+`vector-vrl.__all__` also carries `THGPerformanceAssessor`, `THGMetrics`,
 `THGResult`, `quick_thg_assessment`, `assess_vrl_performance`,
 `execute_vector_pipeline`, `VectorTestRunner`, `ProductionPatterns`,
 `production_patterns`, and the `get_apache_combined` / `get_nginx_access` /

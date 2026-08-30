@@ -1,0 +1,48 @@
+# Docker Container Logs - Optimized for 400+ THG Performance
+# Efficient container ID and name extraction
+
+sources:
+  docker_logs:
+    type: stdin
+
+transforms:
+  parse_docker_container:
+    type: remap
+    source: |
+      message_str = to_string(.message) ?? ""
+
+      # Docker log format: timestamp container_id[container_name]: message
+      # Optimized parsing with minimal operations
+      if contains(message_str, "[") && contains(message_str, "]:") {
+          # Efficient extraction using built-in functions
+          bracket_start = index_of(message_str, "[") ?? -1
+          bracket_end = index_of(message_str, "]") ?? -1
+          colon_pos = index_of(message_str, "]: ") ?? -1
+
+          if bracket_start > 0 && bracket_end > bracket_start && colon_pos > bracket_end {
+              # Extract parts efficiently
+              before_bracket = slice!(message_str, 0, bracket_start)
+              container_name = slice!(message_str, bracket_start + 1, bracket_end)
+              log_message = slice!(message_str, colon_pos + 3)
+
+              # Parse timestamp and container ID from before bracket
+              timestamp_parts = split(before_bracket, " ")
+              .timestamp = strip_whitespace(to_string(timestamp_parts[0]))
+              .container_id = strip_whitespace(to_string(timestamp_parts[1]))
+
+              # Container details
+              .container_name = strip_whitespace(container_name)
+              .log_message = strip_whitespace(log_message)
+
+              # Metadata
+              .source_type = "docker"
+              .log_type = "container"
+          }
+      }
+
+sinks:
+  console_output:
+    type: console
+    inputs: ["parse_docker_container"]
+    encoding:
+      codec: json

@@ -2,10 +2,18 @@
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.uv]
+# An orchestration CLI run in place (`./build/build`), never pip-installed
+# or imported by another package - `package = false` stops `uv sync` from
+# building it as an installable distribution, which setuptools' flat-layout
+# auto-discovery refuses once the directory holds more than one top-level
+# module (build_system.py, common.py, core_build.py, ...).
+package = false
+
 [project]
-name = "vectordotdev-build-system"
+name = "vector-vrl-build-system"
 version = "0.1.0"
-description = "Build system for vectordotdev"
+description = "Build system for vector-vrl"
 requires-python = ">=3.12"
 dependencies = [
     "scalo[http]>=2.28.5",
@@ -14,7 +22,8 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pytest>=7.0.0"
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0",
 ]
 
 [tool.ruff]
@@ -29,3 +38,7 @@ convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

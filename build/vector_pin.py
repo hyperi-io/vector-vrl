@@ -1,10 +1,8 @@
 """Check and update the Vector version this repo builds and tests against.
 
-Two independent pins:
-- the `vector/` checkout (sibling of vector-bindings/) build.rs walks for
-  API auto-discovery - its own Cargo.toml carries the version
-- the `timberio/vector` Docker tag the test suite's vector_runner fixture
-  pulls (vectordotdev/tests/conftest.py's _VECTOR_TAG)
+One pin: the `timberio/vector` Docker tag the test suite's vector_runner
+fixture pulls (vector-vrl/tests/conftest.py's _VECTOR_TAG). `vector-bindings`
+itself reads no local Vector checkout, so there is nothing else to pin here.
 
 vectordotdev/vector tags two independent things under one repo: product
 releases (v0.58.0, no hyphen) and its own vdev build-tool releases
@@ -29,9 +27,8 @@ from pathlib import Path
 from common import log_message
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-VECTOR_DIR = REPO_ROOT / "vector"
-CONFTEST_PATH = REPO_ROOT / "vectordotdev" / "tests" / "conftest.py"
-VECTOR_TAG_RE = re.compile(r'^v\d+\.\d+\.\d+$')
+CONFTEST_PATH = REPO_ROOT / "vector-vrl" / "tests" / "conftest.py"
+VECTOR_TAG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 COOLDOWN_DAYS = 7
 
 
@@ -46,9 +43,11 @@ def _tags_newest_first() -> list[tuple[str, str]]:
     already is the commit SHA.
     """
     result = subprocess.run(
-        ["git", "ls-remote", "--tags",
-         "https://github.com/vectordotdev/vector.git"],
-        capture_output=True, text=True, timeout=30, check=True,
+        ["git", "ls-remote", "--tags", "https://github.com/vectordotdev/vector.git"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
     )
     commit_sha_by_tag: dict[str, str] = {}
     for line in result.stdout.splitlines():
@@ -58,7 +57,9 @@ def _tags_newest_first() -> list[tuple[str, str]]:
         if VECTOR_TAG_RE.match(tag):
             commit_sha_by_tag[tag] = sha
     if not commit_sha_by_tag:
-        raise RuntimeError("no vX.Y.Z tags found on vectordotdev/vector - check the filter")
+        raise RuntimeError(
+            "no vX.Y.Z tags found on vectordotdev/vector - check the filter"
+        )
     pairs = list(commit_sha_by_tag.items())
     pairs.sort(key=lambda p: tuple(int(x) for x in p[0][1:].split(".")), reverse=True)
     return pairs
@@ -85,21 +86,14 @@ def latest_vector_version() -> str | None:
         age_days = _commit_age_days(sha)
         if age_days >= COOLDOWN_DAYS:
             return tag
-        log_message(f"{tag} is only {age_days:.1f}d old - within the {COOLDOWN_DAYS}d cooldown, skipping")
+        log_message(
+            f"{tag} is only {age_days:.1f}d old - within the {COOLDOWN_DAYS}d cooldown, skipping"
+        )
     return None
 
 
 def _version_tuple(tag: str) -> tuple[int, ...]:
     return tuple(int(x) for x in tag.removeprefix("v").split("."))
-
-
-def current_checkout_version() -> str | None:
-    """Version the local vector/ checkout's own Cargo.toml declares, if present."""
-    cargo_toml = VECTOR_DIR / "Cargo.toml"
-    if not cargo_toml.exists():
-        return None
-    match = re.search(r'^version\s*=\s*"([^"]+)"', cargo_toml.read_text(), re.MULTILINE)
-    return f"v{match.group(1)}" if match else None
 
 
 def current_docker_tag() -> str | None:
@@ -109,75 +103,61 @@ def current_docker_tag() -> str | None:
 
 
 def check() -> None:
-    """Warn (never fail) if either pin is behind the cooldown-cleared latest."""
+    """Warn (never fail) if the Docker pin is behind the cooldown-cleared latest."""
     latest = latest_vector_version()
     if latest is None:
-        log_message(f"no Vector release has cleared the {COOLDOWN_DAYS}-day cooldown yet")
+        log_message(
+            f"no Vector release has cleared the {COOLDOWN_DAYS}-day cooldown yet"
+        )
         return
 
-    checkout = current_checkout_version()
     docker_tag = current_docker_tag()
     docker_version = f"v{docker_tag.removesuffix('-debian')}" if docker_tag else None
 
-    stale = []
-    if checkout is not None and _version_tuple(checkout) < _version_tuple(latest):
-        stale.append(f"vector/ checkout is {checkout}, latest is {latest}")
-    if docker_version is not None and _version_tuple(docker_version) < _version_tuple(latest):
-        stale.append(f"test Docker image is {docker_tag}, latest is {latest}-debian")
-
-    if not stale:
-        log_message(f"Vector pin is current: {latest}")
+    if docker_version is not None and _version_tuple(docker_version) < _version_tuple(
+        latest
+    ):
+        line = f"test Docker image is {docker_tag}, latest is {latest}-debian"
+        print(
+            f"::warning::{line} - run `python3 build/vector_pin.py update`",
+            file=sys.stderr,
+        )
+        log_message(f"stale: {line}")
         return
 
-    for line in stale:
-        print(f"::warning::{line} - run `python3 build/vector_pin.py update`", file=sys.stderr)
-        log_message(f"stale: {line}")
+    log_message(f"Vector pin is current: {latest}")
 
 
 def update() -> None:
-    """Bump both pins to the cooldown-cleared latest, if either is behind it."""
+    """Bump the Docker pin to the cooldown-cleared latest, if it is behind it."""
     latest = latest_vector_version()
     if latest is None:
-        log_message(f"no Vector release has cleared the {COOLDOWN_DAYS}-day cooldown yet - nothing to do")
+        log_message(
+            f"no Vector release has cleared the {COOLDOWN_DAYS}-day cooldown yet - nothing to do"
+        )
         return
 
-    current = current_checkout_version()
-    if current is not None and _version_tuple(current) >= _version_tuple(latest):
-        log_message(f"already at {current}, >= cooldown-cleared {latest} - nothing to do")
+    docker_tag = current_docker_tag()
+    docker_version = f"v{docker_tag.removesuffix('-debian')}" if docker_tag else None
+    if docker_version is not None and _version_tuple(docker_version) >= _version_tuple(
+        latest
+    ):
+        log_message(
+            f"already at {docker_tag}, >= cooldown-cleared {latest} - nothing to do"
+        )
         return
 
     new_tag = f"{latest.removeprefix('v')}-debian"
 
     conftest_src = CONFTEST_PATH.read_text()
-    new_src = re.sub(r'_VECTOR_TAG = "[^"]+"', f'_VECTOR_TAG = "{new_tag}"', conftest_src)
+    new_src = re.sub(
+        r'_VECTOR_TAG = "[^"]+"', f'_VECTOR_TAG = "{new_tag}"', conftest_src
+    )
     if new_src == conftest_src:
         log_message(f"conftest.py already pins {new_tag}")
     else:
         CONFTEST_PATH.write_text(new_src)
         log_message(f"conftest.py -> {new_tag}")
-
-    if (VECTOR_DIR / ".git").exists():
-        # A real clone - cwd=VECTOR_DIR is safe, git won't walk up to the
-        # repo root's .git looking for one.
-        subprocess.run(["git", "fetch", "--depth", "1", "origin", "tag", latest],
-                        cwd=VECTOR_DIR, check=True)
-        subprocess.run(["git", "checkout", latest], cwd=VECTOR_DIR, check=True)
-        log_message(f"vector/ checked out at {latest}")
-    elif VECTOR_DIR.exists():
-        # A plain directory with no .git of its own (a raw source copy,
-        # not a clone) - `git` commands with this as cwd would silently
-        # walk up and operate on the OUTER repo instead. Remove it by hand
-        # first; this script won't delete a directory it doesn't own.
-        print(f"vector/ exists but is not a git clone (no vector/.git) - "
-              f"remove it yourself, then rerun: rm -rf {VECTOR_DIR}", file=sys.stderr)
-        raise SystemExit(1)
-    else:
-        subprocess.run(
-            ["git", "clone", "--depth", "1", "--branch", latest,
-             "https://github.com/vectordotdev/vector.git", str(VECTOR_DIR)],
-            check=True,
-        )
-        log_message(f"vector/ cloned at {latest}")
 
 
 def main() -> int:

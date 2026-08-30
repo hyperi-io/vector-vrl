@@ -1,0 +1,98 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "vector-vrl"
+version = "1.0.5"
+requires-python = ">=3.12"
+description = "Run Vector's transform language (VRL) in Python, in-process"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "HyperI"}
+]
+keywords = ["vector", "vrl", "logging", "observability", "log-parsing", "rust"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Logging",
+    "Topic :: System :: Monitoring",
+    "Topic :: System :: Systems Administration",
+]
+dependencies = []
+
+[project.optional-dependencies]
+# Reading a Vector config from YAML. TOML and JSON need no extra (stdlib).
+yaml = ["pyyaml>=6.0"]
+
+# Test tooling is a dependency-group, not an extra: uv installs the default
+# groups for `uv run`, and groups stay out of published wheel metadata.
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+    "pyyaml>=6.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/hyperi-io/vector-vrl"
+"Bug Reports" = "https://github.com/hyperi-io/vector-vrl/issues"
+"Source" = "https://github.com/hyperi-io/vector-vrl"
+"Documentation" = "https://github.com/hyperi-io/vector-vrl#readme"
+"License" = "https://github.com/hyperi-io/vector-vrl/blob/main/LICENSE"
+
+[tool.maturin]
+python-source = "src"
+module-name = "vector_vrl._bindings.vector_bindings"
+manifest-path = "../vector-bindings/Cargo.toml"
+
+[tool.maturin.environment]
+RUSTFLAGS = "-C linker=gcc"
+PYO3_USE_ABI3_FORWARD_COMPATIBILITY = "1"
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "D"]
+ignore = ["E501", "D203", "D213"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: requires external services (e.g. a Vector container)",
+    "e2e: end-to-end tests requiring full infrastructure",
+    "slow: tests exceeding 30 seconds",
+    "smoke: critical-path startup tests",
+]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+# These shell out to a `vector` binary at /usr/bin/vector and are not part
+# of the in-process bindings API - CLAUDE.md documents them as outside the
+# surface the test suite covers. Measuring them here would count real
+# code as "uncovered" for a surface no test in this repo is meant to
+# exercise, rather than a genuine gap in tested code.
+omit = [
+    "src/vector_vrl/thg_performance.py",
+    "src/vector_vrl/vector_test_utils.py",
+    "src/vector_vrl/production_patterns.py",
+    "src/vector_vrl/version_detection.py",
+]

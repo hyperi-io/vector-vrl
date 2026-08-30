@@ -12,7 +12,7 @@ From the repo root:
 make check      # quality + test, all three components
 make quality    # lint/format only
 make test       # tests only
-make build      # builds the vectordotdev wheel
+make build      # builds the vector-vrl wheel
 ```
 
 Each target wraps `hyperi-ci run <stage> -C <component>`. Narrower targets
@@ -35,7 +35,7 @@ lose an afternoon to.
 ## Getting your Rust change into Python
 
 The compiled extension lives IN the source tree, at
-`vectordotdev/src/vectordotdev/_bindings/vector_bindings.cpython-*.so`, and
+`vector-vrl/src/vector-vrl/_bindings/vector_bindings.cpython-*.so`, and
 it is gitignored. Nothing rebuilds it for you. Edit `lib.rs`, run your
 Python tests, and they will happily exercise whatever `.so` was there
 before - passing or failing for reasons that have nothing to do with your
@@ -52,7 +52,7 @@ If you suspect the `.so` is stale, compare timestamps:
 
 ```bash
 ls -la vector-bindings/src/lib.rs
-ls -la vectordotdev/src/vectordotdev/_bindings/*.so
+ls -la vector-vrl/src/vector-vrl/_bindings/*.so
 ```
 
 An `.so` older than `lib.rs` is stale, and it fails silently - you get the
@@ -68,15 +68,15 @@ pyo3 0.22 supports Python up to 3.13. On a machine whose default Python is
 env PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 cargo build --release
 ```
 
-You only need this on 3.14+. Building through maturin from `vectordotdev/`
-sets it for you - it is already in `vectordotdev/pyproject.toml` under
+You only need this on 3.14+. Building through maturin from `vector-vrl/`
+sets it for you - it is already in `vector-vrl/pyproject.toml` under
 `[tool.maturin.environment]`.
 
 ## Testing the Python package
 
 ```bash
-cd vectordotdev
-PYTHONPATH=src uv run --with pytest --with pytest-asyncio pytest tests/
+cd vector-vrl
+PYTHONPATH=src uv run --with pytest --with pytest-asyncio --with pyyaml pytest tests/
 ```
 
 The two files that describe the real, working API surface are
@@ -92,43 +92,21 @@ run.
 Markers are declared in `pyproject.toml`: `integration`, `e2e`, `slow`,
 `smoke`. Deselect the slow ones with `-m "not slow"`.
 
-## The `vector/` checkout
+## `vector-bindings` needs no `vector/` checkout
 
-`vector-bindings/build.rs` walks a sibling `vector/` directory - an upstream
-[vectordotdev/vector](https://github.com/vectordotdev/vector) clone - to
-auto-discover public types. It is gitignored and absent from a fresh
-checkout, so clone it yourself next to `vector-bindings/`:
+The `vrl` crate comes straight from git in `vector-bindings/Cargo.toml`, so
+`execute_vrl`, `validate_vrl`, `get_vrl_performance` and `Vector` all build
+and run with nothing else cloned. `vector-bindings` reads no local Vector
+source at all - see [architecture.md](architecture.md).
 
-```bash
-git clone https://github.com/vectordotdev/vector.git
-```
-
-Missing, the build still SUCCEEDS. `build.rs` prints
-`cargo:warning=... not found, skipping` and generates zero classes from that
-path. Check the build output before trusting any statement about API
-coverage:
-
-```
-warning: ...   ../vector/lib/vector-core/src/event - 46 APIs
-warning: ...   ../vector/lib/vector-common/src - 50 APIs
-warning: ... Discovered 96 unique Vector APIs across all modules
-```
-
-Those counts are what the build script printed on this repo at the time of
-writing. Trust the number your own build prints, not this one - and see
-[explanation-auto-discovery.md](explanation-auto-discovery.md) for what
-those classes are and are not.
-
-VRL execution does not need `vector/` at all. The `vrl` crate comes straight
-from git in `vector-bindings/Cargo.toml`, so `execute_vrl`, `validate_vrl`,
-`get_vrl_performance` and `Vector` all work with `vector/` absent. Only the
-auto-discovered classes need it. The full picture is in
-[ARCHITECTURE.md](../ARCHITECTURE.md).
+A `vector/` checkout is still used elsewhere in this repo: `build/`'s own
+orchestrator compiles actual Vector from source as a build stage. See
+[how-to-run-the-build-orchestrator.md](how-to-run-the-build-orchestrator.md).
 
 ## Building the wheel
 
 ```bash
-cd vectordotdev
+cd vector-vrl
 maturin build --release
 ```
 

@@ -1,19 +1,25 @@
-# vectordotdev
+# vector-vrl
 
-Python bindings for [Vector](https://vector.dev/), the observability data
-pipeline. Run VRL (Vector Remap Language) against events without shelling
-out to the `vector` binary - the compiler and runtime are compiled straight
-into the Python extension via [PyO3](https://pyo3.rs/).
+**Run Vector's transform language in Python. In-process, no subprocess.**
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 
-## What actually works right now
+VRL - the [Vector Remap Language](https://vector.dev/docs/reference/vrl/) - is
+the thing that makes [Vector](https://vector.dev/) good at logs. Parse, filter,
+redact, reshape, enrich, all in a language built for exactly that and nothing
+else. The catch has always been that it only runs inside the `vector` binary.
 
-VRL execution, in-process. That's it, and it's real - not a wrapper around
-a subprocess, not a mock:
+This package compiles Vector's actual VRL compiler and runtime into a Python
+extension. Not a subprocess wrapper, not a reimplementation that is subtly
+wrong at the edges - the same engine, in your process.
+
+```bash
+pip install vector-vrl
+```
 
 ```python
-from vectordotdev._bindings import execute_vrl, validate_vrl
+from vector-vrl import execute_vrl, validate_vrl
 
 vrl = """
 parsed, err = parse_json(.message)
@@ -22,68 +28,86 @@ if err == null {
 }
 """
 
-events = ['{"message": "{\\"level\\": \\"info\\"}"}']
-result = execute_vrl(vrl, events)
-print(result)  # [{'level': 'info', 'message': '...'}]
+execute_vrl(vrl, ['{"message": "{\\"level\\": \\"info\\"}"}'])
+# [{'level': 'info', 'message': '{"level": "info"}'}]
 
-check = validate_vrl(vrl)
-print(check.success)  # True
+validate_vrl(vrl).success
+# True
 ```
 
-`validate_vrl` compiles without running - use it to lint VRL before you ship
-it. `get_vrl_performance(vrl, events, iterations=100)` runs the same VRL
-repeatedly and reports events/sec.
+## What it is good for
 
-There's also a `Vector` class (`Vector(config)`, `.initialize()`,
-`.process_logs(logs, vrl_code)`, `.get_stats()`) for running the same VRL
-against a batch without touching `_bindings` directly. Be aware: the
-`config` dict it takes is parsed and stored but not yet wired into
-`process_logs` - construct it with whatever you like, it won't change what
-runs. Full sources/transforms/sinks pipeline configuration (the way you'd
-configure the real `vector` binary) is NOT implemented. If that's what
-you're after, use `execute_vrl` directly and drive your own event loop
-around it.
+- **Test VRL in CI** without installing Vector. `validate_vrl` compiles
+  without running, so a broken transform fails your test suite instead of
+  your pipeline.
+- **Check a Vector config before you ship it.** `validate_config` walks a
+  YAML/TOML/JSON config and compiles every `remap` transform's VRL, catching
+  the most common way a config breaks. It checks the VRL, not the sinks -
+  see the caveat under The API.
+- **Build VRL tooling** - playgrounds, linters, editor plugins, config
+  generators - against the real compiler rather than a regex approximation.
+- **Process events in Python** with semantics identical to what your Vector
+  deployment will do to the same data.
+- **Benchmark a transform** before it goes anywhere near production.
+- **AI agents** for vrl processing and development loops
 
-## What's tracked as broken, not shipped
+## Safer to hand untrusted VRL
 
-- `regex2vrl` (a regex-to-VRL pattern converter) - removed from the public
-  API, source archived locally, see [issue #13](https://github.com/hyperi-io/vectordotdev/issues/13).
-- The auto-exposed "96 Vector APIs" `build.rs` generates from the upstream
-  Vector source are placeholder classes, not real bindings to those types -
-  see [issue #15](https://github.com/hyperi-io/vectordotdev/issues/15).
+Two guards apply to every entry point that compiles VRL, unconditionally and
+with no way to switch them off:
 
-Neither of these will surprise you if you stick to `execute_vrl`/
-`validate_vrl`/`get_vrl_performance` and the `Vector` class as described
-above - that surface is the one with real tests behind it.
+- **No host, no network.** `get_env_var`, `get_hostname`, `http_request` and
+  `dns_lookup` are not compiled in. Caller-supplied VRL cannot read your
+  environment or reach out of the process - it fails to compile instead.
+- **No nesting bomb.** VRL source may not nest brackets past 64 levels. Past
+  a few hundred the parser's own recursion overflows the stack and kills the
+  process, which no Python `except` can catch, so the check runs before the
+  parser ever sees the input.
 
-## Install
+That combination is what makes it reasonable to accept VRL from a user - a
+multi-tenant playground, a customer-supplied transform, a config someone
+pasted in. The reasoning is in
+[docs/architecture.md](docs/architecture.md).
 
-```bash
-pip install vectordotdev
-```
+## The API
 
-Building from source needs the Rust toolchain (the package wraps a
-compiled crate, `vector-bindings/` - see that component's own README) and
-[maturin](https://github.com/PyO3/maturin). See
-[docs/how-to-build-and-test.md](docs/how-to-build-and-test.md).
+| | |
+|---|---|
+| `execute_vrl(vrl, events)` | Compile once, run over a batch, get the transformed events back |
+| `validate_vrl(vrl)` | Compile without running. Returns a `VrlResult`, never raises on bad VRL |
+| `get_vrl_performance(vrl, events, iterations=100)` | Run it repeatedly, get events/sec |
+| `Vector` | Batch runner holding state across calls - `.initialize()`, `.process_logs()`, `.get_stats()` |
+| `validate_config(path\|dict)` | Compile every `remap` transform's VRL in a Vector config (YAML/TOML/JSON) |
+
+`Vector` runs the VRL step alone. Its `config` argument is stored but never
+applied - there is no sources/transforms/sinks pipeline here. If you want the
+full pipeline, run Vector itself.
+
+`validate_config` is a VRL check, not a Vector config check. It compiles the
+`source` of every `remap` transform and reports each one by name; a remap
+reading its VRL from `file:` is listed as skipped rather than guessed at.
+It says nothing about sources, sinks, wiring or type compatibility - for
+that, run `vector validate`.
+
+Exact signatures, return shapes, and the rough edges worth knowing (nested
+objects come back as JSON strings, a per-event runtime error replaces that
+event's dict) are in
+[docs/reference-python-api.md](docs/reference-python-api.md).
 
 ## The repo
 
-Three independent components sharing this checkout - not one project, and
-"install and pip install -e ." will not work as you'd expect from a normal
-Python repo:
+Three components sharing one checkout. This is not a normal Python repo and
+`pip install -e .` will not do what you expect:
 
-- `vector-bindings/` - the Rust crate. Compiles VRL, runs it, exposes the
-  result to Python.
-- `vectordotdev/` - the package that actually ships to PyPI. Wraps
-  `vector-bindings` via maturin.
-- `build/` - a separate orchestration CLI, not a dependency of the other
-  two.
+- **`vector-bindings/`** - the Rust crate. Compiles VRL, runs it, hands the
+  result to Python via [PyO3](https://pyo3.rs/).
+- **`vector-vrl/`** - the package that ships to PyPI. Wraps the crate via
+  [maturin](https://github.com/PyO3/maturin), so building it compiles Rust.
+- **`build/`** - a separate orchestration CLI. Not a dependency of either.
 
-[ARCHITECTURE.md](ARCHITECTURE.md) has the full layout, the dependency
-direction, and the one genuine gotcha (an upstream Vector checkout that's
-required for full API auto-discovery and silently degrades to nothing if
-you forget to clone it).
+[docs/architecture.md](docs/architecture.md) has the layout and the dependency
+direction. [docs/how-to-build-and-test.md](docs/how-to-build-and-test.md) is
+how to build it from source (needs the Rust toolchain).
 
 ## Contributing
 
@@ -92,10 +116,3 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 Apache License, Version 2.0. See [LICENSE](LICENSE).
-
-## Related projects
-
-- [Vector](https://vector.dev/) - the data processing engine this wraps
-- [VRL](https://vector.dev/docs/reference/vrl/) - the transform language
-- [PyO3](https://pyo3.rs/) - Python bindings for Rust
-- [maturin](https://github.com/PyO3/maturin) - builds this package

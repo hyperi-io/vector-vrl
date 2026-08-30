@@ -1,0 +1,340 @@
+# DOUBLED COMPLEX PRODUCTION REGEX PATTERNS
+# Based on 2025 web research for extremely challenging real-world patterns
+
+# Original 10 patterns PLUS 10 new challenging patterns
+
+# ===== ORIGINAL PATTERNS =====
+apache_combined_log:
+  name: "Apache Combined Log Format"
+  description: "Most common Apache access log format with user agent and referrer"
+  pattern: '^(?P<remote_addr>\d+\.\d+\.\d+\.\d+) - (?P<remote_user>\S+) \[(?P<time_local>[^\]]+)\] "(?P<request_method>[A-Z]+) (?P<request_uri>[^\s"]+) HTTP/(?P<http_version>[\d\.]+)" (?P<status>\d{3}) (?P<body_bytes_sent>\d+) "(?P<http_referer>[^"]*)" "(?P<http_user_agent>[^"]*)"'
+  expected_fields:
+    - remote_addr
+    - remote_user
+    - time_local
+    - request_method
+    - request_uri
+    - http_version
+    - status
+    - body_bytes_sent
+    - http_referer
+    - http_user_agent
+
+nginx_access_log:
+  name: "Nginx Access Log Format"
+  description: "Nginx combined log format with additional fields"
+  pattern: '^(?P<remote_addr>\d+\.\d+\.\d+\.\d+) - (?P<remote_user>[^ ]*) \[(?P<time_local>[^\]]+)\] "(?P<request>[^"]*)" (?P<status>\d{3}) (?P<body_bytes_sent>\d+) "(?P<http_referer>[^"]*)" "(?P<http_user_agent>[^"]*)"(?: "(?P<http_x_forwarded_for>[^"]*)")?'
+  expected_fields:
+    - remote_addr
+    - remote_user
+    - time_local
+    - request
+    - status
+    - body_bytes_sent
+    - http_referer
+    - http_user_agent
+    - http_x_forwarded_for
+
+syslog_standard:
+  name: "Standard Syslog Format"
+  description: "RFC3164 syslog format with timestamp, hostname, program and message"
+  pattern: '^(?P<timestamp>\w{3} \d{1,2} \d{2}:\d{2}:\d{2}) (?P<hostname>\S+) (?P<program>\w+)(?:\[(?P<pid>\d+)\])?: (?P<message>.*)$'
+  expected_fields:
+    - timestamp
+    - hostname
+    - program
+    - pid
+    - message
+
+json_application_log:
+  name: "JSON Application Log"
+  description: "Structured JSON application logs with timestamp, level and message"
+  pattern: '^(?P<json_data>\{.*\})$'
+  expected_fields:
+    - json_data
+
+docker_container_log:
+  name: "Docker Container Log Format"
+  description: "Docker JSON log driver format"
+  pattern: '^(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z) (?P<stream>stdout|stderr) (?P<partial_flag>[FP]) (?P<log_message>.*)$'
+  expected_fields:
+    - timestamp
+    - stream
+    - partial_flag
+    - log_message
+
+kubernetes_pod_log:
+  name: "Kubernetes Pod Log Format"
+  description: "Kubernetes CRI-O/containerd log format"
+  pattern: '^(?P<timestamp>[^ Z]+Z?) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+  expected_fields:
+    - timestamp
+    - stream
+    - logtag
+    - log
+
+ip_address_extraction:
+  name: "IP Address Extraction"
+  description: "Extract IPv4 addresses from log lines"
+  pattern: '(?P<ip_address>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
+  expected_fields:
+    - ip_address
+
+timestamp_iso8601:
+  name: "ISO 8601 Timestamp"
+  description: "Extract ISO 8601 formatted timestamps"
+  pattern: '(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z?)'
+  expected_fields:
+    - timestamp
+
+log_level_extraction:
+  name: "Log Level Extraction"
+  description: "Extract common log levels from log messages"
+  pattern: '(?P<log_level>DEBUG|INFO|WARN|WARNING|ERROR|FATAL|CRITICAL|TRACE)'
+  expected_fields:
+    - log_level
+
+http_status_code:
+  name: "HTTP Status Code Extraction"
+  description: "Extract HTTP status codes from web server logs"
+  pattern: '(?P<status_code>[1-5]\d{2})'
+  expected_fields:
+    - status_code
+
+# ===== NEW CHALLENGING PATTERNS (10 MORE) =====
+
+aws_elb_access_log:
+  name: "AWS ELB Access Log (Complex)"
+  description: "Amazon ELB access log with SSL/TLS details and timing metrics"
+  pattern: '^(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z) (?P<elb_name>[^ ]+) (?P<client_ip>\d+\.\d+\.\d+\.\d+):(?P<client_port>\d+) (?:(?P<backend_ip>\d+\.\d+\.\d+\.\d+):(?P<backend_port>\d+)|-) (?P<request_processing_time>-?\d+\.?\d*) (?P<backend_processing_time>-?\d+\.?\d*) (?P<response_processing_time>-?\d+\.?\d*) (?P<elb_status_code>\d{3}) (?P<backend_status_code>\d{3}|-) (?P<received_bytes>\d+) (?P<sent_bytes>\d+) "(?P<request_verb>[A-Z]+) (?P<request_url>[^ ]*) (?P<request_proto>[^"]*)" "(?P<user_agent>[^"]*)" (?P<ssl_cipher>[^ ]+) (?P<ssl_protocol>[^ ]+)$'
+  expected_fields:
+    - timestamp
+    - elb_name
+    - client_ip
+    - client_port
+    - backend_ip
+    - backend_port
+    - request_processing_time
+    - backend_processing_time
+    - response_processing_time
+    - elb_status_code
+    - backend_status_code
+    - received_bytes
+    - sent_bytes
+    - request_verb
+    - request_url
+    - request_proto
+    - user_agent
+    - ssl_cipher
+    - ssl_protocol
+
+haproxy_http_log:
+  name: "HAProxy HTTP Log (Complex)"
+  description: "HAProxy HTTP log with detailed connection and timing info"
+  pattern: '^(?P<timestamp>\w{3} \d{1,2} \d{2}:\d{2}:\d{2}) (?P<server_name>[^ ]+) (?P<process_name>[^[]+)\[(?P<pid>\d+)\]: (?P<client_ip>\d+\.\d+\.\d+\.\d+):(?P<client_port>\d+) \[(?P<accept_date>[^\]]+)\] (?P<frontend_name>[^ ]+) (?P<backend_name>[^/]+)/(?P<server>[^ ]+) (?P<time_request>\d+)/(?P<time_queue>\d+)/(?P<time_connect>\d+)/(?P<time_response>\d+)/(?P<total_time>\d+) (?P<http_status>\d{3}) (?P<bytes_read>\d+) - - ---- (?P<actconn>\d+)/(?P<feconn>\d+)/(?P<beconn>\d+)/(?P<srvconn>\d+)/(?P<retries>\d+) (?P<srv_queue>\d+)/(?P<backend_queue>\d+) "(?P<http_request>[^"]*)"$'
+  expected_fields:
+    - timestamp
+    - server_name
+    - process_name
+    - pid
+    - client_ip
+    - client_port
+    - accept_date
+    - frontend_name
+    - backend_name
+    - server
+    - time_request
+    - time_queue
+    - time_connect
+    - time_response
+    - total_time
+    - http_status
+    - bytes_read
+    - actconn
+    - feconn
+    - beconn
+    - srvconn
+    - retries
+    - srv_queue
+    - backend_queue
+    - http_request
+
+cloudflare_log_format:
+  name: "Cloudflare Log Format (Complex)"
+  description: "Cloudflare edge server log with security and performance metrics"
+  pattern: '^(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z) (?P<zone_id>\d+) (?P<zone_name>[^ ]+) (?P<datetime>\d+) (?P<client_ip>\d+\.\d+\.\d+\.\d+) (?P<http_protocol>[^ ]+) (?P<http_method>[^ ]+) (?P<http_host>[^ ]+) (?P<http_uri>[^ ]+) (?P<http_user_agent>"[^"]*") (?P<http_referer>"[^"]*") (?P<http_x_forwarded_for>[^ ]+) (?P<ssl_protocol>[^ ]+) (?P<ssl_cipher>[^ ]+) (?P<http_response_code>\d{3}) (?P<http_response_bytes>\d+) (?P<cache_status>[^ ]+) (?P<ray_id>[^ ]+) (?P<country_code>[A-Z]{2}) (?P<waf_action>[^ ]+) (?P<waf_flags>[^ ]+) (?P<waf_matched_var>[^ ]+) (?P<edge_response_time>\d+) (?P<origin_response_time>\d+)$'
+  expected_fields:
+    - timestamp
+    - zone_id
+    - zone_name
+    - datetime
+    - client_ip
+    - http_protocol
+    - http_method
+    - http_host
+    - http_uri
+    - http_user_agent
+    - http_referer
+    - http_x_forwarded_for
+    - ssl_protocol
+    - ssl_cipher
+    - http_response_code
+    - http_response_bytes
+    - cache_status
+    - ray_id
+    - country_code
+    - waf_action
+    - waf_flags
+    - waf_matched_var
+    - edge_response_time
+    - origin_response_time
+
+mysql_slow_query_log:
+  name: "MySQL Slow Query Log (Complex)"
+  description: "MySQL slow query log with execution statistics"
+  pattern: '^# Time: (?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z).*# User@Host: (?P<user>[^[]+)\[(?P<user_host>[^\]]*)\] @ (?P<host_name>[^ ]*) \[(?P<host_ip>[^\]]*)\].*# Query_time: (?P<query_time>\d+\.\d+)\s+Lock_time: (?P<lock_time>\d+\.\d+)\s+Rows_sent: (?P<rows_sent>\d+)\s+Rows_examined: (?P<rows_examined>\d+).*(?P<sql_query>(?:SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP).*)$'
+  expected_fields:
+    - timestamp
+    - user
+    - user_host
+    - host_name
+    - host_ip
+    - query_time
+    - lock_time
+    - rows_sent
+    - rows_examined
+    - sql_query
+
+postfix_mail_log:
+  name: "Postfix Mail Log (Complex)"
+  description: "Postfix mail server log with delivery status and SMTP details"
+  pattern: '^(?P<timestamp>\w{3} \d{1,2} \d{2}:\d{2}:\d{2}) (?P<hostname>[^ ]+) (?P<process>postfix/[^[]+)\[(?P<pid>\d+)\]: (?P<queue_id>[A-F0-9]+): (?:(?P<message_action>client|to|from|message-id|size|status)=(?P<action_value>[^,]+)(?:, )?)*(?:relay=(?P<relay_info>[^,]+))?(?:, delay=(?P<delay>\d+(?:\.\d+)?))?(?:, delays=(?P<delays>[^,]+))?(?:, dsn=(?P<dsn>[^,]+))?(?:, status=(?P<delivery_status>[^ ]+)(?: \((?P<status_message>[^)]+)\))?)?'
+  expected_fields:
+    - timestamp
+    - hostname
+    - process
+    - pid
+    - queue_id
+    - message_action
+    - action_value
+    - relay_info
+    - delay
+    - delays
+    - dsn
+    - delivery_status
+    - status_message
+
+kubernetes_audit_log:
+  name: "Kubernetes Audit Log (Complex)"
+  description: "Kubernetes API server audit log with RBAC and resource details"
+  pattern: '^(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z) (?P<audit_id>[^ ]+) (?P<stage>[^ ]+) (?P<request_uri>[^ ]+) (?P<verb>[^ ]+) (?P<user>[^ ]+) (?P<groups>\[[^\]]*\]) (?P<source_ips>\[[^\]]*\]) (?P<user_agent>"[^"]*") (?P<object_ref_resource>[^ ]+) (?P<object_ref_namespace>[^ ]+) (?P<object_ref_name>[^ ]+) (?P<object_ref_uid>[^ ]+) (?P<object_ref_apiversion>[^ ]+) (?P<object_ref_resourceversion>[^ ]+) (?P<response_code>\d+) (?P<response_reason>[^ ]+) (?P<request_received_timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z) (?P<stage_timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)$'
+  expected_fields:
+    - timestamp
+    - audit_id
+    - stage
+    - request_uri
+    - verb
+    - user
+    - groups
+    - source_ips
+    - user_agent
+    - object_ref_resource
+    - object_ref_namespace
+    - object_ref_name
+    - object_ref_uid
+    - object_ref_apiversion
+    - object_ref_resourceversion
+    - response_code
+    - response_reason
+    - request_received_timestamp
+    - stage_timestamp
+
+apache_error_log:
+  name: "Apache Error Log (Complex)"
+  description: "Apache error log with detailed error classification and context"
+  pattern: '^\[(?P<timestamp>\w{3} \w{3} \d{1,2} \d{2}:\d{2}:\d{2}\.\d+ \d{4})\] \[(?P<error_module>[^:]+):(?P<log_level>\w+)\] \[pid (?P<pid>\d+):tid (?P<tid>\d+)\] (?:\[client (?P<client_ip>\d+\.\d+\.\d+\.\d+):(?P<client_port>\d+)\] )?(?P<error_message>.*?)(?:, referer: (?P<referer>https?://[^ ]+))?$'
+  expected_fields:
+    - timestamp
+    - error_module
+    - log_level
+    - pid
+    - tid
+    - client_ip
+    - client_port
+    - error_message
+    - referer
+
+windows_event_log:
+  name: "Windows Event Log (Complex)"
+  description: "Windows Event Log with security and system event details"
+  pattern: '^(?P<timestamp>\d{1,2}/\d{1,2}/\d{4} \d{1,2}:\d{2}:\d{2} (?:AM|PM)) (?P<event_level>[^ ]+) (?P<event_source>[^ ]+) (?P<event_id>\d+) (?P<task_category>[^ ]+) (?P<computer_name>[^ ]+) (?P<user_name>[^ ]+) (?P<event_description>.+?)(?:\s+Keywords: (?P<keywords>.+?))?(?:\s+Event Data: (?P<event_data>.+?))?$'
+  expected_fields:
+    - timestamp
+    - event_level
+    - event_source
+    - event_id
+    - task_category
+    - computer_name
+    - user_name
+    - event_description
+    - keywords
+    - event_data
+
+firewall_pf_log:
+  name: "pfSense/OpenBSD Firewall Log (Complex)"
+  description: "pfSense firewall log with detailed packet inspection and rule matching"
+  pattern: '^(?P<timestamp>\w{3} \d{1,2} \d{2}:\d{2}:\d{2}) (?P<hostname>[^ ]+) (?P<process>filterlog)(?:\[(?P<pid>\d+)\])?: (?P<rule_number>\d+),(?P<sub_rule>\d+)?,(?P<anchor>[^,]*),(?P<tracker>\d+),(?P<interface>[^,]+),(?P<reason>[^,]+),(?P<action>[^,]+),(?P<direction>[^,]+),(?P<ip_version>\d+),(?P<tos>[^,]*),(?P<ecn>[^,]*),(?P<ttl>\d+),(?P<id>\d+),(?P<offset>\d+),(?P<flags>[^,]*),(?P<protocol_id>\d+),(?P<protocol_text>[^,]+),(?P<length>\d+),(?P<src_ip>[^,]+),(?P<dst_ip>[^,]+)(?:,(?P<src_port>\d+),(?P<dst_port>\d+),(?P<data_length>\d+)(?:,(?P<tcp_flags>[^,]*),(?P<sequence_number>\d+),(?P<ack_number>\d+),(?P<window>\d+),(?P<urg>\d+),(?P<options>[^,]*))?)?$'
+  expected_fields:
+    - timestamp
+    - hostname
+    - process
+    - pid
+    - rule_number
+    - sub_rule
+    - anchor
+    - tracker
+    - interface
+    - reason
+    - action
+    - direction
+    - ip_version
+    - tos
+    - ecn
+    - ttl
+    - id
+    - offset
+    - flags
+    - protocol_id
+    - protocol_text
+    - length
+    - src_ip
+    - dst_ip
+    - src_port
+    - dst_port
+    - data_length
+    - tcp_flags
+    - sequence_number
+    - ack_number
+    - window
+    - urg
+    - options
+
+java_gc_log:
+  name: "Java GC Log (Complex)"
+  description: "Java garbage collection log with heap and timing statistics"
+  pattern: '^(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+[+-]\d{4}): (?P<gc_time>\d+\.\d+): \[(?P<gc_type>[^,]+)(?:, (?P<gc_cause>[^\]]+))?\] (?P<heap_before>\d+)K->(?P<heap_after>\d+)K\((?P<heap_total>\d+)K\)(?:, (?P<young_gen_before>\d+)K->(?P<young_gen_after>\d+)K\((?P<young_gen_total>\d+)K\))? (?P<gc_duration>\d+\.\d+) secs?(?: \[Times: user=(?P<user_time>\d+\.\d+) sys=(?P<sys_time>\d+\.\d+), real=(?P<real_time>\d+\.\d+) secs\])?$'
+  expected_fields:
+    - timestamp
+    - gc_time
+    - gc_type
+    - gc_cause
+    - heap_before
+    - heap_after
+    - heap_total
+    - young_gen_before
+    - young_gen_after
+    - young_gen_total
+    - gc_duration
+    - user_time
+    - sys_time
+    - real_time

@@ -38,6 +38,10 @@ build/dist/
 test_outputs/
 integration.toml
 
+# pytest-cov output (every `make test-python` run regenerates these)
+.coverage
+coverage.xml
+
 # Temporary files (controlled via LFS for important ones)
 .tmp/
 !.tmp/.gitkeep
@@ -66,7 +70,7 @@ build/.cache/
 build/logs/
 build/*.backup
 vectordotdev/target/
-# vectordotdev/dist/ - Allow for deployment wheels
+vectordotdev/dist/
 vector-bindings/target/
 
 # Cargo registry and git checkouts (major source of 10K+ changes) -
@@ -89,6 +93,3 @@ vector-bindings/target/
 *.pkg
 *.deb
 *.rpm
-# Allow vectordotdev deployment wheels
-\!vectordotdev/dist/
-\!vectordotdev/dist/*.whl

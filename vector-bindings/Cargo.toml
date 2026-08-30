@@ -3,7 +3,7 @@ name = "vector-bindings"
 version = "1.0.5"
 edition = "2024"
 description = "PyO3 bindings for Vector data processing"
-authors = ["vectordotdev team"]
+authors = ["HyperI"]
 license = "Apache-2.0"
 
 [lib]

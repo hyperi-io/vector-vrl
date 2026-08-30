@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Bootstrap script to install vectordotdev development dependencies
+# Bootstrap script to install vector-vrl development dependencies
 # Supports Fedora/RHEL, Ubuntu/Debian, and macOS
 
 set -e
@@ -234,7 +234,7 @@ setup_dev_env() {
 
 # Main function
 main() {
-    log_info "Starting vectordotdev-rs development environment bootstrap"
+    log_info "Starting vector-vrl development environment bootstrap"
     
     detect_os
     install_rust

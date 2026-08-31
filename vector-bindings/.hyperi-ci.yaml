@@ -27,6 +27,10 @@ test:
     # default build and its mirror only under full-stdlib, so a single
     # --all-features run would silently skip the sandbox one.
     features: default|full-stdlib
+    # Require process-per-test isolation rather than accepting whatever the
+    # runner has: a missing nextest fails the stage instead of quietly
+    # switching to cargo test's shared-process semantics.
+    nextest: true
 build:
   enabled: true
   strategies:

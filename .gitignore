@@ -93,3 +93,7 @@ vector-bindings/target/
 *.pkg
 *.deb
 *.rpm
+
+# Per-developer AI tool settings - machine-local, never shared
+.claude/
+.cursor/

@@ -55,7 +55,7 @@ jobs:
   plan:
     name: Plan
     if: github.event.pull_request.head.repo.fork != true
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.GH_RUNNER_DEFAULT || 'ubuntu-latest' }}
     # predict-version runs semantic-release, whose git plugin verifies push
     # access on a publish predict.
     permissions:
@@ -87,7 +87,7 @@ jobs:
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.GH_RUNNER_DEFAULT || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -99,7 +99,7 @@ jobs:
     name: vector-bindings (quality + test)
     needs: [plan]
     if: needs.plan.outputs.run-checks == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.GH_RUNNER_RUST || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -120,7 +120,7 @@ jobs:
     name: vector-vrl + build/ (quality + test)
     needs: [plan]
     if: needs.plan.outputs.run-checks == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.GH_RUNNER_PYTHON || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -190,7 +190,7 @@ jobs:
     name: Tag & Publish
     needs: [plan, build-wheels]
     if: needs.plan.outputs.will-publish == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.GH_RUNNER_PUBLISH || 'ubuntu-latest' }}
     environment: pypi-publish
     permissions:
       contents: write # semantic-release tag + release-commit

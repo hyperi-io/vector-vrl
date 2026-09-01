@@ -7,14 +7,6 @@ binary to install, nothing to shell out to.**
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](https://github.com/hyperi-io/vector-vrl/blob/main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 
-VRL - the [Vector Remap Language](https://vector.dev/docs/reference/vrl/) - is
-what makes [Vector](https://vector.dev/) good at logs: parse, filter, redact,
-reshape, enrich, in a language built for that and nothing else. The catch has
-always been that it only runs inside the `vector` binary.
-
-Not any more - the same engine, in your process. 198 of Vector 0.58's 213 VRL
-functions, zero dependencies.
-
 ```bash
 pip install vector-vrl
 ```
@@ -59,9 +51,9 @@ Two guards apply to every entry point that compiles VRL:
 - **No host, no network.** `get_env_var`, `get_hostname`, `http_request`,
   `dns_lookup` and six more are not compiled in. Caller-supplied VRL cannot
   read your environment or reach out of the process - it fails to compile
-  instead. This is what the published wheel ships. Someone building the crate
-  from source can turn those ten functions on with the `full-stdlib` Cargo
-  feature; only do that where you control the VRL text.
+  instead. This is what the published wheel ships. Someone building the
+  crate from source can turn those ten functions on with the `full-stdlib`
+  Cargo feature; only do that where you control the VRL text.
 - **No nesting bomb.** VRL source may not nest brackets past 64 levels. Past
   a few hundred the parser's own recursion overflows the stack and kills the
   process, which no Python `except` can catch, so the check runs before the
@@ -69,7 +61,8 @@ Two guards apply to every entry point that compiles VRL:
 
 That combination is what makes it reasonable to accept VRL from a user - a
 multi-tenant playground, a customer-supplied transform, a config someone
-pasted in.
+pasted in. The reasoning is in
+[docs/architecture.md](https://github.com/hyperi-io/vector-vrl/blob/main/docs/architecture.md).
 
 ## The API
 
@@ -97,34 +90,25 @@ about sources, sinks or wiring, and it cannot judge VRL that calls
 `get_enrichment_table_record` or `get_secret` - those are registered by Vector
 from `enrichment_tables:` and secret backends declared in the config, outside
 VRL, so this build has never heard of them. Rather than call a valid config
-broken, it reports those transforms as `unchecked` with a reason. YAML needs
-`pip install vector-vrl[yaml]`; TOML and JSON need nothing.
+broken, it reports those transforms as `unchecked` with a reason. Reading a
+YAML config needs `pip install vector-vrl[yaml]`; TOML and JSON need nothing.
 
 `validate_config_with_vector` runs `vector validate --no-environment` and
 checks the lot - wiring, component options, and the enrichment-backed VRL the
 in-process check has to skip. It needs Vector installed, and it is one-shot:
 Vector exits as soon as it has answered, never running as a daemon and never
-moving data. `--no-environment` also keeps it offline, so it will not dial your
-sinks just to check the file.
+moving data.
 
 Exact signatures, return shapes, and the rough edges worth knowing (nested
 objects come back as JSON strings, a per-event runtime error replaces that
-event's dict) are in the
-[Python API reference](https://github.com/hyperi-io/vector-vrl/blob/main/docs/reference-python-api.md).
+event's dict) are in
+[docs/reference-python-api.md](https://github.com/hyperi-io/vector-vrl/blob/main/docs/reference-python-api.md).
 
-## Also in the box
+## Contributing
 
-A second surface (`assess_vrl_performance`, `THGPerformanceAssessor`,
-`get_apache_combined` and the other pattern helpers) shells out to a `vector`
-binary on your PATH instead of using the compiled bindings above. Different
-code path, different tests. If you came here for VRL execution, the example at
-the top already gave it to you.
+See [CONTRIBUTING.md](https://github.com/hyperi-io/vector-vrl/blob/main/CONTRIBUTING.md).
 
-## Links
+## License
 
-- [Source and issues](https://github.com/hyperi-io/vector-vrl)
-- [Architecture](https://github.com/hyperi-io/vector-vrl/blob/main/docs/architecture.md)
-- [Building from source](https://github.com/hyperi-io/vector-vrl/blob/main/docs/how-to-build-and-test.md)
-  (needs the Rust toolchain - the package wraps a compiled crate)
-
-Apache License, Version 2.0.
+Apache License, Version 2.0. See
+[LICENSE](https://github.com/hyperi-io/vector-vrl/blob/main/LICENSE).

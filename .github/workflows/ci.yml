@@ -235,7 +235,9 @@ jobs:
       contents: write # semantic-release tag + release-commit
       issues: write # release-notify
       pull-requests: write
-      id-token: write # PyPI Trusted Publishing (OIDC) - no stored token
+      # hyperi-ci's publish handler passes --token when PYPI_TOKEN is set and
+      # falls back to OIDC when it is not; both paths stay open.
+      id-token: write
     env:
       # The `secrets` context is not readable from a step-level `if`, and the
       # release identity turns on whether this repo can see the App key.
@@ -329,6 +331,9 @@ jobs:
         working-directory: vector-vrl
         env:
           HYPERCI_VERSION: ${{ steps.forcedtag.outputs.version || needs.plan.outputs.next-version }}
+          # The org PYPI_TOKEN is shared per repository, so this is empty
+          # until vector-vrl is added to that secret's selected list.
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: ${{ env.HYPERCI_INSTALL }} run publish -C .
 
       - name: Stamp the released version

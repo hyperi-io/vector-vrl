@@ -1,18 +1,17 @@
 # vector-vrl
 
-**Run Vector's transform language in Python. In-process, no subprocess.**
+**Vector's own VRL compiler and runtime, compiled into a Python extension.**
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](https://github.com/hyperi-io/vector-vrl/blob/main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 
 VRL - the [Vector Remap Language](https://vector.dev/docs/reference/vrl/) - is
-the thing that makes [Vector](https://vector.dev/) good at logs. Parse, filter,
-redact, reshape, enrich, all in a language built for exactly that and nothing
-else. The catch has always been that it only runs inside the `vector` binary.
+what makes [Vector](https://vector.dev/) good at logs: parse, filter, redact,
+reshape, enrich, in a language built for that and nothing else. The catch has
+always been that it only runs inside the `vector` binary.
 
-This package compiles Vector's actual VRL compiler and runtime into a Python
-extension. Not a subprocess wrapper, not a reimplementation that is subtly
-wrong at the edges - the same engine, in your process.
+Not any more, and not by shelling out - the same engine, in your process. 198
+of Vector 0.58's 213 VRL functions, zero dependencies.
 
 ```bash
 pip install vector-vrl
@@ -48,23 +47,8 @@ validate_vrl(vrl).success
   generators - against the real compiler rather than a regex approximation.
 - **Process events in Python** with semantics identical to what your Vector
   deployment will do to the same data.
-- **Benchmark a transform** before it goes anywhere near production.
 - **AI agents** for VRL processing and development loops - generate a
   candidate, compile it, run it, iterate, all without a Vector install.
-
-## Fast enough to not think about
-
-`get_vrl_performance` on the parse-and-reassign program above, 50,000 events,
-single core, one 13th-gen i7 laptop:
-
-```
-718,229 events/second
-```
-
-Measured with the package's own `get_vrl_performance(vrl, events,
-iterations=500)`, so you can reproduce it on your own hardware in one line.
-It measures the in-process runtime, and makes no claim about the `vector`
-binary.
 
 ## Safer to hand untrusted VRL
 

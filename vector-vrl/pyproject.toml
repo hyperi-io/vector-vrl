@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "vector-vrl"
 version = "1.0.5"
 requires-python = ">=3.12"
-description = "Run Vector's transform language (VRL) in Python, in-process"
+description = "Vector's own VRL compiler and runtime, in your Python process"
 readme = "README.md"
 license = {file = "LICENSE"}
 authors = [

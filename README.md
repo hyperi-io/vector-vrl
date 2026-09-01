@@ -7,14 +7,6 @@ binary to install, nothing to shell out to.**
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
 
-VRL - the [Vector Remap Language](https://vector.dev/docs/reference/vrl/) - is
-what makes [Vector](https://vector.dev/) good at logs: parse, filter, redact,
-reshape, enrich, in a language built for that and nothing else. The catch has
-always been that it only runs inside the `vector` binary.
-
-Not any more - the same engine, in your process. 198 of Vector 0.58's 213 VRL
-functions, zero dependencies.
-
 ```bash
 pip install vector-vrl
 ```
@@ -110,21 +102,6 @@ Exact signatures, return shapes, and the rough edges worth knowing (nested
 objects come back as JSON strings, a per-event runtime error replaces that
 event's dict) are in
 [docs/reference-python-api.md](docs/reference-python-api.md).
-
-## The repo
-
-Three components sharing one checkout. This is not a normal Python repo and
-`pip install -e .` will not do what you expect:
-
-- **`vector-bindings/`** - the Rust crate. Compiles VRL, runs it, hands the
-  result to Python via [PyO3](https://pyo3.rs/).
-- **`vector-vrl/`** - the package that ships to PyPI. Wraps the crate via
-  [maturin](https://github.com/PyO3/maturin), so building it compiles Rust.
-- **`build/`** - a separate orchestration CLI. Not a dependency of either.
-
-[docs/architecture.md](docs/architecture.md) has the layout and the dependency
-direction. [docs/how-to-build-and-test.md](docs/how-to-build-and-test.md) is
-how to build it from source (needs the Rust toolchain).
 
 ## Contributing
 

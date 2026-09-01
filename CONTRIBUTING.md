@@ -80,17 +80,24 @@ make test-python
 
 ## Which component am I touching
 
-- `vector-bindings/` - Rust. Everything the Python package can actually do
-  is defined in `src/lib.rs`. Change a signature here and you have changed
-  the public API, so update
+Three components share one checkout and build separately.
+
+- `vector-bindings/` - the Rust crate. Compiles VRL, runs it, and hands the
+  result back to Python via [PyO3](https://pyo3.rs/). Everything the Python
+  package can actually do is defined in `src/lib.rs`, so changing a
+  signature here changes the public API - update
   [docs/reference-python-api.md](docs/reference-python-api.md) in the same
   commit.
-- `vector-vrl/` - the Python package that ships to PyPI. Building it
-  compiles the Rust crate, because `pyproject.toml` points maturin at
-  `../vector-bindings/Cargo.toml`.
+- `vector-vrl/` - the package that ships to PyPI. It wraps the crate via
+  [maturin](https://github.com/PyO3/maturin), pointed at
+  `../vector-bindings/Cargo.toml`, so building the package compiles Rust.
 - `build/` - a standalone orchestration CLI with its own `pyproject.toml`
-  and `uv.lock`. Nothing imports it. See
+  and `uv.lock`. A dependency of neither, and nothing imports it. See
   [docs/how-to-run-the-build-orchestrator.md](docs/how-to-run-the-build-orchestrator.md).
+
+[docs/architecture.md](docs/architecture.md) has the dependency direction;
+[docs/how-to-build-and-test.md](docs/how-to-build-and-test.md) covers building
+from source, which needs the Rust toolchain.
 
 Never edit anything under `vector/`. It is an upstream checkout, read-only,
 and not tracked in this repo.

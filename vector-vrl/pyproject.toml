@@ -85,14 +85,13 @@ markers = [
 testpaths = ["tests"]
 
 [tool.coverage.run]
-# These shell out to a `vector` binary at /usr/bin/vector and are not part
-# of the in-process bindings API - CLAUDE.md documents them as outside the
-# surface the test suite covers. Measuring them here would count real
-# code as "uncovered" for a surface no test in this repo is meant to
-# exercise, rather than a genuine gap in tested code.
+# thg_performance and vector_test_utils shell out to a `vector` binary and
+# are reached only by the binary-gated integration tests, so measuring them
+# here would report a surface the unit suite is not meant to cover.
+# version_detection is a standalone GitHub-API CLI nothing in the package
+# imports; it is excluded pending its removal or a move to build/.
 omit = [
     "src/vector_vrl/thg_performance.py",
     "src/vector_vrl/vector_test_utils.py",
-    "src/vector_vrl/production_patterns.py",
     "src/vector_vrl/version_detection.py",
 ]

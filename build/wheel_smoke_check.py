@@ -39,10 +39,18 @@ def _python_version_for(wheel: Path) -> str:
 
 # Mirrors README.md's worked example and the Vector class golden path.
 SMOKE_SCRIPT = r'''
+from pathlib import Path
+
 import vector_vrl
 
 info = vector_vrl.get_bindings_info()
 assert info["source"] == "bundled", f"compiled bindings not bundled: {info}"
+
+package = Path(vector_vrl.__file__).parent
+assert (package / "py.typed").is_file(), "py.typed marker missing from the wheel"
+assert (package / "_bindings" / "vector_bindings.pyi").is_file(), (
+    "vector_bindings.pyi stub missing from the wheel"
+)
 
 vrl = """
 parsed, err = parse_json(.message)

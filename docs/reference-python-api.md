@@ -417,9 +417,10 @@ Both are covered by tests in `vector-bindings/src/lib.rs` and
 pattern helpers.
 
 These are a different thing to everything above. They shell out to a
-`vector` BINARY, defaulting to `/usr/bin/vector`, and `VectorTestRunner`
-raises `RuntimeError` at construction if that path does not exist. They do
-not use the compiled bindings.
+`vector` BINARY - the first `vector` on PATH, else `/usr/bin/vector`, or
+the path you pass - and `VectorTestRunner` raises `RuntimeError` at
+construction if no binary exists there. They do not use the compiled
+bindings.
 
 They are not part of the in-process API this package is for, and they are
 not covered by the test files that describe it. If you want VRL executed,

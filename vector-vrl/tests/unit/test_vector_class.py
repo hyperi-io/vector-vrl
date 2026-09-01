@@ -300,6 +300,7 @@ class TestVrlSandbox:
     def test_validate_vrl_rejects_escape(self, vrl):
         result = validate_vrl(vrl)
         assert result.success is False, f"{vrl!r} compiled - the sandbox is open"
+        assert result.error is not None
         assert "undefined function" in result.error
 
     @pytest.mark.parametrize("vrl", SANDBOX_ESCAPES)
@@ -335,6 +336,7 @@ class TestVrlNestingDepth:
     def test_validate_vrl_rejects_thousand_deep_nesting(self):
         result = validate_vrl(_nested_vrl(1000))
         assert result.success is False
+        assert result.error is not None
         assert "nests" in result.error, f"unexpected rejection reason: {result.error}"
 
     def test_execute_vrl_rejects_thousand_deep_nesting(self):
@@ -348,6 +350,7 @@ class TestVrlNestingDepth:
     def test_nesting_one_past_the_limit_is_rejected(self):
         result = validate_vrl(_nested_vrl(MAX_NESTING_DEPTH + 1))
         assert result.success is False
+        assert result.error is not None
         assert "nests" in result.error
 
     def test_deep_nesting_does_not_kill_the_interpreter(self):

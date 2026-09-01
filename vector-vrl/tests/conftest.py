@@ -78,7 +78,7 @@ def _run_containerized(
     "vector" makes it try to run "vector" as a subcommand of itself and fail
     with "unrecognized subcommand 'vector'".
     """
-    image = os.environ.get("VECTORDOTDEV_TEST_VECTOR_IMAGE", _DEFAULT_IMAGE)
+    image = os.environ.get("VECTOR_VRL_TEST_VECTOR_IMAGE", _DEFAULT_IMAGE)
     name = "".join(c.lower() if c.isalnum() else "-" for c in request.node.name)
     cmd = [
         "docker",

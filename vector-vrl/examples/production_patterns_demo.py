@@ -30,16 +30,16 @@ def demo_apache_pattern():
     ]
 
     try:
-        # THIS IS THE GOAL: Native in-process Vector execution
+        # In-process execution of the pattern's remap transform
+        vrl_code = apache_config["transforms"]["parse_apache_combined"]["source"]
         vector = vector_vrl.Vector(apache_config)
         vector.initialize()
-        results = vector.process_logs(apache_logs)
+        results = vector.process_logs(apache_logs, vrl_code)
 
         print(f"Processed {len(results)} Apache logs natively")
         print(f"First result: {results[0]}")
 
-        # THG assessment
-        vrl_code = apache_config["transforms"]["parse_apache"]["source"]
+        # THG assessment (shells out to the vector binary)
         thg = vector_vrl.assess_vrl_performance(
             vrl_code, apache_logs, "apache_production"
         )
@@ -48,7 +48,6 @@ def demo_apache_pattern():
         return True
     except Exception as e:
         print(f"Apache pattern demo failed: {e}")
-        print("This demonstrates the target API - actual Vector integration pending")
         return False
 
 
@@ -68,25 +67,22 @@ def demo_json_application_pattern():
     ]
 
     try:
-        # Native Vector execution with built-in JSON parser (500+ EPS expected)
+        # In-process execution with the built-in JSON parser
+        vrl_code = json_config["transforms"]["parse_json_app"]["source"]
         vector = vector_vrl.Vector(json_config)
         vector.initialize()
-        results = vector.process_logs(json_logs)
+        results = vector.process_logs(json_logs, vrl_code)
 
         print(f"Processed {len(results)} JSON logs natively")
         print("Performance optimized with parse_json() built-in")
 
-        # THG assessment should show excellent performance
-        vrl_code = json_config["transforms"]["parse_json_app"]["source"]
+        # THG assessment (shells out to the vector binary)
         thg = vector_vrl.assess_vrl_performance(vrl_code, json_logs, "json_production")
-        print(
-            f"THG Score: {thg['thg_score']} ({thg['performance_grade']}) - Expected: A+ (500+ eps)"
-        )
+        print(f"THG Score: {thg['thg_score']} ({thg['performance_grade']})")
 
         return True
     except Exception as e:
         print(f"JSON pattern demo failed: {e}")
-        print("This demonstrates the target API - actual Vector integration pending")
         return False
 
 
@@ -106,24 +102,22 @@ def demo_kubernetes_pattern():
     ]
 
     try:
-        # Native K8s log processing with namespace/container extraction
+        # In-process K8s log processing with namespace/container extraction
+        vrl_code = k8s_config["transforms"]["parse_k8s_pods"]["source"]
         vector = vector_vrl.Vector(k8s_config)
         vector.initialize()
-        results = vector.process_logs(k8s_logs)
+        results = vector.process_logs(k8s_logs, vrl_code)
 
         print(f"Processed {len(results)} K8s logs with metadata")
         print("Extracted: namespace, container, pod info")
 
-        vrl_code = k8s_config["transforms"]["parse_k8s"]["source"]
+        # THG assessment (shells out to the vector binary)
         thg = vector_vrl.assess_vrl_performance(vrl_code, k8s_logs, "k8s_production")
-        print(
-            f"THG Score: {thg['thg_score']} ({thg['performance_grade']}) - Expected: B+ (300+ eps)"
-        )
+        print(f"THG Score: {thg['thg_score']} ({thg['performance_grade']})")
 
         return True
     except Exception as e:
         print(f"K8s pattern demo failed: {e}")
-        print("This demonstrates the target API - actual Vector integration pending")
         return False
 
 
@@ -175,7 +169,6 @@ def demo_pattern_benchmark():
         return True
     except Exception as e:
         print(f"Pattern benchmark failed: {e}")
-        print("This demonstrates the target API - actual Vector integration pending")
         return False
 
 
@@ -213,15 +206,8 @@ def main():
     total = len(results)
     print(f"Working demos: {successful}/{total}")
 
-    if successful > 0:
-        print("Production patterns are integrated and ready for native execution!")
-        print("THG assessment framework working with production log formats")
-    else:
-        print(
-            "Demos show target API design - Vector core integration needed for execution"
-        )
-
-    print("\nNext: Complete Vector runtime integration for true in-process execution")
+    if successful < total:
+        print("A THG demo needs a vector binary on PATH; the in-process part does not")
 
 
 if __name__ == "__main__":

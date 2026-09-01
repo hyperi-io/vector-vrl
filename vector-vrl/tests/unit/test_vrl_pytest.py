@@ -189,6 +189,7 @@ class TestVRLErrorReporting:
 
     def test_undefined_function_names_the_problem(self):
         result = validate_vrl("parse_nonexistent(.field)")
+        assert result.error is not None
         assert "undefined function" in result.error
 
     def test_success_carries_no_error(self):

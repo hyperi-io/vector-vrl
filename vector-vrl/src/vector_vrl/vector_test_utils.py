@@ -4,7 +4,9 @@ Provides a centralized way to test VRL code with Vector CLI without shell escapi
 """
 
 import json
+import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -16,14 +18,15 @@ class VectorTestRunner:
     NO shell escaping issues - uses file-based communication only.
     """
 
-    def __init__(self, vector_binary: str = "/usr/bin/vector", verbose: bool = False):
-        """Validate the Vector binary path and set up test runner state."""
-        self.vector_binary = vector_binary
+    def __init__(self, vector_binary: str | None = None, verbose: bool = False):
+        """Resolve the Vector binary (PATH first, then /usr/bin/vector) and set up state."""
+        self.vector_binary = (
+            vector_binary or shutil.which("vector") or "/usr/bin/vector"
+        )
         self.verbose = verbose
 
-        # Validate Vector binary exists
-        if not Path(vector_binary).exists():
-            raise RuntimeError(f"Vector binary not found: {vector_binary}")
+        if not Path(self.vector_binary).exists():
+            raise RuntimeError(f"Vector binary not found: {self.vector_binary}")
 
     def test_vrl_with_vector(
         self, vrl_code: str, input_logs: list[str], test_name: str = "test"
@@ -33,9 +36,8 @@ class VectorTestRunner:
         Returns:
             (success: bool, results: List[Dict], error_message: str)
         """
-        # Create isolated test environment
-        test_dir = Path(".tmp") / f"vector_test_{test_name}_{int(time.time())}"
-        test_dir.mkdir(parents=True, exist_ok=True)
+        # Isolated test environment outside the caller's working directory
+        test_dir = Path(tempfile.mkdtemp(prefix=f"vector_test_{test_name}_"))
 
         try:
             # Create input file
@@ -64,11 +66,13 @@ class VectorTestRunner:
                 print(f"   Logs: {len(input_logs)}")
                 print(f"   VRL: {len(vrl_code)} chars")
 
-            # Run Vector with file-based config (NO command line VRL)
+            # Run Vector with file-based config (NO command line VRL). `-qq`
+            # keeps Vector's own logging to error level so the stderr check
+            # below is not tripped by startup chatter.
             error_msg = ""
             try:
                 process = subprocess.Popen(
-                    [self.vector_binary, "--config", str(config_file)],
+                    [self.vector_binary, "-qq", "--config", str(config_file)],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
@@ -119,8 +123,6 @@ class VectorTestRunner:
 
         finally:
             # Cleanup temp directory
-            import shutil
-
             if test_dir.exists():
                 try:
                     shutil.rmtree(test_dir)
@@ -175,10 +177,6 @@ sinks:
 
 api:
   enabled: false
-
-# Disable excessive logging for testing
-log:
-  level: ERROR
 '''
 
     def validate_field_extraction(
@@ -232,7 +230,7 @@ log:
 def test_vrl_simple(
     vrl_code: str,
     input_logs: list[str],
-    expected_fields: list[str] = None,
+    expected_fields: list[str] | None = None,
     test_name: str = "simple_test",
 ) -> dict[str, Any]:
     """Simple function to test VRL code with Vector CLI.

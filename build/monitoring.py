@@ -2,9 +2,18 @@
 
 import re
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from common import ErrorType, log_message
+
+
+@dataclass(frozen=True)
+class BuildPhase:
+    """A build-log phase: the regex that marks it, and how long it may run."""
+
+    pattern: str
+    max_duration: int = 300
 
 
 class BuildMonitor:
@@ -50,19 +59,10 @@ class BuildMonitor:
 
         # Track build phases with configurable durations
         build_phases = {
-            "downloading": {
-                "pattern": r"Downloading|Updating",
-                "max_duration": 900,  # 15 minutes
-            },
-            "compiling": {
-                "pattern": r"Compiling",
-                "max_duration": 1800,  # 30 minutes
-            },
-            "linking": {
-                "pattern": r"Linking|Finished",
-                "max_duration": 600,  # 10 minutes
-            },
-            "error": {"pattern": r"error:|ERROR:|failed|panic", "immediate": True},
+            "downloading": BuildPhase(r"Downloading|Updating", max_duration=900),
+            "compiling": BuildPhase(r"Compiling", max_duration=1800),
+            "linking": BuildPhase(r"Linking|Finished", max_duration=600),
+            "error": BuildPhase(r"error:|ERROR:|failed|panic"),
         }
 
         current_phase = None
@@ -106,9 +106,7 @@ class BuildMonitor:
 
                             # Detect build phases
                             for phase_name, phase_info in build_phases.items():
-                                if re.search(
-                                    phase_info["pattern"], line, re.IGNORECASE
-                                ):
+                                if re.search(phase_info.pattern, line, re.IGNORECASE):
                                     if current_phase != phase_name:
                                         if current_phase:
                                             elapsed = time.time() - phase_start_time
@@ -146,9 +144,7 @@ class BuildMonitor:
                     # Phase-specific timeout
                     if current_phase and current_phase in build_phases:
                         phase_duration = time.time() - phase_start_time
-                        max_phase_duration = build_phases[current_phase].get(
-                            "max_duration", 300
-                        )
+                        max_phase_duration = build_phases[current_phase].max_duration
 
                         if phase_duration > max_phase_duration:
                             log_message(

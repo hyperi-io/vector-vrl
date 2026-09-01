@@ -126,6 +126,21 @@ jobs:
         with:
           fetch-depth: 0 # gitleaks scans history
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      # The subprocess surface (VectorTestRunner, THG) shells out to a `vector`
+      # binary on PATH and its integration tests hard-fail under $CI without
+      # one. The version is the docker tag pinned in tests/conftest.py, read
+      # from there so the two cannot drift; the release tarball unpacks to
+      # vector-<target>/bin/vector.
+      - name: Install the pinned vector binary
+        run: |
+          version="$(sed -n 's/^_VECTOR_TAG = "\(.*\)-debian"$/\1/p' vector-vrl/tests/conftest.py)"
+          test -n "$version" || { echo "::error::could not read _VECTOR_TAG from vector-vrl/tests/conftest.py"; exit 1; }
+          target="$(uname -m)-unknown-linux-gnu"
+          curl -sSfL "https://github.com/vectordotdev/vector/releases/download/v${version}/vector-${version}-${target}.tar.gz" | tar -xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/vector-${target}/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/vector-${target}/bin/vector" --version
+
       - run: make quality-python
       - run: make test-python
 

@@ -8,6 +8,7 @@ sources/transforms/sinks pipeline here.
 import time
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
+from typing import TYPE_CHECKING
 
 from .config_check import (
     ConfigCheck,
@@ -17,10 +18,11 @@ from .config_check import (
     validate_config_with_vector,
 )
 
-# Import from bundled vector-bindings extension
-try:
-    # Try bundled extension first (included in PyPI wheel)
-    from ._bindings import (
+# Import from the bundled vector-bindings extension. Type checkers take the
+# names from the stub beside the compiled module and never see the runtime
+# fallbacks below.
+if TYPE_CHECKING:
+    from ._bindings.vector_bindings import (
         Vector,
         VrlResult,
         clear_enrichment_tables,
@@ -34,73 +36,90 @@ try:
 
     _bindings_source = "bundled"
     _bindings_available = True
-
-except ImportError:  # pragma: no cover - only reachable if the wheel shipped without its compiled extension
-    # Fallback to external vector-bindings if available
+else:
     try:
-        import vector_bindings
+        # Try bundled extension first (included in PyPI wheel)
+        from ._bindings import (
+            Vector,
+            VrlResult,
+            clear_enrichment_tables,
+            execute_vrl,
+            execute_vrl_with_secrets,
+            get_vrl_performance,
+            list_enrichment_tables,
+            register_enrichment_table,
+            validate_vrl,
+        )
 
-        Vector = vector_bindings.Vector
-        VrlResult = vector_bindings.VrlResult
-        execute_vrl = vector_bindings.execute_vrl
-        execute_vrl_with_secrets = vector_bindings.execute_vrl_with_secrets
-        validate_vrl = vector_bindings.validate_vrl
-        get_vrl_performance = vector_bindings.get_vrl_performance
-        register_enrichment_table = vector_bindings.register_enrichment_table
-        clear_enrichment_tables = vector_bindings.clear_enrichment_tables
-        list_enrichment_tables = vector_bindings.list_enrichment_tables
-
-        _bindings_source = "external"
+        _bindings_source = "bundled"
         _bindings_available = True
 
-    except ImportError as e:
-        # No bindings available
-        print(f"Warning: vector bindings not available: {e}")
-        _bindings_available = False
-        _bindings_source = "none"
+    except ImportError:  # pragma: no cover - only reachable if the wheel shipped without its compiled extension
+        # Fallback to external vector-bindings if available
+        try:
+            import vector_bindings
 
-        # Stub implementations
-        class Vector:
-            """Placeholder Vector used when the native bindings are unavailable."""
+            Vector = vector_bindings.Vector
+            VrlResult = vector_bindings.VrlResult
+            execute_vrl = vector_bindings.execute_vrl
+            execute_vrl_with_secrets = vector_bindings.execute_vrl_with_secrets
+            validate_vrl = vector_bindings.validate_vrl
+            get_vrl_performance = vector_bindings.get_vrl_performance
+            register_enrichment_table = vector_bindings.register_enrichment_table
+            clear_enrichment_tables = vector_bindings.clear_enrichment_tables
+            list_enrichment_tables = vector_bindings.list_enrichment_tables
 
-            def __init__(self, config):
-                """Raise ImportError because Vector bindings are not available."""
-                raise ImportError("Vector bindings not available")
+            _bindings_source = "external"
+            _bindings_available = True
 
-        class VrlResult:
-            """Placeholder VrlResult used when the native bindings are unavailable."""
+        except ImportError as e:
+            # No bindings available
+            print(f"Warning: vector bindings not available: {e}")
+            _bindings_available = False
+            _bindings_source = "none"
 
-            def __init__(self, *args, **kwargs):
+            # Stub implementations
+            class Vector:
+                """Placeholder Vector used when the native bindings are unavailable."""
+
+                def __init__(self, config):
+                    """Raise ImportError because Vector bindings are not available."""
+                    raise ImportError("Vector bindings not available")
+
+            class VrlResult:
+                """Placeholder VrlResult used when the native bindings are unavailable."""
+
+                def __init__(self, *args, **kwargs):
+                    """Raise ImportError because VRL bindings are not available."""
+                    raise ImportError("VRL bindings not available")
+
+            def execute_vrl(code, data, secrets=None):
                 """Raise ImportError because VRL bindings are not available."""
                 raise ImportError("VRL bindings not available")
 
-        def execute_vrl(code, data, secrets=None):
-            """Raise ImportError because VRL bindings are not available."""
-            raise ImportError("VRL bindings not available")
+            def execute_vrl_with_secrets(code, data, secrets=None):
+                """Raise ImportError because VRL bindings are not available."""
+                raise ImportError("VRL bindings not available")
 
-        def execute_vrl_with_secrets(code, data, secrets=None):
-            """Raise ImportError because VRL bindings are not available."""
-            raise ImportError("VRL bindings not available")
+            def validate_vrl(code):
+                """Raise ImportError because VRL bindings are not available."""
+                raise ImportError("VRL bindings not available")
 
-        def validate_vrl(code):
-            """Raise ImportError because VRL bindings are not available."""
-            raise ImportError("VRL bindings not available")
+            def get_vrl_performance(code, data, iterations=None):
+                """Raise ImportError because VRL bindings are not available."""
+                raise ImportError("VRL bindings not available")
 
-        def get_vrl_performance(code, data, iterations=None):
-            """Raise ImportError because VRL bindings are not available."""
-            raise ImportError("VRL bindings not available")
+            def register_enrichment_table(name, kind, path, delimiter=None):
+                """Raise ImportError because VRL bindings are not available."""
+                raise ImportError("VRL bindings not available")
 
-        def register_enrichment_table(name, kind, path, delimiter=None):
-            """Raise ImportError because VRL bindings are not available."""
-            raise ImportError("VRL bindings not available")
+            def clear_enrichment_tables():
+                """Raise ImportError because VRL bindings are not available."""
+                raise ImportError("VRL bindings not available")
 
-        def clear_enrichment_tables():
-            """Raise ImportError because VRL bindings are not available."""
-            raise ImportError("VRL bindings not available")
-
-        def list_enrichment_tables():
-            """Raise ImportError because VRL bindings are not available."""
-            raise ImportError("VRL bindings not available")
+            def list_enrichment_tables():
+                """Raise ImportError because VRL bindings are not available."""
+                raise ImportError("VRL bindings not available")
 
 
 # Version information - read from the installed package's own metadata

@@ -47,8 +47,8 @@ class THGPerformanceAssessor:
     Measures real Vector performance with production-like loads
     """
 
-    def __init__(self, vector_binary: str = "/usr/bin/vector"):
-        """Set up the Vector test runner and THG scoring thresholds."""
+    def __init__(self, vector_binary: str | None = None):
+        """Set up the Vector test runner (PATH first, then /usr/bin/vector) and scoring."""
         self.vector_runner = VectorTestRunner(vector_binary)
 
         # THG scoring thresholds (events/second)

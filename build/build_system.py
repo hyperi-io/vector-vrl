@@ -24,7 +24,7 @@ class RobustBuildSystem:
 
         # Configure from environment
         self.max_fallbacks = 2
-        self.verbose = os.environ.get("VECTORDOTDEV_VERBOSE", "").lower() == "true"
+        self.verbose = os.environ.get("VECTOR_VRL_VERBOSE", "").lower() == "true"
 
     def robust_build(self) -> BuildResult:
         """Main build with version fallback and auto-detection."""
@@ -118,7 +118,7 @@ def main():
     args = parser.parse_args()
 
     if args.verbose:
-        os.environ["VECTORDOTDEV_VERBOSE"] = "true"
+        os.environ["VECTOR_VRL_VERBOSE"] = "true"
 
     build_system = RobustBuildSystem()
 

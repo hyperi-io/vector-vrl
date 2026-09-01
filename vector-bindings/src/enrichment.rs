@@ -921,12 +921,18 @@ mod tests {
     }
 
     /// Real GeoLite2 lookup, using the test database in the upstream `vector`
-    /// checkout. That checkout is gitignored and `build/build --clean` removes
-    /// it, so the test reports and returns rather than failing when it is gone.
+    /// checkout at the repo root (`<repo>/vector/`, a sibling of this crate).
+    /// That checkout is gitignored and `build/build --clean` removes it, so
+    /// the test reports and returns rather than failing when it is gone. The
+    /// path is anchored on `CARGO_MANIFEST_DIR`, not on where the repo is
+    /// cloned.
     #[test]
     fn geoip_lookup_returns_a_record() {
         let _guard = lock();
-        let mmdb = Path::new("/projects/vectordotdev/vector/tests/data/GeoLite2-ASN-Test.mmdb");
+        let mmdb = Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../vector/tests/data/GeoLite2-ASN-Test.mmdb"
+        ));
         if !mmdb.exists() {
             eprintln!("skipping: {} is absent", mmdb.display());
             return;

@@ -28,7 +28,7 @@ class CoreBuildSystem:
         self.dep_manager = DependencyManager(project_root, self.vector_dir)
         self.monitor = BuildMonitor(
             stall_timeout=600,  # 10 minutes
-            verbose=os.environ.get("VECTORDOTDEV_VERBOSE", "").lower() == "true",
+            verbose=os.environ.get("VECTOR_VRL_VERBOSE", "").lower() == "true",
         )
 
     def download_vector(self, version: str) -> bool:
@@ -279,7 +279,7 @@ class CoreBuildSystem:
             )
 
     def build_python_layer(
-        self, vector_result: StageResult, bindings_result: StageResult = None
+        self, vector_result: StageResult, bindings_result: StageResult | None = None
     ) -> StageResult:
         """Stage 3: Build Python bindings using Vector core and optional bindings artifacts."""
         log_message("Building Python layer")

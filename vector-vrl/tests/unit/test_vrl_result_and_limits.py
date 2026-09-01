@@ -22,22 +22,22 @@ class TestVrlResultImmutability:
     def test_success_attribute_is_read_only(self):
         result = validate_vrl(".x = 1")
         with pytest.raises(AttributeError):
-            result.success = False
+            result.success = False  # ty: ignore[invalid-assignment]
 
     def test_output_attribute_is_read_only(self):
         result = validate_vrl(".x = 1")
         with pytest.raises(AttributeError):
-            result.output = "tampered"
+            result.output = "tampered"  # ty: ignore[invalid-assignment]
 
     def test_error_attribute_is_read_only(self):
         result = validate_vrl(".x = 1")
         with pytest.raises(AttributeError):
-            result.error = "tampered"
+            result.error = "tampered"  # ty: ignore[invalid-assignment]
 
     def test_error_type_attribute_is_read_only(self):
         result = validate_vrl(".x = 1")
         with pytest.raises(AttributeError):
-            result.error_type = "tampered"
+            result.error_type = "tampered"  # ty: ignore[invalid-assignment]
 
     def test_repr_on_success(self):
         """repr() is Rust's derived Debug format, not Python-native - lowercase

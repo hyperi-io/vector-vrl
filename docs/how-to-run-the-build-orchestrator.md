@@ -41,7 +41,7 @@ orchestrator is wired up correctly.
 `--skip-vector` runs stages 2 and 3 against an already-built Vector. It
 exits 1 with `No Vector build found` if there is nothing to skip to.
 
-`--verbose` sets `VECTORDOTDEV_VERBOSE=true` in the environment. You can set
+`--verbose` sets `VECTOR_VRL_VERBOSE=true` in the environment. You can set
 that yourself and get the same result.
 
 ## --clean deletes your vector/ checkout

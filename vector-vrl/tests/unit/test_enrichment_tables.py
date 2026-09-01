@@ -40,6 +40,7 @@ def _clean_registry():
 def test_an_unregistered_table_is_a_compile_error():
     result = validate_vrl(GET)
     assert not result.success
+    assert result.error is not None
     assert "unknown enrichment table" in result.error
 
 
@@ -52,6 +53,7 @@ def test_the_diagnostic_names_the_registered_tables(users_csv: Path):
     register_enrichment_table("users", "file", str(users_csv))
     result = validate_vrl('. = get_enrichment_table_record!("usres", {"id":"1"})')
     assert not result.success
+    assert result.error is not None
     assert "usres" in result.error
     assert "users" in result.error
 

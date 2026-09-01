@@ -6,6 +6,7 @@ Automatically detects the latest compatible Vector version from GitHub API.
 
 import json
 import os
+import tomllib
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
@@ -18,25 +19,27 @@ class VectorVersionDetector:
         """Load Vector version detection settings from the environment and optional config file."""
         # Configuration from environment or config file (NO hardcoded values)
         self.github_api_url = os.getenv(
-            "VECTORDOTDEV_GITHUB_API_URL",
+            "VECTOR_VRL_GITHUB_API_URL",
             "https://api.github.com/repos/vectordotdev/vector/releases",
         )
-        self.fallback_count = int(os.getenv("VECTORDOTDEV_FALLBACK_COUNT", "3"))
-        self.min_version = os.getenv("VECTORDOTDEV_MIN_VERSION")  # No default
-        self.max_version = os.getenv("VECTORDOTDEV_MAX_VERSION")  # No default
-        self.timeout = int(os.getenv("VECTORDOTDEV_VERSION_TIMEOUT", "10"))
+        self.fallback_count = int(os.getenv("VECTOR_VRL_FALLBACK_COUNT", "3"))
+        self.min_version = os.getenv("VECTOR_VRL_MIN_VERSION")  # No default
+        self.max_version = os.getenv("VECTOR_VRL_MAX_VERSION")  # No default
+        self.timeout = int(os.getenv("VECTOR_VRL_VERSION_TIMEOUT", "10"))
 
         # Load additional config if provided
         if config_file and os.path.exists(config_file):
             self._load_config_file(config_file)
 
     def _load_config_file(self, config_file: str):
-        """Load configuration from file."""
-        try:
-            import toml
+        """Load configuration from file.
 
-            with open(config_file) as f:
-                config = toml.load(f)
+        Stdlib ``tomllib``: this package declares no dependencies, so a
+        third-party parser would never be installed.
+        """
+        try:
+            with open(config_file, "rb") as f:
+                config = tomllib.load(f)
 
             vector_config = config.get("vector_integration", {})
 
@@ -150,8 +153,8 @@ class VectorVersionDetector:
     def detect_current_project_version(self) -> str | None:
         """Detect current Vector version used in project."""
         # Check environment variable first
-        if "VECTORDOTDEV_VECTOR_VERSION" in os.environ:
-            return os.environ["VECTORDOTDEV_VECTOR_VERSION"]
+        if "VECTOR_VRL_VECTOR_VERSION" in os.environ:
+            return os.environ["VECTOR_VRL_VECTOR_VERSION"]
 
         # Check Cargo.toml files for Vector version
         toml_files = ["../vector-bindings/Cargo.toml", "./Cargo.toml"]

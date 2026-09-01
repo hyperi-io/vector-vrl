@@ -163,7 +163,9 @@ class TestFunctionsThisBuildCannotCompile:
 
     def test_the_reason_names_the_offending_function(self):
         result = validate_config({"transforms": {"t": _remap(self.ENRICHMENT)}})
-        assert "get_enrichment_table_record" in result.unchecked[0].unchecked_reason
+        reason = result.unchecked[0].unchecked_reason
+        assert reason is not None
+        assert "get_enrichment_table_record" in reason
 
     def test_a_real_error_still_fails_alongside_an_unchecked_one(self):
         result = validate_config(

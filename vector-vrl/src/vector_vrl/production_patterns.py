@@ -9,6 +9,32 @@ from typing import Any
 
 import yaml
 
+# The patterns with a YAML config under patterns/configs/ - the only names
+# get_pattern and benchmark_all_patterns accept.
+_PATTERN_NAMES = (
+    "apache_combined",
+    "nginx_access",
+    "json_application",
+    "kubernetes_pods",
+    "docker_container",
+)
+
+
+def _remap_source(config: dict[str, Any]) -> str:
+    """The VRL of the config's single ``remap`` transform."""
+    remaps = {
+        name: transform
+        for name, transform in config.get("transforms", {}).items()
+        if transform.get("type") == "remap"
+    }
+    if len(remaps) != 1:
+        raise ValueError(f"expected exactly one remap transform, found {len(remaps)}")
+    ((name, transform),) = remaps.items()
+    source = transform.get("source")
+    if source is None:
+        raise ValueError(f"remap transform {name!r} has no inline source")
+    return source
+
 
 class ProductionPatterns:
     """Library of production-ready Vector configurations loaded from YAML files.
@@ -76,34 +102,16 @@ class ProductionPatterns:
     @staticmethod
     def list_available_patterns() -> list[str]:
         """Get list of all available production patterns."""
-        return [
-            "apache_combined",
-            "nginx_access",
-            "json_application",
-            "kubernetes_pods",
-            "docker_container",
-            "syslog_standard",
-            "aws_elb_logs",
-            "mysql_error_logs",
-        ]
+        return list(_PATTERN_NAMES)
 
     @staticmethod
     def get_pattern(pattern_name: str) -> dict[str, Any]:
-        """Get production pattern by name."""
-        patterns = {
-            "apache_combined": ProductionPatterns.get_apache_combined,
-            "nginx_access": ProductionPatterns.get_nginx_access,
-            "json_application": ProductionPatterns.get_json_application,
-            "kubernetes_pods": ProductionPatterns.get_kubernetes_pods,
-            "docker_container": ProductionPatterns.get_docker_container,
-        }
-
-        if pattern_name not in patterns:
+        """Get production pattern by name, through the module-level instance's cache."""
+        if pattern_name not in _PATTERN_NAMES:
             raise ValueError(
-                f"Unknown pattern: {pattern_name}. Available: {list(patterns.keys())}"
+                f"Unknown pattern: {pattern_name}. Available: {list(_PATTERN_NAMES)}"
             )
-
-        return patterns[pattern_name]()
+        return production_patterns._load_yaml_config(pattern_name)
 
     @staticmethod
     def benchmark_all_patterns(test_data_sets: dict[str, list[str]]) -> dict[str, dict]:
@@ -120,9 +128,7 @@ class ProductionPatterns:
 
             try:
                 config = ProductionPatterns.get_pattern(pattern_name)
-                vrl_code = config["transforms"]["parse_" + pattern_name.split("_")[0]][
-                    "source"
-                ]
+                vrl_code = _remap_source(config)
                 test_data = test_data_sets[pattern_name]
 
                 thg_result = vector_vrl.assess_vrl_performance(

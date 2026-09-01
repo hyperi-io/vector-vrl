@@ -24,6 +24,11 @@ dependencies = [
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0",
+    # The quality stage spawns `ruff` from this project's own environment;
+    # without it declared here the checks pass only where a ruff happens to
+    # be on PATH, and fail on a clean runner. Held to the same minor as
+    # vector-vrl's lock so one repo is not linted by two ruff versions.
+    "ruff>=0.12.11,<0.13",
 ]
 
 [tool.ruff]

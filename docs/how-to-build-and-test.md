@@ -59,18 +59,19 @@ An `.so` older than `lib.rs` is stale, and it fails silently - you get the
 old behaviour with no warning at all. This is worth checking first whenever
 a change you know you made appears to have no effect.
 
-## Python 3.14 and the abi3 flag
+## The stable ABI
 
-pyo3 0.22 supports Python up to 3.13. On a machine whose default Python is
-3.14 or newer, a raw `cargo build` needs:
+`vector-bindings` sets `pyo3/abi3-py312`, so it compiles against CPython's
+stable ABI rather than one version's internals. Two consequences worth
+knowing.
 
-```bash
-env PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 cargo build --release
-```
+The wheel is tagged `cp312-abi3` and installs on 3.12 and every later
+release, including ones published after this crate was built - one wheel per
+platform instead of one per Python.
 
-You only need this on 3.14+. Building through maturin from `vector-vrl/`
-sets it for you - it is already in `vector-vrl/pyproject.toml` under
-`[tool.maturin.environment]`.
+pyo3 0.22 otherwise refuses to build against an interpreter newer than 3.13.
+Under abi3 that ceiling does not apply, so a plain `cargo build` works on a
+3.14 machine with no environment variable.
 
 ## Testing the Python package
 

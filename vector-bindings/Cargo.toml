@@ -11,7 +11,10 @@ name = "vector_bindings"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.22", features = ["extension-module"] }
+# abi3-py312 targets CPython's stable ABI: one wheel per platform serves 3.12
+# and every later release, and pyo3 0.22's 3.13 interpreter ceiling no longer
+# applies.
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py312"] }
 serde_json = { version = "1.0.142", default-features = false, features = ["std"] }
 # Enrichment tables. `csv` parses a registered `file` table; it is already in
 # the tree via vrl's stdlib-base, so declaring it adds no new dependency.
@@ -36,7 +39,6 @@ vrl = { git = "https://github.com/vectordotdev/vrl.git", branch = "main", defaul
 
 [features]
 default = []
-abi3 = ["pyo3/abi3-py38"]
 # Opt in to VRL's complete stdlib, adding the ten functions the sandboxed
 # default holds back. `vrl/stdlib` is additive over the features already
 # named above, so this unions in enable_env_functions, enable_system_functions

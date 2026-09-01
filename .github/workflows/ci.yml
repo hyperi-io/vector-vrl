@@ -162,10 +162,19 @@ jobs:
           - name: linux-aarch64
             os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-          # One universal2 wheel covers both Mac architectures.
-          - name: macos-universal2
+          # One wheel per Mac architecture rather than a universal2 fat binary:
+          # pip resolves the right one and each download carries a single
+          # architecture. Both build on the arm64 runner, since `abi3` plus
+          # `extension-module` links no libpython and so cross-compiles.
+          - name: macos-arm64
             os: macos-latest
-            target: universal2-apple-darwin
+            target: aarch64-apple-darwin
+          # Cross-built, so its wheel cannot be installed on the runner that
+          # produced it and the smoke check has to sit this one out.
+          - name: macos-x86_64
+            os: macos-latest
+            target: x86_64-apple-darwin
+            cross: true
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -183,21 +192,32 @@ jobs:
           VERSION: ${{ needs.plan.outputs.next-version }}
         run: ${{ env.HYPERCI_INSTALL }} stamp-version "$VERSION" -C vector-vrl
 
+      # Pins the interpreter maturin builds against on macOS; the Linux legs
+      # use the manylinux container's own, found by --find-interpreter.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
       # v1.9.0 was tagged in 2021: it declares no `working-directory`, so the
       # input was silently dropped and the build ran at the checkout root, and
       # it defaults Linux to the retired manylinux2010 image whose glibc 2.12
       # is too old for current rustup-init.
+      #
+      # --find-interpreter because manylinux containers keep their CPythons
+      # under /opt/python with no plain `python3` on PATH. The crate is abi3,
+      # so however many it finds, the result is one wheel for this platform.
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: vector-vrl
           target: ${{ matrix.target }}
-          args: --release --out dist
+          args: --release --out dist --find-interpreter
           manylinux: auto # ignored on macOS
 
       # Installs the wheel just built ON THIS RUNNER into a throwaway venv and
       # exercises the real public API through it, not the dev tree's own .so.
       # A platform whose wheel fails this never reaches publish.
-      - run: python3 build/wheel_smoke_check.py vector-vrl/dist
+      - if: matrix.cross != true
+        run: python3 build/wheel_smoke_check.py vector-vrl/dist
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

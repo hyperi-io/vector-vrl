@@ -19,9 +19,9 @@ and Python still shows the old behaviour, you skipped `maturin develop` -
 the `.so` lives in `../vector-vrl/src/vector-vrl/_bindings/` and goes
 stale silently.
 
-On Python 3.14+, a raw `cargo build` needs
-`PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1` (pyo3 0.22 supports up to 3.13).
-Building through maturin sets it for you.
+The crate builds against CPython's stable ABI (`pyo3/abi3-py312`), so one
+wheel per platform serves 3.12 and every later release, and pyo3 0.22's
+3.13 interpreter ceiling does not apply on a newer Python.
 
 ## What is in here
 

@@ -399,9 +399,12 @@ mod tests {
         // that is not set - verified against `vector vrl 'get_secret("nope")'`.
         let (event, _) =
             run(r#".key = get_secret("nope")"#, &[]).expect("a missing secret is not an error");
+        // Report the field under test, not the whole event: a panic message
+        // is one of the few places a secret could escape.
         assert!(
             event.get("key").is_some_and(serde_json::Value::is_null),
-            "expected null, got {event}"
+            "expected null, got {:?}",
+            event.get("key")
         );
     }
 

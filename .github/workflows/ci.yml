@@ -183,7 +183,11 @@ jobs:
           VERSION: ${{ needs.plan.outputs.next-version }}
         run: ${{ env.HYPERCI_INSTALL }} stamp-version "$VERSION" -C vector-vrl
 
-      - uses: PyO3/maturin-action@fdd104694b233054d6e985e29b3af9f126af7ac6 # v1.9.0
+      # v1.9.0 was tagged in 2021: it declares no `working-directory`, so the
+      # input was silently dropped and the build ran at the checkout root, and
+      # it defaults Linux to the retired manylinux2010 image whose glibc 2.12
+      # is too old for current rustup-init.
+      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: vector-vrl
           target: ${{ matrix.target }}

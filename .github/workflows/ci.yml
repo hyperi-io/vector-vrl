@@ -331,9 +331,11 @@ jobs:
         working-directory: vector-vrl
         env:
           HYPERCI_VERSION: ${{ steps.forcedtag.outputs.version || needs.plan.outputs.next-version }}
-          # The org PYPI_TOKEN is shared per repository, so this is empty
-          # until vector-vrl is added to that secret's selected list.
           PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+          # This step also cuts the GitHub Release once the upload lands, so
+          # it needs a gh token; without one the upload succeeds and the step
+          # still fails, leaving a tag and a shipped version behind it.
+          GH_TOKEN: ${{ steps.bot.outputs.token || secrets.GITHUB_TOKEN }}
         run: ${{ env.HYPERCI_INSTALL }} run publish -C .
 
       - name: Stamp the released version

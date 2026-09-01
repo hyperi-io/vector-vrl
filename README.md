@@ -1,6 +1,8 @@
 # vector-vrl
 
-**Vector's own VRL compiler and runtime, compiled into a Python extension.**
+**Vector's own VRL compiler and runtime, compiled into a Python extension.
+The real VRL engine from [Vector](https://vector.dev/), self contained - no
+binary to install, nothing to shell out to.**
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
@@ -10,8 +12,8 @@ what makes [Vector](https://vector.dev/) good at logs: parse, filter, redact,
 reshape, enrich, in a language built for that and nothing else. The catch has
 always been that it only runs inside the `vector` binary.
 
-Not any more, and not by shelling out - the same engine, in your process. 198
-of Vector 0.58's 213 VRL functions, zero dependencies.
+Not any more - the same engine, in your process. 198 of Vector 0.58's 213 VRL
+functions, zero dependencies.
 
 ```bash
 pip install vector-vrl

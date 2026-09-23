@@ -14,27 +14,56 @@ import re
 import subprocess
 import sys
 import tempfile
+import zipfile
+from email.parser import BytesParser
 from pathlib import Path
 
 _PYTHON_TAG_RE = re.compile(r"^cp(\d)(\d+)$")
+_REQUIRES_FLOOR_RE = re.compile(r">=\s*(\d+)\.(\d+)")
 
 
-def _python_version_for(wheel: Path) -> str:
-    """The CPython version (e.g. "3.12") a wheel's own filename tag names.
-
-    A wheel is tied to the exact interpreter it was built against unless
-    tagged abi3 - installing it into a mismatched venv fails outright, and
-    the CI runner's ambient default Python is not guaranteed to match
-    whatever maturin-action picked, so this must be read from the wheel
-    itself rather than assumed.
-    """
+def _tag_version(wheel: Path) -> tuple[int, int]:
+    """The CPython version a wheel's own filename tag names, as (major, minor)."""
     python_tag = wheel.stem.split("-")[2]
     match = _PYTHON_TAG_RE.match(python_tag)
     if not match:
         raise ValueError(
             f"can't parse a CPython version from wheel tag {python_tag!r} ({wheel.name})"
         )
-    return f"{match.group(1)}.{match.group(2)}"
+    return int(match.group(1)), int(match.group(2))
+
+
+def _requires_python_floor(wheel: Path) -> tuple[int, int] | None:
+    """The lower bound of the wheel's own ``Requires-Python``, if it declares one."""
+    with zipfile.ZipFile(wheel) as archive:
+        names = [n for n in archive.namelist() if n.endswith(".dist-info/METADATA")]
+        if not names:
+            return None
+        with archive.open(names[0]) as handle:
+            metadata = BytesParser().parse(handle, headersonly=True)
+    declared = metadata.get("Requires-Python")
+    if not declared:
+        return None
+    match = _REQUIRES_FLOOR_RE.search(declared)
+    return (int(match.group(1)), int(match.group(2))) if match else None
+
+
+def _python_version_for(wheel: Path) -> str:
+    """The CPython version (e.g. "3.14") to build the throwaway venv on.
+
+    Two constraints, and the venv must satisfy both. The filename tag names
+    the interpreter a non-abi3 wheel is tied to, and the CI runner's ambient
+    default is not guaranteed to match whatever maturin-action picked. An
+    abi3 wheel is forward compatible, so there its tag is a FLOOR rather than
+    an exact requirement, and the package's own ``Requires-Python`` can sit
+    above it -- an abi3-py312 wheel declaring >=3.14 refuses to install on
+    3.12, which is the wheel telling the truth and the tag being the lesser
+    of the two bounds.
+    """
+    tag = _tag_version(wheel)
+    floor = _requires_python_floor(wheel)
+    major, minor = max(tag, floor) if floor else tag
+    return f"{major}.{minor}"
 
 
 # Mirrors README.md's worked example and the Vector class golden path.

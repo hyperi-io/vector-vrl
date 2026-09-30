@@ -61,17 +61,11 @@ a change you know you made appears to have no effect.
 
 ## The stable ABI
 
-`vector-bindings` sets `pyo3/abi3-py312`, so it compiles against CPython's
-stable ABI rather than one version's internals. Two consequences worth
-knowing.
+`vector-bindings` sets `pyo3/abi3-py312`, so it compiles against CPython's stable ABI rather than one version's internals.
 
 The wheel is tagged `cp312-abi3` and installs on 3.12 and every later
 release, including ones published after this crate was built - one wheel per
 platform instead of one per Python.
-
-pyo3 0.22 otherwise refuses to build against an interpreter newer than 3.13.
-Under abi3 that ceiling does not apply, so a plain `cargo build` works on a
-3.14 machine with no environment variable.
 
 ## Testing the Python package
 

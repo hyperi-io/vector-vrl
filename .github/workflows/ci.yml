@@ -107,8 +107,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
-      # pyo3 0.22 caps at Python 3.13 - pin the interpreter pyo3-build-config
-      # finds so the build does not depend on the runner image's default.
+      # Pin the interpreter pyo3-build-config finds so the build does not
+      # depend on the runner image's default.
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"

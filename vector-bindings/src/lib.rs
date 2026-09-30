@@ -1,13 +1,7 @@
-// pyo3 0.22's #[pymethods]/#[pyfunction] macro expansion predates edition
-// 2024's unsafe_op_in_unsafe_fn tightening and emits a redundant PyErr->PyErr
-// conversion in its generated trampolines - neither lint fires on our own
-// code. Tracked for removal on the pyo3 0.29+ migration (see repo CLAUDE.md
-// / plan Decision Log, pyo3 0.22 vs Python 3.14 gap).
-#![allow(unsafe_op_in_unsafe_fn, clippy::useless_conversion)]
-
 mod enrichment;
 mod secrets;
 
+use pyo3::IntoPyObjectExt;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyDictMethods};
 use serde_json::Value as JsonValue;
@@ -27,7 +21,7 @@ use crate::secrets::EventTarget;
 type SecretMap = BTreeMap<String, String>;
 
 /// VRL execution result with error details
-#[pyclass]
+#[pyclass(skip_from_py_object)]
 #[derive(Clone, Debug)]
 struct VrlResult {
     #[pyo3(get)]
@@ -251,27 +245,29 @@ fn vrl_outcome_to_py_dict(
     py: Python<'_>,
     outcome: Result<Value, String>,
     original: &str,
-) -> PyResult<PyObject> {
-    let result_dict = PyDict::new_bound(py);
+) -> PyResult<Py<PyAny>> {
+    let result_dict = PyDict::new(py);
 
     match outcome {
         Ok(vrl_result) => {
             if let JsonValue::Object(obj) = vrl_value_to_json(vrl_result) {
                 for (key, value) in obj {
                     let py_value = match value {
-                        JsonValue::String(s) => s.into_py(py),
+                        JsonValue::String(s) => s.into_py_any(py)?,
                         JsonValue::Number(n) => {
                             if let Some(i) = n.as_i64() {
-                                i.into_py(py)
+                                i.into_py_any(py)?
                             } else if let Some(f) = n.as_f64() {
-                                f.into_py(py)
+                                f.into_py_any(py)?
                             } else {
                                 py.None()
                             }
                         }
-                        JsonValue::Bool(b) => b.into_py(py),
+                        JsonValue::Bool(b) => b.into_py_any(py)?,
                         JsonValue::Null => py.None(),
-                        JsonValue::Array(_) | JsonValue::Object(_) => value.to_string().into_py(py),
+                        JsonValue::Array(_) | JsonValue::Object(_) => {
+                            value.to_string().into_py_any(py)?
+                        }
                     };
                     result_dict.set_item(key, py_value)?;
                 }
@@ -317,7 +313,7 @@ impl Vector {
         // module so nested dicts/lists/strings/numbers/bools/None are
         // all serialized correctly.
         let py = config_dict.py();
-        let json_module = py.import_bound("json")?;
+        let json_module = py.import("json")?;
         let config_str: String = json_module
             .call_method1("dumps", (config_dict,))?
             .extract()?;
@@ -350,7 +346,7 @@ impl Vector {
     }
 
     /// Process logs in-process using real VRL runtime
-    fn process_logs(&mut self, logs: Vec<String>, vrl_code: String) -> PyResult<Vec<PyObject>> {
+    fn process_logs(&mut self, logs: Vec<String>, vrl_code: String) -> PyResult<Vec<Py<PyAny>>> {
         if !self.initialized {
             return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
                 "Vector not initialized",
@@ -360,7 +356,7 @@ impl Vector {
         // Compile VRL program using real Vector VRL compiler
         let program = compile_program(&vrl_code)?;
 
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let mut results = Vec::with_capacity(logs.len());
 
             for log in logs {
@@ -389,13 +385,13 @@ impl Vector {
     /// Real accumulated counts, measured from the last `initialize()`. A
     /// batch whose VRL fails to COMPILE raises before any event is touched
     /// and so moves no counter - `errors` counts per-event runtime failures.
-    fn get_stats(&self) -> PyResult<PyObject> {
+    fn get_stats(&self) -> PyResult<Py<PyAny>> {
         let uptime_seconds = self
             .started_at
             .map_or(0.0, |started| started.elapsed().as_secs_f64());
 
-        Python::with_gil(|py| {
-            let stats_dict = PyDict::new_bound(py);
+        Python::attach(|py| {
+            let stats_dict = PyDict::new(py);
             stats_dict.set_item("events_processed", self.events_processed.0)?;
             stats_dict.set_item("bytes_processed", self.bytes_processed.0)?;
             stats_dict.set_item("errors", self.errors.0)?;
@@ -423,11 +419,11 @@ fn execute_vrl(
     vrl_code: String,
     input_data: Vec<String>,
     secrets: Option<SecretMap>,
-) -> PyResult<Vec<PyObject>> {
+) -> PyResult<Vec<Py<PyAny>>> {
     let program = compile_program(&vrl_code)?;
     let secrets = secrets.unwrap_or_default();
 
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let mut results = Vec::with_capacity(input_data.len());
 
         for input in input_data {
@@ -460,16 +456,16 @@ fn execute_vrl_with_secrets(
     vrl_code: String,
     input_data: Vec<String>,
     secrets: Option<SecretMap>,
-) -> PyResult<Vec<PyObject>> {
+) -> PyResult<Vec<Py<PyAny>>> {
     let program = compile_program(&vrl_code)?;
     let secrets = secrets.unwrap_or_default();
 
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let mut results = Vec::with_capacity(input_data.len());
 
         for input in input_data {
             let outcome = execute_vrl_on_event(&program, &input, secrets.clone());
-            let entry = PyDict::new_bound(py);
+            let entry = PyDict::new(py);
             entry.set_item("event", vrl_outcome_to_py_dict(py, outcome.result, &input)?)?;
             entry.set_item("secrets", outcome.secrets)?;
             results.push(entry.into());
@@ -556,12 +552,12 @@ fn clear_enrichment_tables() {
 /// Each entry is a dict with `name`, `kind`, `path` and `rows` - `rows` is the
 /// loaded row count for a "file" table and None for a "geoip" table.
 #[pyfunction]
-fn list_enrichment_tables() -> PyResult<Vec<PyObject>> {
+fn list_enrichment_tables() -> PyResult<Vec<Py<PyAny>>> {
     let tables = enrichment::list_tables();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let mut out = Vec::with_capacity(tables.len());
         for (name, kind, path, rows) in tables {
-            let entry = PyDict::new_bound(py);
+            let entry = PyDict::new(py);
             entry.set_item("name", name)?;
             entry.set_item("kind", kind)?;
             entry.set_item("path", path)?;
@@ -579,7 +575,7 @@ fn get_vrl_performance(
     vrl_code: String,
     test_data: Vec<String>,
     iterations: Option<u32>,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     let iter_count = iterations.unwrap_or(100);
 
     // test_data.len() * iter_count is fully materialised in memory before
@@ -612,8 +608,8 @@ fn get_vrl_performance(
         0.0
     };
 
-    Python::with_gil(|py| {
-        let metrics_dict = pyo3::types::PyDict::new_bound(py);
+    Python::attach(|py| {
+        let metrics_dict = PyDict::new(py);
         metrics_dict.set_item("events_per_second", events_per_second)?;
         metrics_dict.set_item("processing_time_seconds", processing_time.as_secs_f64())?;
         metrics_dict.set_item("total_events", total_events)?;

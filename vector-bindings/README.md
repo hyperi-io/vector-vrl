@@ -19,9 +19,7 @@ and Python still shows the old behaviour, you skipped `maturin develop` -
 the `.so` lives in `../vector-vrl/src/vector-vrl/_bindings/` and goes
 stale silently.
 
-The crate builds against CPython's stable ABI (`pyo3/abi3-py312`), so one
-wheel per platform serves 3.12 and every later release, and pyo3 0.22's
-3.13 interpreter ceiling does not apply on a newer Python.
+The crate builds against CPython's stable ABI (`pyo3/abi3-py312`), so one wheel per platform serves 3.12 and every later release.
 
 ## What is in here
 

@@ -12,9 +12,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # abi3-py312 targets CPython's stable ABI: one wheel per platform serves 3.12
-# and every later release, and pyo3 0.22's 3.13 interpreter ceiling no longer
-# applies.
-pyo3 = { version = "0.22", features = ["extension-module", "abi3-py312"] }
+# and every later release.
+pyo3 = { version = "0.29.2", features = ["extension-module", "abi3-py312"] }
 serde_json = { version = "1.0.142", default-features = false, features = ["std"] }
 # Enrichment tables. `csv` parses a registered `file` table; it is already in
 # the tree via vrl's stdlib-base, so declaring it adds no new dependency.

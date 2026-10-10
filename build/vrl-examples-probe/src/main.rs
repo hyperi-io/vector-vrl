@@ -1,7 +1,5 @@
 //! Dump every VRL stdlib function's upstream examples as JSON.
 
-use vrl::compiler::Function;
-
 fn main() {
     let mut out = Vec::new();
     for f in vrl::stdlib::all() {

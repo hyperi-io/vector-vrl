@@ -1,20 +1,22 @@
 # Project:   vector-vrl
 # File:      .github/workflows/vector-auto-update.yml
 # Purpose:   Daily check for a new Vector release (7-day release-age
-#            cooldown - build/vector_pin.py skips anything newer); try it,
-#            and only ship if it actually builds and passes.
+#            cooldown - build/vector_pin.py skips anything newer). When one is
+#            found it is tried, and a PR is opened only if it builds and passes.
 #
-# Never touches main on a red result - the commit only happens after the
-# same `make check` gate every normal push gets passes clean. A push made
-# with the default GITHUB_TOKEN does not retrigger other workflows (GitHub's
-# own anti-recursion rule), so the real ci.yml pipeline - which builds the
-# multi-platform wheels and publishes - is invoked explicitly afterwards via
-# workflow_dispatch rather than relied on to fire from the push.
+# Nothing touches git until the same `make check` gate every normal push gets
+# passes clean. The bump then goes to a vector-bump/<version> branch with a PR
+# against the default branch, so main only moves when a person merges it.
 #
-# Requires this repo's Settings -> Actions -> General -> Workflow permissions
-# set to "Read and write permissions" (for the commit/push and the
-# workflow_dispatch call) - a one-time repo setting, not something this file
-# can grant itself.
+# The branch and the PR are made with the default GITHUB_TOKEN. Events that
+# token causes start no push run, and GitHub holds the PR's own CI runs until
+# someone with write access selects "Approve workflows to run".
+#
+# One bump PR at a time: while a vector-bump/* PR is open the job stays quiet.
+#
+# Requires this repo's Settings -> Actions -> General -> "Allow GitHub Actions
+# to create and approve pull requests" - a repo setting, not something this
+# file can grant itself.
 
 name: Vector auto-update
 
@@ -28,16 +30,18 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
-  issues: write
-  actions: write
+  contents: read
 
 jobs:
   check:
     name: Check for a new Vector release
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       stale: ${{ steps.check.outputs.stale }}
+      open-bump-prs: ${{ steps.open.outputs.count }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: check
@@ -49,17 +53,38 @@ jobs:
             echo "stale=false" >> "$GITHUB_OUTPUT"
           fi
           cat /tmp/vector-pin-check.log
+      - id: open
+        run: |
+          count=$(gh pr list --state open --json headRefName --jq '[.[] | select(.headRefName | startswith("vector-bump/"))] | length')
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   try-update:
     name: Try the bump
     needs: check
-    if: needs.check.outputs.stale == 'true'
+    if: needs.check.outputs.stale == 'true' && needs.check.outputs.open-bump-prs == '0'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the vector-bump branch
+      pull-requests: write # open the PR
+    env:
+      # hyperi-ci 2.10 and later need Python 3.14, so uv must not fall back to the runner's 3.12.
+      UV_PYTHON: "3.14"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
           components: clippy, rustfmt
+      # hyperi-ci's own actions float @main, as in ci.yml.
+      # The Rust quality gate runs cargo audit and cargo deny, pinned by hyperi-ci.
+      - uses: hyperi-io/hyperi-ci/.github/actions/setup-rust-tools@main
+      # The quality gate's malicious-package scan, pinned by hyperi-ci.
+      - uses: hyperi-io/hyperi-ci/.github/actions/setup-osv-scanner@main
+      # vector-bindings sets `test.rust.nextest: true`, which fails the test stage without it.
+      - uses: hyperi-io/hyperi-ci/.github/actions/setup-nextest@main
+      # Pin the interpreter pyo3-build-config finds so the build does not
+      # depend on the runner image's default.
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -67,31 +92,61 @@ jobs:
       - name: Attempt the Vector version bump
         working-directory: build
         run: python3 vector_pin.py update
+
+      # The integration tests hard-fail under $CI without a vector binary on
+      # PATH. This reads the pin the bump just wrote, so it is the new release.
+      - name: Install the bumped vector binary
+        run: |
+          version="$(sed -n 's/^_VECTOR_TAG = "\(.*\)-debian"$/\1/p' vector-vrl/tests/conftest.py)"
+          test -n "$version" || { echo "::error::could not read _VECTOR_TAG from vector-vrl/tests/conftest.py"; exit 1; }
+          target="$(uname -m)-unknown-linux-gnu"
+          curl -sSfL "https://github.com/vectordotdev/vector/releases/download/v${version}/vector-${version}-${target}.tar.gz" | tar -xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/vector-${target}/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/vector-${target}/bin/vector" --version
+
       - name: Verify - the same gate every normal push gets
         run: make check
       # Reached only if `make check` passed. Nothing above this line
       # touches git state, so a failure leaves main untouched.
-      - name: Commit and trigger the real pipeline
+      - name: Open the bump PR
         run: |
+          conftest=vector-vrl/tests/conftest.py
+          old=$(git show "HEAD:${conftest}" | grep -oP '_VECTOR_TAG = "\K[^"]+')
+          new=$(grep -oP '_VECTOR_TAG = "\K[^"]+' "$conftest")
+          branch="vector-bump/${new%-debian}"
+          title="fix: bump pinned Vector version to ${new}"
+          body=$(printf '%s\n' \
+            "The daily check found Vector ${new%-debian}, past the 7-day cooldown and ahead of the pinned ${old%-debian}." \
+            "" \
+            "- changes the _VECTOR_TAG pin in ${conftest} and nothing else" \
+            "- make check passed against it on the runner before this PR was opened" \
+            "- CI runs on this PR wait for 'Approve workflows to run', because the PR is opened with the default token" \
+            "" \
+            "Done when CI on this PR is green and a person merges it.")
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          NEW_VERSION=$(grep -oP '_VECTOR_TAG = "\K[^"]+' vector-vrl/tests/conftest.py)
-          git commit -am "fix: bump pinned Vector version to ${NEW_VERSION}"
-          git push origin HEAD:main
-          gh workflow run ci.yml --ref main
+          git checkout -b "$branch"
+          git add "$conftest"
+          git commit -m "$title"
+          git push origin "$branch"
+          gh pr create --base "$BASE" --head "$branch" --title "$title" --body "$body"
         env:
           GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.repository.default_branch }}
 
   notify-failure:
     name: Alert on a failed attempt
     needs: [check, try-update]
     if: always() && needs.check.outputs.stale == 'true' && needs.try-update.result == 'failure'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: |
           gh issue create \
             --title "Vector auto-update failed - manual bump needed" \
-            --body "The daily Vector version check found a newer release, but \`make check\` failed against it - see the [failed run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}). Nothing was committed or published; the pinned version is unchanged. Run \`python3 build/vector_pin.py update\` locally to reproduce and fix."
+            --body "The daily Vector version check found a newer release, but the attempt to bump to it failed, usually \`make check\` against the new version - see the [failed run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}). No PR was opened and nothing was merged or published, so the pinned version is unchanged. Run \`python3 build/vector_pin.py update\` locally to reproduce and fix."
         env:
           GH_TOKEN: ${{ github.token }}

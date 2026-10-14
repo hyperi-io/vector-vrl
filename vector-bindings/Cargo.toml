@@ -13,14 +13,16 @@ crate-type = ["cdylib"]
 [dependencies]
 # abi3-py312 targets CPython's stable ABI: one wheel per platform serves 3.12
 # and every later release.
-pyo3 = { version = "0.29.2", features = ["extension-module", "abi3-py312"] }
-serde_json = { version = "1.0.142", default-features = false, features = ["std"] }
+pyo3 = { version = "0.29.3", features = ["extension-module", "abi3-py312"] }
+serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
 # Enrichment tables. `csv` parses a registered `file` table; it is already in
 # the tree via vrl's stdlib-base, so declaring it adds no new dependency.
 csv = "1.4"
 # MaxMind DB reader for registered `geoip` tables. Vector's own enrichment
-# lib is unpublished, so the GeoIP2/GeoLite2 reader is taken direct.
-maxminddb = "0.30"
+# lib is unpublished, so the GeoIP2/GeoLite2 reader is taken direct. 0.31+
+# bounds the work a crafted database can force during decoding, and a
+# registered table is a file the caller hands us.
+maxminddb = "0.32"
 # VRL - synced from Vector's workspace dependencies (NO HARDCODING).
 # stdlib-base only, NOT the default `stdlib`/`cli`: this crate executes
 # caller-supplied VRL text, so the three host-reaching feature groups stay

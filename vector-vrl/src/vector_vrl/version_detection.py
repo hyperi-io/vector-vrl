@@ -9,6 +9,7 @@ import os
 import tomllib
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import urlopen
 
 
@@ -54,9 +55,14 @@ class VectorVersionDetector:
 
     def fetch_vector_releases(self) -> list[dict[str, Any]]:
         """Fetch Vector releases from GitHub API."""
+        # The URL comes from the environment or a config file, so a file: URL is refused.
+        if urlparse(self.github_api_url).scheme != "https":
+            print(f"Refusing a releases URL that is not https: {self.github_api_url}")
+            return []
         try:
             print("Fetching Vector releases from GitHub API...")
-            with urlopen(self.github_api_url, timeout=self.timeout) as response:
+            # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+            with urlopen(self.github_api_url, timeout=self.timeout) as response:  # noqa: S310
                 data = json.loads(response.read())
 
             # Filter to stable releases (not pre-releases)
@@ -116,7 +122,7 @@ class VectorVersionDetector:
                 and int(parts[0]) >= 0
                 and int(parts[1]) >= 0
             )
-        except (ValueError, IndexError):
+        except ValueError, IndexError:
             return False
 
     def _is_version_compatible(self, version: str) -> bool:
@@ -141,7 +147,7 @@ class VectorVersionDetector:
 
             return True
 
-        except (ValueError, IndexError):
+        except ValueError, IndexError:
             # If version parsing fails, allow it (conservative approach)
             return True
 
@@ -162,7 +168,7 @@ class VectorVersionDetector:
         for toml_file in toml_files:
             if os.path.exists(toml_file):
                 try:
-                    with open(toml_file) as f:
+                    with open(toml_file, encoding="utf-8") as f:
                         content = f.read()
                         # Look for Vector git tag
                         if 'tag = "v' in content:
@@ -171,7 +177,7 @@ class VectorVersionDetector:
                             match = re.search(r'tag = "v([^"]+)"', content)
                             if match:
                                 return f"v{match.group(1)}"
-                except Exception:
+                except OSError, UnicodeDecodeError:
                     continue
 
         return None

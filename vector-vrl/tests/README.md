@@ -8,6 +8,7 @@ tests use the compiled PyO3 module in-process.
 ## Overview
 
 The test suite validates vector-vrl functionality including:
+
 1. **Unit Tests**: Isolated component testing (VRL functions, subprocess Vector calls)
 2. **Integration Tests**: Component interaction testing (vector-vrl Python bindings, subprocess Vector configs)
 3. **E2E Tests**: End-to-end production scenarios (regex2vrl with real patterns)
@@ -15,7 +16,7 @@ The test suite validates vector-vrl functionality including:
 
 ## Test Structure
 
-```
+```text
 vector-vrl/tests/
 ├── conftest.py                        # vector_runner fixture: run(args, cwd) against a real vector binary/container
 ├── smoke/                             # Mandatory startup smoke test
@@ -69,17 +70,20 @@ bug.
 ## Test Categories
 
 ### Unit Tests (`unit/`)
+
 Isolated component testing - no dependencies between tests. VRL function
 tests run in-process against the compiled bindings; subprocess tests spin a
 real `vector` process via `vector_runner` per test.
 
 ### Integration Tests (`integration/`)
+
 Component interaction testing. `bindings.py` uses `vector.Vector()` directly,
 in-process, no subprocess. Other files here exercise a real `vector`
 subprocess against a generated config (regex2vrl output, YAML configs,
 auto-stop behaviour, etc) via `vector_runner`.
 
 ### E2E Tests (`e2e/`)
+
 Full regex2vrl -> VRL -> Vector -> validation pipelines against production-
 shaped patterns (Apache/Nginx/syslog/JSON/Docker/Kubernetes logs, grok
 patterns) via `vector_runner`.

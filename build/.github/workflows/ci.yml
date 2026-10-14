@@ -23,12 +23,12 @@ name: CI
         type: string
         required: false
         default: ""
-        description: "'true' to release/retry the current HEAD — the CI creates the tag (issue #35)."
+        description: "'true' to release/retry the current HEAD -- the CI creates the tag (issue #35)."
       bump:
         type: string
         required: false
         default: "auto"
-        description: "Version resolution for from-head: auto | patch | minor (forced — release even with no release-worthy commit) | X.Y.Z (exact version)."
+        description: "Version resolution for from-head: auto | patch | minor (forced -- release even with no release-worthy commit) | X.Y.Z (exact version)."
 
 jobs:
   ci:

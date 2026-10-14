@@ -71,7 +71,8 @@ class VectorTestRunner:
             # below is not tripped by startup chatter.
             error_msg = ""
             try:
-                process = subprocess.Popen(
+                # An argv list with no shell, reading a config this runner wrote.
+                process = subprocess.Popen(  # noqa: S603
                     [self.vector_binary, "-qq", "--config", str(config_file)],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,

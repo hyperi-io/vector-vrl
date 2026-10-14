@@ -7,12 +7,12 @@
 # and has no wheel matrix, so this repo cannot call it the way scalo-py does.
 # Everything it would have given us is reused piece by piece instead: the
 # predict-version and setup-semantic-release composite actions, and the
-# hyperi-ci CLI for check-commits / stamp-version / publish / release-commit
+# hyperi-ci CLI for check-commits / stamp-version / release / release-commit
 # / release-notify. Only the cross-component fan-out and the wheel matrix are
 # bespoke.
 #
 # Version, CHANGELOG.md and git tags are semantic-release's, never hand-set.
-# A push to main whose HEAD commit carries a `Publish: true` trailer (or a
+# A push to main whose HEAD commit carries a `Release: true` trailer (or a
 # workflow_dispatch with from-head/tag) tags and publishes; everything else
 # validates only.
 
@@ -63,7 +63,7 @@ jobs:
     outputs:
       run-checks: ${{ steps.predict.outputs.run-checks }}
       run-build: ${{ steps.predict.outputs.run-build }}
-      will-publish: ${{ steps.predict.outputs.will-publish }}
+      will-release: ${{ steps.predict.outputs.will-release }}
       next-version: ${{ steps.predict.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -109,6 +109,8 @@ jobs:
           components: clippy, rustfmt
       # The Rust quality gate runs cargo audit and cargo deny, pinned by hyperi-ci.
       - uses: hyperi-io/hyperi-ci/.github/actions/setup-rust-tools@main
+      # The quality gate's malicious-package scan, pinned by hyperi-ci.
+      - uses: hyperi-io/hyperi-ci/.github/actions/setup-osv-scanner@main
       # make test-rust runs the suite under cargo-nextest, pinned by hyperi-ci.
       - uses: hyperi-io/hyperi-ci/.github/actions/setup-nextest@main
       # Pin the interpreter pyo3-build-config finds so the build does not
@@ -191,7 +193,7 @@ jobs:
         # Version-first: the wheel must carry the version about to be tagged,
         # because `vector_vrl.__version__` reads its own package metadata.
         # Skipped on a plain `tag` dispatch, where the tag's tree is correct.
-        if: needs.plan.outputs.will-publish == 'true' && (github.event_name == 'push' || inputs.from-head == 'true')
+        if: needs.plan.outputs.will-release == 'true' && (github.event_name == 'push' || inputs.from-head == 'true')
         env:
           VERSION: ${{ needs.plan.outputs.next-version }}
         run: ${{ env.HYPERCI_INSTALL }} stamp-version "$VERSION" -C vector-vrl
@@ -229,10 +231,10 @@ jobs:
           path: vector-vrl/dist/*
           retention-days: 7
 
-  tag-and-publish:
-    name: Tag & Publish
+  tag-and-release:
+    name: Tag & Release
     needs: [plan, build-wheels]
-    if: needs.plan.outputs.will-publish == 'true'
+    if: needs.plan.outputs.will-release == 'true'
     runs-on: ${{ vars.GH_RUNNER_PUBLISH || 'ubuntu-latest' }}
     environment: pypi-publish
     permissions:
@@ -299,7 +301,7 @@ jobs:
             head=$(git rev-parse "HEAD^{commit}")
             if [ "$existing" != "$head" ]
             then
-              echo "::error::Predicted ${predicted} already exists at ${existing} but HEAD is ${head}. Refusing to auto-tag. Ship past it with 'hyperi-ci publish --version X.Y.Z'."
+              echo "::error::Predicted ${predicted} already exists at ${existing} but HEAD is ${head}. Refusing to auto-tag. Ship past it with 'hyperi-ci release --version X.Y.Z'."
               exit 1
             fi
             echo "${predicted} already exists at HEAD - nothing to tag."
@@ -340,7 +342,7 @@ jobs:
           # it needs a gh token; without one the upload succeeds and the step
           # still fails, leaving a tag and a shipped version behind it.
           GH_TOKEN: ${{ steps.bot.outputs.token || secrets.GITHUB_TOKEN }}
-        run: ${{ env.HYPERCI_INSTALL }} run publish -C .
+        run: ${{ env.HYPERCI_INSTALL }} run release -C .
 
       - name: Stamp the released version
         # This job checked out the pre-release tree, and the build's stamp ran

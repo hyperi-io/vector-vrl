@@ -78,38 +78,38 @@ else:
             _bindings_available = False
             _bindings_source = "none"
 
-            # Stub implementations
+            # Stub implementations: any call raises, whatever arguments it was given.
             class Vector:
                 """Placeholder Vector used when the native bindings are unavailable."""
 
-                def __init__(self, config):
+                def __init__(self, *_args, **_kwargs):
                     """Raise ImportError because Vector bindings are not available."""
                     raise ImportError("Vector bindings not available")
 
             class VrlResult:
                 """Placeholder VrlResult used when the native bindings are unavailable."""
 
-                def __init__(self, *args, **kwargs):
+                def __init__(self, *_args, **_kwargs):
                     """Raise ImportError because VRL bindings are not available."""
                     raise ImportError("VRL bindings not available")
 
-            def execute_vrl(code, data, secrets=None):
+            def execute_vrl(*_args, **_kwargs):
                 """Raise ImportError because VRL bindings are not available."""
                 raise ImportError("VRL bindings not available")
 
-            def execute_vrl_with_secrets(code, data, secrets=None):
+            def execute_vrl_with_secrets(*_args, **_kwargs):
                 """Raise ImportError because VRL bindings are not available."""
                 raise ImportError("VRL bindings not available")
 
-            def validate_vrl(code):
+            def validate_vrl(*_args, **_kwargs):
                 """Raise ImportError because VRL bindings are not available."""
                 raise ImportError("VRL bindings not available")
 
-            def get_vrl_performance(code, data, iterations=None):
+            def get_vrl_performance(*_args, **_kwargs):
                 """Raise ImportError because VRL bindings are not available."""
                 raise ImportError("VRL bindings not available")
 
-            def register_enrichment_table(name, kind, path, delimiter=None):
+            def register_enrichment_table(*_args, **_kwargs):
                 """Raise ImportError because VRL bindings are not available."""
                 raise ImportError("VRL bindings not available")
 
@@ -167,18 +167,10 @@ except (
 ):  # pragma: no cover - only reachable if a subprocess-based module fails to import
     _performance_available = False
 
-    # Fallback functions if performance module unavailable
-    def quick_thg_assessment(*args, **kwargs):
+    # assess_vrl_performance and execute_vector_pipeline check the flag themselves.
+    def quick_thg_assessment(*_args, **_kwargs):
         """Raise ImportError because THG performance assessment is not available."""
         raise ImportError("THG performance assessment not available")
-
-    def assess_vrl_performance(*args, **kwargs):
-        """Raise ImportError because VRL performance assessment is not available."""
-        raise ImportError("VRL performance assessment not available")
-
-    def execute_vector_pipeline(*args, **kwargs):
-        """Raise ImportError because Vector pipeline execution is not available."""
-        raise ImportError("Vector pipeline execution not available")
 
 
 # Re-export key components

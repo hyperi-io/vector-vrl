@@ -6,7 +6,7 @@
 # Copyright: (c) 2026 HyperSec
 #
 # The publishable artefact: maturin build wraps ../vector-bindings.
-# publish stays gated - fires only on the Publish:true trailer or an
+# release stays gated - fires only on the Release: true trailer or an
 # explicit workflow_dispatch, never on a plain push.
 #
 # Override defaults with HYPERCI_* env vars.
@@ -25,7 +25,5 @@ build:
   enabled: true
   strategies:
   - native
-  type: package
-publish:
+release:
   enabled: true
-  target: oss

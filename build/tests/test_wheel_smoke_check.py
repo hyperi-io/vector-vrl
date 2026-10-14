@@ -47,11 +47,15 @@ class TestRequiresPythonFloor:
     """The lower bound the wheel's own metadata declares."""
 
     def test_reads_the_floor(self, tmp_path):
-        wheel = _wheel(tmp_path, "vector_vrl-1.0.8-cp312-abi3-linux_x86_64.whl", ">=3.14")
+        wheel = _wheel(
+            tmp_path, "vector_vrl-1.0.8-cp312-abi3-linux_x86_64.whl", ">=3.14"
+        )
         assert _requires_python_floor(wheel) == (3, 14)
 
     def test_tolerates_whitespace(self, tmp_path):
-        wheel = _wheel(tmp_path, "vector_vrl-1.0.8-cp312-abi3-linux_x86_64.whl", ">= 3.14")
+        wheel = _wheel(
+            tmp_path, "vector_vrl-1.0.8-cp312-abi3-linux_x86_64.whl", ">= 3.14"
+        )
         assert _requires_python_floor(wheel) == (3, 14)
 
     def test_none_when_undeclared(self, tmp_path):
@@ -69,11 +73,15 @@ class TestPythonVersionFor:
     def test_the_declared_floor_wins_over_an_abi3_tag(self, tmp_path):
         # The 1.0.8 release: abi3-py312 wheel, >=3.14 metadata. Building the
         # venv on the tag gave a 3.12 interpreter the wheel then refused.
-        wheel = _wheel(tmp_path, "vector_vrl-1.0.8-cp312-abi3-linux_x86_64.whl", ">=3.14")
+        wheel = _wheel(
+            tmp_path, "vector_vrl-1.0.8-cp312-abi3-linux_x86_64.whl", ">=3.14"
+        )
         assert _python_version_for(wheel) == "3.14"
 
     def test_the_tag_wins_when_it_is_the_higher_bound(self, tmp_path):
-        wheel = _wheel(tmp_path, "vector_vrl-1.0.8-cp314-abi3-linux_x86_64.whl", ">=3.12")
+        wheel = _wheel(
+            tmp_path, "vector_vrl-1.0.8-cp314-abi3-linux_x86_64.whl", ">=3.12"
+        )
         assert _python_version_for(wheel) == "3.14"
 
     def test_the_tag_stands_alone_when_nothing_is_declared(self, tmp_path):
@@ -81,5 +89,7 @@ class TestPythonVersionFor:
         assert _python_version_for(wheel) == "3.12"
 
     def test_equal_bounds_agree(self, tmp_path):
-        wheel = _wheel(tmp_path, "vector_vrl-1.0.8-cp314-abi3-linux_x86_64.whl", ">=3.14")
+        wheel = _wheel(
+            tmp_path, "vector_vrl-1.0.8-cp314-abi3-linux_x86_64.whl", ">=3.14"
+        )
         assert _python_version_for(wheel) == "3.14"

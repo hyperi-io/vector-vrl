@@ -266,7 +266,8 @@ def validate_config_with_vector(
         cmd.append("--deny-warnings")
     cmd.append(str(path))
 
-    run = subprocess.run(
+    # An argv list with no shell: the caller names the binary and the config path.
+    run = subprocess.run(  # noqa: S603
         cmd,
         capture_output=True,
         text=True,

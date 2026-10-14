@@ -92,7 +92,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - run: ${{ env.HYPERCI_INSTALL }} check-commits
 
   quality-test-rust:
@@ -118,7 +118,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - run: make quality-rust
       - run: make test-rust
 
@@ -131,7 +131,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # gitleaks scans history
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
 
       # The subprocess surface (VectorTestRunner, THG) shells out to a `vector`
       # binary on PATH and its integration tests hard-fail under $CI without
@@ -187,7 +187,7 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
 
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
 
       - name: Stamp the predicted version
         # Version-first: the wheel must carry the version about to be tagged,
@@ -283,7 +283,7 @@ jobs:
             echo "::warning::GH_APP_PRIVATE_KEY is not visible to this repo - tagging as github-actions. Required status checks cannot be bypassed, and the release push will trigger no workflows."
           fi
 
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
 
       - name: Setup semantic-release (shared toolchain)
         if: ${{ github.event_name == 'push' || (inputs.from-head == 'true' && inputs.bump == 'auto') }}

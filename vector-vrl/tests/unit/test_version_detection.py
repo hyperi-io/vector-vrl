@@ -45,3 +45,17 @@ def test_a_malformed_config_file_is_reported_not_fatal(tmp_path, monkeypatch, ca
 
     assert detector.fallback_count == 3
     assert "Could not load config file" in capsys.readouterr().out
+
+
+def test_a_file_url_is_refused_before_it_is_opened(tmp_path, monkeypatch, capsys):
+    secret = tmp_path / "releases.json"
+    secret.write_text(
+        '[{"tag_name": "v9.9.9", "prerelease": false, "draft": false}]',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("VECTOR_VRL_GITHUB_API_URL", secret.as_uri())
+
+    detector = VectorVersionDetector()
+
+    assert detector.fetch_vector_releases() == []
+    assert "not https" in capsys.readouterr().out

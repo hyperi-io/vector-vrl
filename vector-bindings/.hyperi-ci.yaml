@@ -38,5 +38,5 @@ build:
   rust:
     features: all
     targets: []
-publish:
+release:
   enabled: false

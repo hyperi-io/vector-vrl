@@ -49,10 +49,10 @@ Then:
 
 1. Land changes on `main` via PR or direct push - your call. `git push`
    works as normal, nothing wraps it.
-2. To publish `vector-vrl` to PyPI, push to `main` with a `Publish: true`
+2. To publish `vector-vrl` to PyPI, push to `main` with a `Release: true`
    trailer on the HEAD commit message (or trigger the workflow manually via
    `workflow_dispatch`). `.github/workflows/ci.yml`'s `plan` job checks for
-   that trailer and gates the `publish-vector-vrl` job on it - every other
+   that trailer and gates the `tag-and-release` job on it - every other
    push only runs quality + test.
 
 ## Before you push

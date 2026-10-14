@@ -29,6 +29,5 @@ build:
   enabled: true
   strategies:
   - native
-  type: package
-publish:
+release:
   enabled: false

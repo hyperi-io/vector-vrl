@@ -49,7 +49,8 @@ permissions:
   contents: read
 
 env:
-  HYPERCI_INSTALL: ${{ vars.HYPERCI_INSTALL_OVERRIDE || 'uvx --no-cache --refresh hyperi-ci' }}
+  # Without --python, uv takes the runner's interpreter and resolves the newest hyperi-ci that runs on it.
+  HYPERCI_INSTALL: ${{ vars.HYPERCI_INSTALL_OVERRIDE || 'uvx --python 3.14 --no-cache --refresh hyperi-ci' }}
 
 jobs:
   plan:

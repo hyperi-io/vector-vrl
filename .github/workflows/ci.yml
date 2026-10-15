@@ -352,6 +352,8 @@ jobs:
         continue-on-error: true
         env:
           RELEASE_VERSION: ${{ steps.forcedtag.outputs.version || needs.plan.outputs.next-version }}
+          # The repo root has no package manifest, so VERSION is the only file to stamp.
+          HYPERI_CI_LANGUAGE: none
         run: ${{ env.HYPERCI_INSTALL }} stamp-version "$RELEASE_VERSION"
 
       - name: Commit the rendered release artefacts

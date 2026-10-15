@@ -27,3 +27,6 @@ build:
   - native
 release:
   enabled: true
+  # Wheels go to PyPI only; there are no standalone binaries to publish.
+  destinations:
+    binaries: false

@@ -3,6 +3,12 @@
 Rendered by CI and committed back at the end of a release -- do not edit by
 hand. Release notes also appear on the GitHub Releases page, one per tag.
 
+## [1.0.11](https://github.com/hyperi-io/vector-vrl/compare/v1.0.10...v1.0.11) (2026-10-23)
+
+### Bug Fixes
+
+* **security:** update rustls-webpki to 0.103.16 and certifi to 2026.10.19 ([#49](https://github.com/hyperi-io/vector-vrl/issues/49)) ([96cc9ae](https://github.com/hyperi-io/vector-vrl/commit/96cc9aeb3f6b57ff4e737643a72a4347b959ceb8))
+
 ## [1.0.10](https://github.com/hyperi-io/vector-vrl/compare/v1.0.9...v1.0.10) (2026-10-14)
 
 ### Bug Fixes

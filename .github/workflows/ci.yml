@@ -188,7 +188,10 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
 
+      # Both Mac legs run on the arm64 runner, so without a suffix they derive one cache key and race to save it.
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          cache-suffix: ${{ matrix.name }}
 
       - name: Stamp the predicted version
         # Version-first: the wheel must carry the version about to be tagged,

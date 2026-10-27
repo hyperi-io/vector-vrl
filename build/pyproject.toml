@@ -28,6 +28,7 @@ dev = [
     # without it declared here the checks pass only where a ruff happens to
     # be on PATH, and fail on a clean runner. Held to the same minor as
     # vector-vrl's lock so one repo is not linted by two ruff versions.
+    "pytest-xdist>=3.8.0",
     "ruff>=0.17.0,<0.18",
 ]
 

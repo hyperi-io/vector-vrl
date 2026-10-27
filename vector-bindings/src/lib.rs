@@ -165,6 +165,7 @@ fn execute_vrl_on_event(program: &Program, event_data: &str, secrets: SecretMap)
             let error_msg = match terminate {
                 Terminate::Abort(msg) => format!("VRL aborted: {}", msg),
                 Terminate::Error(err) => format!("VRL error: {}", err),
+                Terminate::Interrupted => "VRL interrupted".to_string(),
             };
             Err(error_msg)
         }
@@ -217,6 +218,7 @@ fn vrl_value_to_json(value: Value) -> JsonValue {
             JsonValue::Number(serde_json::Number::from_f64(f.into_inner()).unwrap_or(0.into()))
         }
         Value::Bytes(b) => JsonValue::String(String::from_utf8_lossy(&b).to_string()),
+        Value::String(s) => JsonValue::String(s.to_string()),
         Value::Array(arr) => JsonValue::Array(arr.into_iter().map(vrl_value_to_json).collect()),
         Value::Object(obj) => {
             let mut map = serde_json::Map::new();
@@ -816,6 +818,15 @@ mod tests {
         let outcome =
             execute_vrl_on_event(&program, r#"{"message": "not json"}"#, SecretMap::new());
         assert!(outcome.result.is_err());
+    }
+
+    #[test]
+    fn a_function_returning_a_guaranteed_utf8_string_reaches_the_output() {
+        // sha1 returns vrl's Value::String variant, distinct from Value::Bytes.
+        let program = compile_vrl_program(r#".digest = sha1("abc")"#).expect("compiles");
+        let outcome = execute_vrl_on_event(&program, r#"{"message":"seed"}"#, SecretMap::new());
+        let json = vrl_value_to_json(outcome.result.expect("program runs"));
+        assert_eq!(json["digest"], "a9993e364706816aba3e25717850c26c9cd0d89d");
     }
 
     #[test]

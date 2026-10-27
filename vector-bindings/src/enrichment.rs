@@ -112,6 +112,7 @@ impl EnrichmentTable {
 fn comparable_text<'a>(field: &str, value: &'a Value) -> Result<Cow<'a, str>, String> {
     match value {
         Value::Bytes(b) => Ok(String::from_utf8_lossy(b)),
+        Value::String(s) => Ok(Cow::Borrowed(&**s)),
         Value::Integer(i) => Ok(Cow::Owned(i.to_string())),
         Value::Float(f) => Ok(Cow::Owned(f.to_string())),
         Value::Boolean(b) => Ok(Cow::Owned(b.to_string())),
@@ -760,6 +761,20 @@ mod tests {
             err.contains("users"),
             "diagnostic should list what IS registered: {err}"
         );
+    }
+
+    #[test]
+    fn a_condition_from_a_string_returning_function_matches_a_cell() {
+        // md5 returns vrl's Value::String variant, distinct from Value::Bytes.
+        let _guard = lock();
+        let csv = TempCsv::new(
+            "string-cond",
+            "id,key\n1,9dd4e461268c8034f5c8564e155c67a6\n",
+        );
+        register_table("hashes", "file", csv.path(), b',').expect("csv loads");
+        let row = run(r#". = get_enrichment_table_record!("hashes", {"key": md5("x")})"#)
+            .expect("lookup runs");
+        assert_eq!(row["id"], "1");
     }
 
     #[test]

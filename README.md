@@ -1,11 +1,21 @@
 # vector-vrl
 
-**Vector's own VRL compiler and runtime, compiled into a Python extension.
-The real VRL engine from [Vector](https://vector.dev/), self contained - no
-binary to install, nothing to shell out to.**
-
+[![PyPI](https://img.shields.io/pypi/v/vector-vrl?logo=pypi)](https://pypi.org/project/vector-vrl/)
+[![Python](https://img.shields.io/badge/python-3.14%2B-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
+
+Vector's own VRL compiler and runtime, compiled into a Python extension. Compile, check and run VRL, the language [Vector](https://vector.dev/) transforms events with, in your Python process, with no Vector binary to install and nothing to shell out to.
+
+## What it gives you
+
+- `validate_vrl`, which compiles without running, so a broken transform fails your test suite instead of your pipeline.
+- `execute_vrl`, which runs a program over a batch of events on the same VRL runtime Vector uses. Nested objects come back as JSON strings, as [the API reference](docs/reference-python-api.md) sets out.
+- `validate_config`, which compiles the inline VRL of each `remap` transform in a Vector config, in-process, and lists the `file:` ones it skipped and any it could not judge.
+- `validate_config_with_vector`, the full check through a one-shot `vector validate`, where Vector is installed.
+- No host or network functions in the published wheel, and a nesting limit that stops a crafted program overflowing the parser's stack.
+- The real compiler to build playgrounds, linters, editor plugins and agent loops against.
+
+## Quick start
 
 ```bash
 pip install vector-vrl
@@ -27,22 +37,6 @@ execute_vrl(vrl, ['{"message": "{\\"level\\": \\"info\\"}"}'])
 validate_vrl(vrl).success
 # True
 ```
-
-## What it is good for
-
-- **Test VRL in CI** without installing Vector. `validate_vrl` compiles
-  without running, so a broken transform fails your test suite instead of
-  your pipeline.
-- **Check a Vector config before you ship it.** `validate_config` walks a
-  YAML/TOML/JSON config and compiles every `remap` transform's VRL, catching
-  the most common way a config breaks. It checks the VRL, not the sinks -
-  see the caveat under The API.
-- **Build VRL tooling** - playgrounds, linters, editor plugins, config
-  generators - against the real compiler rather than a regex approximation.
-- **Process events in Python** with semantics identical to what your Vector
-  deployment will do to the same data.
-- **AI agents** for VRL processing and development loops - generate a
-  candidate, compile it, run it, iterate, all without a Vector install.
 
 ## Safer to hand untrusted VRL
 
@@ -190,4 +184,4 @@ the test binary is a **vectordotdev/vector** release tarball.
 
 ## Issues
 
-Open bugs: [this repo](https://github.com/hyperi-io/vector-vrl/issues?q=is%3Aopen+is%3Aissue+type%3ABug+-label%3Abacklog+-label%3Anext-minor) | [whole DFE suite](https://github.com/search?type=issues&q=is%3Aopen+is%3Aissue+type%3ABug+-label%3Abacklog+-label%3Anext-minor+repo%3Ahyperi-io%2Fdfe-infra+repo%3Ahyperi-io%2Fdfe-docker+repo%3Ahyperi-io%2Fdfe-deploy+repo%3Ahyperi-io%2Fdfe-engine+repo%3Ahyperi-io%2Fdfe-loader+repo%3Ahyperi-io%2Fdfe-receiver+repo%3Ahyperi-io%2Fdfe-fetcher+repo%3Ahyperi-io%2Fdfe-archiver+repo%3Ahyperi-io%2Fdfe-transform-vrl+repo%3Ahyperi-io%2Fdfe-transform-vector+repo%3Ahyperi-io%2Fdfe-transform-elastic+repo%3Ahyperi-io%2Fdfe-ui+repo%3Ahyperi-io%2Fdfe-hyperdx+repo%3Ahyperi-io%2Fscalo-rs+repo%3Ahyperi-io%2Fscalo-py+repo%3Ahyperi-io%2Flogreducer+repo%3Ahyperi-io%2Fdfe-schemas+repo%3Ahyperi-io%2Fvector-vrl+repo%3Ahyperi-io%2Fculvert+repo%3Ahyperi-io%2Fclickhouse-dfe+repo%3Ahyperi-io%2Ffactbook-rs)
+Open bugs: [this repo](https://github.com/hyperi-io/vector-vrl/issues?q=is%3Aopen+is%3Aissue+type%3ABug+-label%3Abacklog+-label%3Anext-minor) | [whole DFE suite](https://github.com/search?type=issues&q=is%3Aopen+is%3Aissue+type%3ABug+-label%3Abacklog+-label%3Anext-minor+repo%3Ahyperi-io%2Fdfe-infra+repo%3Ahyperi-io%2Fdfe-docker+repo%3Ahyperi-io%2Fdfe-deploy+repo%3Ahyperi-io%2Fdfe-engine+repo%3Ahyperi-io%2Fdfe-loader+repo%3Ahyperi-io%2Fdfe-receiver+repo%3Ahyperi-io%2Fdfe-fetcher+repo%3Ahyperi-io%2Fdfe-archiver+repo%3Ahyperi-io%2Fdfe-transform-vrl+repo%3Ahyperi-io%2Fdfe-transform-vector+repo%3Ahyperi-io%2Fdfe-transform-elastic+repo%3Ahyperi-io%2Fdfe-ui+repo%3Ahyperi-io%2Fdfe-hyperdx+repo%3Ahyperi-io%2Fscalo-rs+repo%3Ahyperi-io%2Fscalo-py+repo%3Ahyperi-io%2Flogreducer+repo%3Ahyperi-io%2Fdfe-schemas+repo%3Ahyperi-io%2Fvector-vrl+repo%3Ahyperi-io%2Fculvert+repo%3Ahyperi-io%2Fdfe-clickhouse-rs+repo%3Ahyperi-io%2Ffactbook-rs)

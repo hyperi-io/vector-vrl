@@ -3,6 +3,16 @@
 Rendered by CI and committed back at the end of a release -- do not edit by
 hand. Release notes also appear on the GitHub Releases page, one per tag.
 
+## [1.0.12](https://github.com/hyperi-io/vector-vrl/compare/v1.0.11...v1.0.12) (2026-10-31)
+
+### Bug Fixes
+
+* declare the repo classification as oss ([#57](https://github.com/hyperi-io/vector-vrl/issues/57)) ([7fe3f4d](https://github.com/hyperi-io/vector-vrl/commit/7fe3f4dbeb4d981c1d9e4ffcffc64dfc134dad1d))
+* run the Python test suites in parallel ([#56](https://github.com/hyperi-io/vector-vrl/issues/56)) ([e4ce7f4](https://github.com/hyperi-io/vector-vrl/commit/e4ce7f4206825569434e2a73bb8a89c3a4a5e06f))
+* run VRL on its own stack, fail infinite floats and stream the performance run ([#58](https://github.com/hyperi-io/vector-vrl/issues/58)) ([c12f30b](https://github.com/hyperi-io/vector-vrl/commit/c12f30b2611d71eee4e1af28293e6c6bdf986bc9))
+* **security:** take ctutils 0.4.5 and key the uv cache per wheel ([#50](https://github.com/hyperi-io/vector-vrl/issues/50)) ([019601b](https://github.com/hyperi-io/vector-vrl/commit/019601bedbdefcc72385a7b180935e3f9e04c4f5))
+* test against Vector 0.60.0 and follow vrl 0.37 ([#55](https://github.com/hyperi-io/vector-vrl/issues/55)) ([44aa1d3](https://github.com/hyperi-io/vector-vrl/commit/44aa1d37653c2f1a62168bc0d908071a705c495c))
+
 ## [1.0.11](https://github.com/hyperi-io/vector-vrl/compare/v1.0.10...v1.0.11) (2026-10-23)
 
 ### Bug Fixes

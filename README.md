@@ -59,10 +59,16 @@ Two guards apply to every entry point that compiles VRL:
   process, which no Python `except` can catch, so the check runs before the
   parser ever sees the input. There is no way to switch this one off.
 
-That combination is what makes it reasonable to accept VRL from a user - a
-multi-tenant playground, a customer-supplied transform, a config someone
-pasted in. The reasoning is in
-[docs/architecture.md](docs/architecture.md).
+VRL also runs on a thread with 256 MiB of stack, so a long chain of operators
+with no brackets compiles where the caller's thread would overflow.
+
+Neither guard bounds memory. A short program that doubles a string in a loop
+asks for gigabytes and aborts the process, and an operator chain tens of
+thousands of terms long still overflows the VRL stack. So where the VRL comes
+from someone who may be hostile - a multi-tenant playground, a
+customer-supplied transform - run it in a child process under a memory limit
+(`RLIMIT_AS`) and a time limit, and treat a dead child as a refused program.
+The reasoning is in [docs/architecture.md](docs/architecture.md).
 
 ## The API
 

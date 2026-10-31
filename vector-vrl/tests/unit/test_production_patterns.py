@@ -4,6 +4,9 @@ It mapped the getters off the class rather than an instance, so every call
 raised TypeError for want of `self` - and nothing called it until now.
 """
 
+import subprocess
+import sys
+
 import pytest
 
 pytest.importorskip("yaml")
@@ -56,6 +59,33 @@ def test_invalid_yaml_is_reported_as_a_value_error(tmp_path):
 
     with pytest.raises(ValueError, match="Invalid YAML in nginx_access"):
         patterns.get_nginx_access()
+
+
+def test_a_bare_install_still_exports_every_name():
+    """PyYAML is an extra: without it the package must import, naming the extra on use."""
+    script = (
+        "import sys\n"
+        "sys.modules['yaml'] = None\n"
+        "import vector_vrl\n"
+        "missing = [n for n in vector_vrl.__all__ if not hasattr(vector_vrl, n)]\n"
+        "assert not missing, missing\n"
+        "try:\n"
+        "    vector_vrl.ProductionPatterns().get_apache_combined()\n"
+        "except ModuleNotFoundError as exc:\n"
+        "    assert 'vector-vrl[yaml]' in str(exc), exc\n"
+        "else:\n"
+        "    raise SystemExit('a pattern loaded without PyYAML')\n"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_every_advertised_pattern_has_a_config_file():

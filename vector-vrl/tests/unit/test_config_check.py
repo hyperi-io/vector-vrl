@@ -161,6 +161,30 @@ class TestFunctionsThisBuildCannotCompile:
         assert result.ok
         assert result.unchecked == ()
 
+    @pytest.mark.parametrize(
+        "vrl",
+        [
+            ".x = upcasee(.message)  # get_hostname is not called here",
+            ".h = get_hostname!()\n.x = nosuchfn(.message)",
+            f"{ENRICHMENT}\n.p = parse_json(.message)",
+            f"{SANDBOXED}\n.p = parse_json(.message)",
+        ],
+        ids=["in-comment", "typo", "enrichment-and-error", "sandboxed-and-error"],
+    )
+    def test_a_real_error_in_the_same_source_still_fails(self, vrl: str):
+        result = validate_config({"transforms": {"t": _remap(vrl)}})
+        assert not result.ok
+        assert [f.name for f in result.failures] == ["t"]
+        assert result.unchecked == ()
+
+    def test_the_reason_names_every_function_left_out(self):
+        vrl = '.h = get_hostname!()\n.e = get_env_var!("HOME")'
+        result = validate_config({"transforms": {"t": _remap(vrl)}})
+        reason = result.unchecked[0].unchecked_reason
+        assert reason is not None
+        assert "get_hostname" in reason
+        assert "get_env_var" in reason
+
     def test_the_reason_names_the_offending_function(self):
         result = validate_config({"transforms": {"t": _remap(self.ENRICHMENT)}})
         reason = result.unchecked[0].unchecked_reason

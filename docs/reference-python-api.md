@@ -93,6 +93,10 @@ A VRL runtime error replaces that event's dict entirely. You get `error` and
 Note there is no `success` key here. Detect failure with
 `"error" in result`. `Vector.process_logs` returns exactly this shape too.
 
+A float that is infinite (`parse_float!("1e999")`) has no JSON form, so that
+event comes back as an `error` naming the field (``field `.x` is an infinite
+float``) rather than as a number.
+
 ## Event secrets
 
 Vector attaches a secret store to every event, separate from the event's
@@ -205,9 +209,11 @@ defaults to 100.
 `events_per_second` clamped to a 1000 ceiling - it is not an independent
 measurement, so two runs above 1000 eps score identically.
 
-`len(test_data) * iterations` is materialised in memory before execution,
-so it is capped at 1,000,000. Over that, `ValueError`. Both inputs are
-caller-controlled, which is why the cap exists.
+`len(test_data) * iterations` is capped at 1,000,000. Over that, `ValueError`.
+Both inputs are caller-controlled, which is why the cap exists. Events run one
+at a time, so memory stays at one event however many iterations are asked for,
+and the timing covers compiling and running the VRL but not building the
+Python result dicts.
 
 This measures the in-process runtime and nothing else. It does not compare
 against the `vector` binary.
@@ -334,11 +340,14 @@ Two groups of VRL this build cannot judge on its own:
   was never given is unchecked - register it to have it checked.
 - The ten functions the sandboxed default build leaves out (`get_env_var`,
   `get_hostname`, `http_request`, `dns_lookup` and six more - see VRL
-  restrictions below) report `call to undefined function`.
+  restrictions below) report ``call to undefined function `get_hostname` ``.
 
 VRL calling either group is not a broken config, so those transforms come back
 with `ok` True and an `unchecked_reason` naming the function, never in
-`failures`. Use `validate_config_with_vector` to check them for real.
+`failures`. That holds only while those are the source's ONLY compile errors.
+One more error of any kind, a typo'd function name included, puts the
+transform in `failures`. Use `validate_config_with_vector` to check the
+unchecked ones for real.
 
 The event-secret functions used to be in this list. They are compiled in now,
 so a config using `get_secret`, `set_secret` or `remove_secret` is checked
@@ -404,8 +413,14 @@ limit you get a message containing `nests`:
 'VRL source nests 1000 levels deep, exceeding the 64-level limit'
 ```
 
-Both are covered by tests in `vector-bindings/src/lib.rs` and
-`vector-vrl/tests/unit/test_vector_class.py`.
+Chains that nest no bracket (`a + b + c ...`, long `else if` ladders, `!!!x`)
+recurse just as deep, so compiling and running VRL happens on a thread with a
+256 MiB stack of its own, whatever stack the calling thread has. If the
+process cannot reserve that much address space the work runs on the calling
+thread instead. A far longer chain still overflows it.
+
+Both bracket and stack limits are covered by tests in
+`vector-bindings/src/lib.rs` and `vector-vrl/tests/unit/test_vector_class.py`.
 
 ## The subprocess surface
 

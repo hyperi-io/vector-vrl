@@ -7,7 +7,8 @@ use pyo3::types::{PyDict, PyDictMethods};
 use serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 use std::num::Saturating;
-use std::time::Instant;
+use std::sync::{Mutex, PoisonError};
+use std::time::{Duration, Instant};
 use vrl::compiler::prelude::{Function, NotNan};
 use vrl::compiler::runtime::{Runtime, Terminate};
 use vrl::compiler::state::RuntimeState;
@@ -75,6 +76,42 @@ fn check_nesting_depth(vrl_code: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Stack for compiling, running and dropping a VRL program.
+///
+/// The compiler and the expression tree recurse once per level of expression
+/// depth, and operator chains (`a + b + c ...`, `else if` ladders, `!!!x`) nest
+/// without any bracket for `check_nesting_depth` to count. A release build needs
+/// about 4 KiB per level, so the 512 KiB a macOS thread gets overflows at 100
+/// chained operators and the 8 MiB of a Linux main thread at about 2000. A stack
+/// overflow aborts the interpreter, so the work runs on a thread of its own.
+const VRL_STACK_BYTES: usize = 256 * 1024 * 1024;
+
+/// Run `work` on a thread with `VRL_STACK_BYTES` of stack and return its result.
+///
+/// Falls back to the calling thread when the thread cannot be created, which
+/// is what an address-space limit (`ulimit -v`) does to a 256 MiB reservation.
+/// A panic in `work` resumes on the caller, as it would have without the thread.
+fn on_vrl_stack<T: Send>(work: impl FnOnce() -> T + Send) -> T {
+    let slot = Mutex::new(Some(work));
+    let run = || {
+        let work = slot.lock().unwrap_or_else(PoisonError::into_inner).take();
+        work.map(|work| work())
+    };
+    let result = std::thread::scope(|scope| {
+        match std::thread::Builder::new()
+            .name("vrl".into())
+            .stack_size(VRL_STACK_BYTES)
+            .spawn_scoped(scope, run)
+        {
+            Ok(handle) => handle
+                .join()
+                .unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
+            Err(_) => run(),
+        }
+    });
+    result.expect("the work closure runs exactly once")
+}
+
 /// Every VRL function a program compiled by this crate can call.
 ///
 /// VRL's standard library, plus the enrichment and event-secret functions this
@@ -102,10 +139,31 @@ fn compile_vrl_program(vrl_code: &str) -> Result<Program, String> {
             // Format compilation errors
             let mut errors = Vec::new();
             for diagnostic in diagnostics {
-                errors.push(diagnostic.message().to_string());
+                errors.push(diagnostic_text(&diagnostic, vrl_code));
             }
             errors.join("\n")
         })
+}
+
+/// A diagnostic's message, with the function name added to "call to undefined
+/// function".
+///
+/// The compiler keeps that name only in the label's span, so without this a
+/// caller cannot tell a typo from a function this build deliberately omits.
+fn diagnostic_text(diagnostic: &vrl::diagnostic::Diagnostic, vrl_code: &str) -> String {
+    let message = diagnostic.message();
+    if message != "call to undefined function" {
+        return message.to_string();
+    }
+    let name = diagnostic
+        .labels()
+        .iter()
+        .find(|label| label.primary)
+        .and_then(|label| vrl_code.get(label.span.range()));
+    match name {
+        Some(name) => format!("{message} `{name}`"),
+        None => message.to_string(),
+    }
 }
 
 /// One event's VRL run: what the program produced, and the secrets it left.
@@ -116,6 +174,36 @@ fn compile_vrl_program(vrl_code: &str) -> Result<Program, String> {
 pub(crate) struct EventOutcome {
     pub(crate) result: Result<Value, String>,
     pub(crate) secrets: SecretMap,
+}
+
+/// Compile `vrl_code` and run it over each event, all on the VRL stack.
+///
+/// Every event starts from a copy of `secrets`. The only error is a compile
+/// failure, as the text `compile_vrl_program` produced.
+fn run_events(
+    vrl_code: &str,
+    events: &[String],
+    secrets: &SecretMap,
+) -> Result<Vec<EventOutcome>, String> {
+    on_vrl_stack(|| {
+        let program = compile_vrl_program(vrl_code)?;
+        Ok(events
+            .iter()
+            .map(|event| execute_vrl_on_event(&program, event, secrets.clone()))
+            .collect())
+    })
+}
+
+/// `run_events` for the Python entry points, raising the compile failure as a
+/// `ValueError`.
+fn run_events_py(
+    vrl_code: &str,
+    events: &[String],
+    secrets: &SecretMap,
+) -> PyResult<Vec<EventOutcome>> {
+    run_events(vrl_code, events, secrets).map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("VRL compilation failed: {e}"))
+    })
 }
 
 /// Execute VRL program on a single event using Vector's VRL runtime
@@ -160,7 +248,12 @@ fn execute_vrl_on_event(program: &Program, event_data: &str, secrets: SecretMap)
         // The VRL program's own return value is discarded here; the mutated
         // `target.value` (the event after any `.field = ...` assignments) is
         // what callers expect back.
-        Ok(_) => Ok(target.value),
+        Ok(_) => match first_infinite_float(&target.value, "") {
+            Some(path) => Err(format!(
+                "VRL error: field `{path}` is an infinite float, which has no JSON form"
+            )),
+            None => Ok(target.value),
+        },
         Err(terminate) => {
             let error_msg = match terminate {
                 Terminate::Abort(msg) => format!("VRL aborted: {}", msg),
@@ -214,8 +307,10 @@ fn vrl_value_to_json(value: Value) -> JsonValue {
         Value::Null => JsonValue::Null,
         Value::Boolean(b) => JsonValue::Bool(b),
         Value::Integer(i) => JsonValue::Number(i.into()),
+        // Infinity has no JSON form. `execute_vrl_on_event` fails the event
+        // before it gets here, so Null is only a floor.
         Value::Float(f) => {
-            JsonValue::Number(serde_json::Number::from_f64(f.into_inner()).unwrap_or(0.into()))
+            serde_json::Number::from_f64(f.into_inner()).map_or(JsonValue::Null, JsonValue::Number)
         }
         Value::Bytes(b) => JsonValue::String(String::from_utf8_lossy(&b).to_string()),
         Value::String(s) => JsonValue::String(s.to_string()),
@@ -229,6 +324,24 @@ fn vrl_value_to_json(value: Value) -> JsonValue {
         }
         Value::Timestamp(ts) => JsonValue::String(ts.to_string()),
         Value::Regex(r) => JsonValue::String(r.to_string()),
+    }
+}
+
+/// Path of the first infinite float in `value`, or None when every float is finite.
+///
+/// VRL floats cannot be NaN but can be infinite (`parse_float!("1e999")`), and
+/// JSON has no infinity.
+fn first_infinite_float(value: &Value, path: &str) -> Option<String> {
+    match value {
+        Value::Float(f) if f.is_infinite() => Some(path.to_string()),
+        Value::Array(items) => items
+            .iter()
+            .enumerate()
+            .find_map(|(index, item)| first_infinite_float(item, &format!("{path}[{index}]"))),
+        Value::Object(fields) => fields
+            .iter()
+            .find_map(|(key, field)| first_infinite_float(field, &format!("{path}.{key}"))),
+        _ => None,
     }
 }
 
@@ -355,27 +468,25 @@ impl Vector {
             ));
         }
 
-        // Compile VRL program using real Vector VRL compiler
-        let program = compile_program(&vrl_code)?;
+        // No secrets surface on the pipeline API - process_logs seeds an
+        // empty store and discards what the program left behind.
+        let outcomes = run_events_py(&vrl_code, &logs, &SecretMap::new())?;
 
         Python::attach(|py| {
             let mut results = Vec::with_capacity(logs.len());
 
-            for log in logs {
+            for (log, outcome) in logs.iter().zip(outcomes) {
                 // bytes_processed is input volume read, so an event that
                 // fails at runtime still counts its bytes.
                 self.bytes_processed += Saturating(log.len() as u64);
 
-                // No secrets surface on the pipeline API - process_logs seeds an
-                // empty store and discards what the program left behind.
-                let outcome = execute_vrl_on_event(&program, &log, SecretMap::new());
                 if outcome.result.is_ok() {
                     self.events_processed += Saturating(1);
                 } else {
                     self.errors += Saturating(1);
                 }
 
-                results.push(vrl_outcome_to_py_dict(py, outcome.result, &log)?);
+                results.push(vrl_outcome_to_py_dict(py, outcome.result, log)?);
             }
 
             Ok(results)
@@ -422,15 +533,13 @@ fn execute_vrl(
     input_data: Vec<String>,
     secrets: Option<SecretMap>,
 ) -> PyResult<Vec<Py<PyAny>>> {
-    let program = compile_program(&vrl_code)?;
-    let secrets = secrets.unwrap_or_default();
+    let outcomes = run_events_py(&vrl_code, &input_data, &secrets.unwrap_or_default())?;
 
     Python::attach(|py| {
         let mut results = Vec::with_capacity(input_data.len());
 
-        for input in input_data {
-            let outcome = execute_vrl_on_event(&program, &input, secrets.clone());
-            results.push(vrl_outcome_to_py_dict(py, outcome.result, &input)?);
+        for (input, outcome) in input_data.iter().zip(outcomes) {
+            results.push(vrl_outcome_to_py_dict(py, outcome.result, input)?);
         }
 
         Ok(results)
@@ -459,16 +568,14 @@ fn execute_vrl_with_secrets(
     input_data: Vec<String>,
     secrets: Option<SecretMap>,
 ) -> PyResult<Vec<Py<PyAny>>> {
-    let program = compile_program(&vrl_code)?;
-    let secrets = secrets.unwrap_or_default();
+    let outcomes = run_events_py(&vrl_code, &input_data, &secrets.unwrap_or_default())?;
 
     Python::attach(|py| {
         let mut results = Vec::with_capacity(input_data.len());
 
-        for input in input_data {
-            let outcome = execute_vrl_on_event(&program, &input, secrets.clone());
+        for (input, outcome) in input_data.iter().zip(outcomes) {
             let entry = PyDict::new(py);
-            entry.set_item("event", vrl_outcome_to_py_dict(py, outcome.result, &input)?)?;
+            entry.set_item("event", vrl_outcome_to_py_dict(py, outcome.result, input)?)?;
             entry.set_item("secrets", outcome.secrets)?;
             results.push(entry.into());
         }
@@ -477,19 +584,11 @@ fn execute_vrl_with_secrets(
     })
 }
 
-/// Compile VRL, turning a compilation failure into the ValueError the Python
-/// entry points raise.
-fn compile_program(vrl_code: &str) -> PyResult<Program> {
-    compile_vrl_program(vrl_code).map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("VRL compilation failed: {}", e))
-    })
-}
-
 /// Validate VRL syntax using real Vector VRL compiler
 #[pyfunction]
 fn validate_vrl(vrl_code: String) -> PyResult<VrlResult> {
-    match compile_vrl_program(&vrl_code) {
-        Ok(_) => Ok(VrlResult {
+    match on_vrl_stack(|| compile_vrl_program(&vrl_code).map(drop)) {
+        Ok(()) => Ok(VrlResult {
             success: true,
             output: Some("VRL syntax valid".to_string()),
             error: None,
@@ -580,30 +679,29 @@ fn get_vrl_performance(
 ) -> PyResult<Py<PyAny>> {
     let iter_count = iterations.unwrap_or(100);
 
-    // test_data.len() * iter_count is fully materialised in memory before
-    // execution; both are caller-controlled, so cap the total to bound
-    // worst-case memory use.
+    // Both factors are caller-controlled, so cap the product to bound the run time.
     const MAX_TOTAL_EVENTS: usize = 1_000_000;
-    let total_requested = test_data.len().saturating_mul(iter_count as usize);
-    if total_requested > MAX_TOTAL_EVENTS {
+    let total_events = test_data.len().saturating_mul(iter_count as usize);
+    if total_events > MAX_TOTAL_EVENTS {
         return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-            "requested {total_requested} events (test_data.len() * iterations) exceeds the {MAX_TOTAL_EVENTS} limit"
+            "requested {total_events} events (test_data.len() * iterations) exceeds the {MAX_TOTAL_EVENTS} limit"
         )));
     }
 
-    let start_time = std::time::Instant::now();
+    // Each pass over test_data is run and dropped in turn, so memory stays
+    // at one event however many iterations are asked for.
+    let processing_time = on_vrl_stack(|| -> Result<Duration, String> {
+        let start_time = Instant::now();
+        let program = compile_vrl_program(&vrl_code)?;
+        for event in test_data.iter().cycle().take(total_events) {
+            drop(execute_vrl_on_event(&program, event, SecretMap::new()));
+        }
+        Ok(start_time.elapsed())
+    })
+    .map_err(|e| {
+        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("VRL compilation failed: {e}"))
+    })?;
 
-    // Execute VRL processing with real VRL runtime
-    let repeated_data: Vec<String> = test_data
-        .iter()
-        .cycle()
-        .take(test_data.len() * iter_count as usize)
-        .cloned()
-        .collect();
-    let _results = execute_vrl(vrl_code.clone(), repeated_data, None)?;
-    let processing_time = start_time.elapsed();
-
-    let total_events = test_data.len() * iter_count as usize;
     let events_per_second = if processing_time.as_secs_f64() > 0.0 {
         total_events as f64 / processing_time.as_secs_f64()
     } else {
@@ -647,6 +745,7 @@ fn vector_bindings(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn nesting_depth_within_limit_is_accepted() {
@@ -719,15 +818,23 @@ mod tests {
         }
 
         // And the compiler agrees - an undefined function is a compile error
-        // whatever arguments it is given.
-        for call in [
-            r#".x = get_env_var!("HOME")"#,
-            r#".x = get_hostname!()"#,
-            r#".x = http_request!("http://169.254.169.254/")"#,
-            r#".x = dns_lookup!("example.com")"#,
+        // whatever arguments it is given, and the error names the function.
+        for (call, name) in [
+            (r#".x = get_env_var!("HOME")"#, "get_env_var"),
+            (r#".x = get_hostname!()"#, "get_hostname"),
+            (
+                r#".x = http_request!("http://169.254.169.254/")"#,
+                "http_request",
+            ),
+            (r#".x = dns_lookup!("example.com")"#, "dns_lookup"),
+            (".x = upcasee(.message)", "upcasee"),
         ] {
-            let result = compile_vrl_program(call);
-            assert!(result.is_err(), "expected {call:?} to fail to compile");
+            let error = compile_vrl_program(call).expect_err("must fail to compile");
+            assert_eq!(
+                error,
+                format!("call to undefined function `{name}`"),
+                "for {call:?}"
+            );
         }
     }
 
@@ -845,5 +952,94 @@ mod tests {
             outcome.secrets.get("touched").map(String::as_str),
             Some("yes")
         );
+    }
+
+    /// The stack of a thread spawned by Python's `threading` on macOS is 512 KiB
+    /// and `std::thread::spawn` gives 2 MiB. Nothing the VRL runs may depend on
+    /// the caller's stack, and an overflow aborts the test process.
+    const CALLER_STACK: usize = 2 * 1024 * 1024;
+
+    fn on_caller_stack<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
+        std::thread::Builder::new()
+            .stack_size(CALLER_STACK)
+            .spawn(work)
+            .expect("spawn test thread")
+            .join()
+            .expect("test thread panicked")
+    }
+
+    #[test]
+    fn expressions_chained_without_brackets_run_on_a_small_caller_stack() {
+        // None of these nests a bracket, so `check_nesting_depth` passes them.
+        // At this depth the sum overflows a 2 MiB stack when the VRL stack is no
+        // bigger. Compile time grows with the square of the depth.
+        let depth = 400;
+        for (name, vrl, expected) in [
+            (
+                "sum",
+                format!(".x = {}1", "1 + ".repeat(depth)),
+                json!(depth + 1),
+            ),
+            (
+                "not",
+                format!(".x = {}true", "!".repeat(depth)),
+                json!(true),
+            ),
+            (
+                "and",
+                format!(".x = {}true", "true && ".repeat(depth)),
+                json!(true),
+            ),
+            (
+                "else if",
+                format!(
+                    "if .message == \"a\" {{ .x = 0 }}{} else {{ .x = 3 }}",
+                    " else if .message == \"b\" { .x = 1 }".repeat(depth)
+                ),
+                json!(3),
+            ),
+        ] {
+            let outcomes = on_caller_stack(move || {
+                run_events(
+                    &vrl,
+                    &[r#"{"message":"seed"}"#.to_string()],
+                    &SecretMap::new(),
+                )
+            })
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
+            let event = vrl_value_to_json(outcomes.into_iter().next().unwrap().result.unwrap());
+            assert_eq!(event["x"], expected, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_panic_on_the_vrl_stack_reaches_the_caller() {
+        assert_eq!(on_vrl_stack(|| 7), 7);
+        let caught =
+            std::panic::catch_unwind(|| on_vrl_stack(|| -> u8 { panic!("from the vrl stack") }));
+        assert!(caught.is_err());
+    }
+
+    #[test]
+    fn an_infinite_float_fails_the_event_wherever_it_sits() {
+        for (vrl, expected) in [
+            (r#".top = parse_float!("1e999")"#, Err(".top")),
+            (
+                r#".n = {"list": [1.5, parse_float!("-1e999")]}"#,
+                Err(".n.list[1]"),
+            ),
+            (r#".fine = 2.5"#, Ok(())),
+        ] {
+            let program = compile_vrl_program(vrl).expect("compiles");
+            let outcome = execute_vrl_on_event(&program, r#"{"message":"seed"}"#, SecretMap::new());
+            match (outcome.result, expected) {
+                (Ok(_), Ok(())) => {}
+                (Err(error), Err(path)) => assert!(
+                    error.contains(&format!("`{path}` is an infinite float")),
+                    "for {vrl:?}: {error}"
+                ),
+                (got, want) => panic!("for {vrl:?}: got {got:?}, wanted {want:?}"),
+            }
+        }
     }
 }

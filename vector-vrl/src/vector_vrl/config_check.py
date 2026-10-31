@@ -11,6 +11,7 @@ of that. It needs the binary, and runs it one-shot - never as a daemon.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import tomllib
@@ -54,29 +55,50 @@ _SANDBOXED = (
 )
 
 
+_UNDEFINED_FUNCTION = re.compile(r"call to undefined function `([^`]+)`")
+# E111 is the code the enrichment functions report for an unregistered table.
+_UNKNOWN_TABLE = re.compile(
+    r"function compilation error: error\[E111\] unknown enrichment table "
+)
+
+
 def _uncompilable_reason(vrl: str, error: str | None) -> str | None:
-    """Name why this build cannot check `vrl`, or None if it is a real error."""
+    """Name why this build cannot check `vrl`, or None if it is a real error.
+
+    Every line of `error` is one compiler diagnostic. The VRL is unchecked only
+    when each of them is a function this build leaves out or a table nothing
+    registered. One other diagnostic makes it a real error, however many
+    sandboxed functions the source also names.
+    """
     if not error:
         return None
 
-    if "unknown enrichment table" in error:
-        used = [fn for fn in _ENRICHMENT if fn in vrl]
-        if used:
-            return (
-                f"uses {', '.join(used)} against an enrichment table this process "
-                "has not registered - Vector declares its tables in its own config; "
-                "call register_enrichment_table to have this checked"
-            )
+    left_out: list[str] = []
+    unregistered = False
+    for line in error.splitlines():
+        undefined = _UNDEFINED_FUNCTION.fullmatch(line)
+        if undefined and undefined.group(1) in _SANDBOXED:
+            if undefined.group(1) not in left_out:
+                left_out.append(undefined.group(1))
+        elif _UNKNOWN_TABLE.match(line):
+            unregistered = True
+        else:
+            return None
 
-    if "undefined function" not in error:
-        return None
-    used = [fn for fn in _SANDBOXED if fn in vrl]
-    if used:
-        return (
-            f"uses {', '.join(used)}, which is deliberately not compiled in so "
+    reasons = []
+    if unregistered:
+        used = [fn for fn in _ENRICHMENT if fn in vrl] or list(_ENRICHMENT)
+        reasons.append(
+            f"uses {', '.join(used)} against an enrichment table this process "
+            "has not registered - Vector declares its tables in its own config; "
+            "call register_enrichment_table to have this checked"
+        )
+    if left_out:
+        reasons.append(
+            f"uses {', '.join(left_out)}, which is deliberately not compiled in so "
             "caller-supplied VRL cannot reach the host or network"
         )
-    return None
+    return "; ".join(reasons) or None
 
 
 @dataclass(frozen=True)
@@ -112,14 +134,19 @@ class ConfigCheck:
         return tuple(c for c in self.checked if c.unchecked_reason is not None)
 
 
-def _load_yaml(text: str) -> Any:
+def import_yaml() -> Any:
+    """Return the `yaml` module, naming the extra that provides it when missing."""
     try:
         import yaml
-    except ModuleNotFoundError as exc:  # pragma: no cover - depends on the extra
+    except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(
-            "Reading a YAML Vector config needs PyYAML: pip install vector-vrl[yaml]"
+            "Reading YAML needs PyYAML: pip install vector-vrl[yaml]"
         ) from exc
-    return yaml.safe_load(text)
+    return yaml
+
+
+def _load_yaml(text: str) -> Any:
+    return import_yaml().safe_load(text)
 
 
 def _parse(source: dict[str, Any] | str | Path) -> dict[str, Any]:

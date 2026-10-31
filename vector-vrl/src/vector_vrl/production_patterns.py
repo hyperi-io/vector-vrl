@@ -7,7 +7,7 @@ Loads patterns from YAML configuration files
 from pathlib import Path
 from typing import Any
 
-import yaml
+from .config_check import import_yaml
 
 # The patterns with a YAML config under patterns/configs/ - the only names
 # get_pattern and benchmark_all_patterns accept.
@@ -56,6 +56,8 @@ class ProductionPatterns:
         if not yaml_file.exists():
             raise FileNotFoundError(f"Pattern not found: {pattern_name} ({yaml_file})")
 
+        # PyYAML is an extra, so a bare install must still import this module.
+        yaml = import_yaml()
         try:
             with open(yaml_file) as f:
                 config = yaml.safe_load(f)

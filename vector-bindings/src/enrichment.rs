@@ -12,9 +12,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use std::sync::{
-    Arc, Mutex, OnceLock, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard,
-};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use vrl::compiler::prelude::*;
 
@@ -310,7 +308,12 @@ impl FileTable {
 
         let key = conditions
             .iter()
-            .map(|(field, value)| Ok(comparable_key(comparable_text(field, value)?, case_sensitive)))
+            .map(|(field, value)| {
+                Ok(comparable_key(
+                    comparable_text(field, value)?,
+                    case_sensitive,
+                ))
+            })
             .collect::<Result<Vec<String>, String>>()?;
         index
             .get(&key)
@@ -543,7 +546,10 @@ fn compile_args(
         .and_then(|value| value.as_boolean())
         .unwrap_or(true);
 
-    let fields: Vec<String> = condition.keys().map(|key| key.as_str().to_owned()).collect();
+    let fields: Vec<String> = condition
+        .keys()
+        .map(|key| key.as_str().to_owned())
+        .collect();
     let index = data.index_for(case_sensitive, fields);
 
     Ok(CompiledArgs {

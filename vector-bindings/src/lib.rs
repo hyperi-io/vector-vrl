@@ -656,10 +656,8 @@ fn register_enrichment_table(
         }
     };
 
-    py.detach(|| {
-        enrichment::register_table(&name, &kind, std::path::Path::new(&path), delimiter)
-    })
-    .map_err(PyErr::new::<pyo3::exceptions::PyValueError, _>)
+    py.detach(|| enrichment::register_table(&name, &kind, std::path::Path::new(&path), delimiter))
+        .map_err(PyErr::new::<pyo3::exceptions::PyValueError, _>)
 }
 
 /// Drop every registered enrichment table.

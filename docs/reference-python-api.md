@@ -453,6 +453,18 @@ the path you pass - and `VectorTestRunner` raises `RuntimeError` at
 construction if no binary exists there. They do not use the compiled
 bindings.
 
+`VectorTestRunner` feeds the logs to Vector on stdin and returns when Vector
+exits, so a run takes as long as the work. Its `timeout` (60 s by default)
+kills a run that goes past it and reports it failed. A run succeeds when
+Vector exits 0 and every output line is JSON. Events a program aborts do not
+come back, and Vector's stderr is in the error message either way.
+
+`execute_vector_pipeline(config, input_data, timeout)` runs the config's own
+remap transforms, in the order their `inputs` chain them and each with its
+own options, over `input_data`. The config's sources and sinks are not used.
+A config whose transforms are not one chain of inline remaps raises
+`ValueError`.
+
 They are not part of the in-process API this package is for, and they are
 not covered by the test files that describe it. If you want VRL executed,
 use `execute_vrl`.

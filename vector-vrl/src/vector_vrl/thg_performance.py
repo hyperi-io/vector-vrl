@@ -93,11 +93,12 @@ class THGPerformanceAssessor:
                 metrics=THGMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, processing_time, 100.0),
                 thg_score=0.0,
                 performance_grade="F",
-                recommendations=[f"VRL compilation failed: {error_msg}"],
+                recommendations=[f"Vector run failed: {error_msg}"],
                 raw_output=[],
             )
 
-        # Calculate basic metrics
+        # A successful run is one where Vector exited after reading every input
+        # line, so the whole input is what it processed.
         events_per_second = total_events / processing_time if processing_time > 0 else 0
         bytes_per_second = total_bytes / processing_time if processing_time > 0 else 0
 
@@ -141,6 +142,12 @@ class THGPerformanceAssessor:
         thg_score = self._calculate_thg_score(metrics)
         grade = self._get_performance_grade(events_per_second)
         recommendations = self._generate_recommendations(metrics, vrl_code)
+        if successful_events < total_events:
+            recommendations.insert(
+                0,
+                f"{total_events - successful_events} of {total_events} events did not "
+                "come back - the program aborted or dropped them",
+            )
 
         return THGResult(
             pattern_name=pattern_name,

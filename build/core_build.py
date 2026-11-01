@@ -11,6 +11,37 @@ from dependency_sync import DependencyManager
 from monitoring import BuildMonitor
 from vector_detection import VectorDetector
 
+# Imports the package, requires the bundled extension and runs one program, so
+# neither an unrelated `vector` module nor a wheel without its extension passes.
+_VERIFY_SCRIPT = (
+    "from vector_vrl import execute_vrl, get_bindings_info\n"
+    "info = get_bindings_info()\n"
+    "assert info['bundled'], info\n"
+    "assert execute_vrl('.ok = true', ['{}']) == [{'ok': True}]\n"
+)
+
+
+def verify_python_layer(python: Path, cwd: Path) -> bool:
+    """Whether `python` imports vector_vrl with its bundled bindings and runs VRL."""
+    try:
+        result = subprocess.run(
+            [str(python), "-c", _VERIFY_SCRIPT],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=cwd,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        log_message(f"Python layer verification could not run: {error}")
+        return False
+    if result.returncode != 0:
+        log_message(f"Python layer verification failed: {result.stderr.strip()[-500:]}")
+        return False
+    return True
+
 
 class CoreBuildSystem:
     """Main orchestrator for 3-stage build process."""
@@ -327,21 +358,11 @@ class CoreBuildSystem:
         )
         build_time = time.time() - start_time
 
-        if success:
-            # Quick verification
-            try:
-                result = subprocess.run(
-                    [".venv/bin/python", "-c", 'import vector; print("OK")'],
-                    capture_output=True,
-                    cwd=self.vector_vrl_dir,
-                    timeout=10,
-                )
-
-                if result.returncode == 0:
-                    log_message(f"Python layer: {build_time:.1f}s")
-                    return StageResult(BuildStage.PYTHON_BINDINGS, True, build_time)
-            except Exception:
-                pass
+        if success and verify_python_layer(
+            self.vector_vrl_dir / ".venv" / "bin" / "python", self.vector_vrl_dir
+        ):
+            log_message(f"Python layer: {build_time:.1f}s")
+            return StageResult(BuildStage.PYTHON_BINDINGS, True, build_time)
 
         with open(log_file) as f:
             build_log = f.read()

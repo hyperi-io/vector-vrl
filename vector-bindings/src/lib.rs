@@ -218,7 +218,7 @@ fn execute_vrl_on_event(program: &Program, event_data: &str, secrets: SecretMap)
         // The VRL program's own return value is discarded here; the mutated
         // `target.value` (the event after any `.field = ...` assignments) is
         // what callers expect back.
-        Ok(_) => match (&target.value, first_infinite_float(&target.value, "")) {
+        Ok(_) => match (&target.value, first_infinite_float(&target.value)) {
             (Value::Object(_), None) => Ok(target.value),
             (Value::Object(_), Some(path)) => Err(format!(
                 "VRL error: field `{path}` is an infinite float, which has no JSON form"
@@ -343,17 +343,17 @@ fn vrl_value_to_json(value: Value) -> JsonValue {
 /// Path of the first infinite float in `value`, or None when every float is finite.
 ///
 /// VRL floats cannot be NaN but can be infinite (`parse_float!("1e999")`), and
-/// JSON has no infinity.
-fn first_infinite_float(value: &Value, path: &str) -> Option<String> {
+/// JSON has no infinity. The path is built only once one is found, so a clean
+/// event allocates nothing here.
+fn first_infinite_float(value: &Value) -> Option<String> {
     match value {
-        Value::Float(f) if f.is_infinite() => Some(path.to_string()),
-        Value::Array(items) => items
-            .iter()
-            .enumerate()
-            .find_map(|(index, item)| first_infinite_float(item, &format!("{path}[{index}]"))),
-        Value::Object(fields) => fields
-            .iter()
-            .find_map(|(key, field)| first_infinite_float(field, &format!("{path}.{key}"))),
+        Value::Float(f) if f.is_infinite() => Some(String::new()),
+        Value::Array(items) => items.iter().enumerate().find_map(|(index, item)| {
+            first_infinite_float(item).map(|path| under(format_args!("[{index}]"), path))
+        }),
+        Value::Object(fields) => fields.iter().find_map(|(key, field)| {
+            first_infinite_float(field).map(|path| under(format_args!(".{key}"), path))
+        }),
         _ => None,
     }
 }

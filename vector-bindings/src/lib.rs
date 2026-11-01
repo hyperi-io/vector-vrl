@@ -165,16 +165,20 @@ fn run_events(
     })
 }
 
-/// `run_events` for the Python entry points, raising the compile failure as a
-/// `ValueError`.
+/// `run_events` for the Python entry points, with the GIL released while it
+/// runs and a compile failure raised as a `ValueError`.
 fn run_events_py(
+    py: Python<'_>,
     vrl_code: &str,
     events: &[String],
     secrets: &SecretMap,
 ) -> PyResult<Vec<EventOutcome>> {
-    run_events(vrl_code, events, secrets).map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("VRL compilation failed: {e}"))
-    })
+    py.detach(|| run_events(vrl_code, events, secrets))
+        .map_err(compile_error)
+}
+
+fn compile_error(error: String) -> PyErr {
+    PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("VRL compilation failed: {error}"))
 }
 
 /// Execute VRL program on a single event using Vector's VRL runtime
@@ -474,8 +478,16 @@ impl Vector {
     }
 
     /// Process logs in-process using real VRL runtime
-    fn process_logs(&mut self, logs: Vec<String>, vrl_code: String) -> PyResult<Vec<Py<PyAny>>> {
-        if !self.initialized {
+    ///
+    /// The pipeline is not borrowed while the VRL runs with the GIL released,
+    /// so another thread may call it meanwhile. Counters are added once the
+    /// batch is converted.
+    fn process_logs(
+        slf: &Bound<'_, Self>,
+        logs: Vec<String>,
+        vrl_code: String,
+    ) -> PyResult<Vec<Py<PyAny>>> {
+        if !slf.borrow().initialized {
             return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
                 "Vector not initialized",
             ));
@@ -483,27 +495,30 @@ impl Vector {
 
         // No secrets surface on the pipeline API - process_logs seeds an
         // empty store and discards what the program left behind.
-        let outcomes = run_events_py(&vrl_code, &logs, &SecretMap::new())?;
+        let py = slf.py();
+        let outcomes = run_events_py(py, &vrl_code, &logs, &SecretMap::new())?;
 
-        Python::attach(|py| {
-            let mut results = Vec::with_capacity(logs.len());
-
-            for (log, outcome) in logs.iter().zip(outcomes) {
-                // bytes_processed is input volume read, so an event that
-                // fails at runtime still counts its bytes.
-                self.bytes_processed += Saturating(log.len() as u64);
-
-                if outcome.result.is_ok() {
-                    self.events_processed += Saturating(1);
-                } else {
-                    self.errors += Saturating(1);
-                }
-
-                results.push(vrl_outcome_to_py_dict(py, outcome.result, log)?);
+        let mut results = Vec::with_capacity(logs.len());
+        let mut processed = Saturating(0);
+        let mut errors = Saturating(0);
+        // bytes_processed is input volume read, so an event that fails at
+        // runtime still counts its bytes.
+        let mut bytes = Saturating(0);
+        for (log, outcome) in logs.iter().zip(outcomes) {
+            bytes += Saturating(log.len() as u64);
+            if outcome.result.is_ok() {
+                processed += Saturating(1);
+            } else {
+                errors += Saturating(1);
             }
+            results.push(vrl_outcome_to_py_dict(py, outcome.result, log)?);
+        }
 
-            Ok(results)
-        })
+        let mut this = slf.borrow_mut();
+        this.events_processed += processed;
+        this.errors += errors;
+        this.bytes_processed += bytes;
+        Ok(results)
     }
 
     /// Get Vector runtime statistics
@@ -542,21 +557,17 @@ impl Vector {
 #[pyfunction]
 #[pyo3(signature = (vrl_code, input_data, secrets=None))]
 fn execute_vrl(
+    py: Python<'_>,
     vrl_code: String,
     input_data: Vec<String>,
     secrets: Option<SecretMap>,
 ) -> PyResult<Vec<Py<PyAny>>> {
-    let outcomes = run_events_py(&vrl_code, &input_data, &secrets.unwrap_or_default())?;
-
-    Python::attach(|py| {
-        let mut results = Vec::with_capacity(input_data.len());
-
-        for (input, outcome) in input_data.iter().zip(outcomes) {
-            results.push(vrl_outcome_to_py_dict(py, outcome.result, input)?);
-        }
-
-        Ok(results)
-    })
+    let outcomes = run_events_py(py, &vrl_code, &input_data, &secrets.unwrap_or_default())?;
+    input_data
+        .iter()
+        .zip(outcomes)
+        .map(|(input, outcome)| vrl_outcome_to_py_dict(py, outcome.result, input))
+        .collect()
 }
 
 /// Execute VRL and hand back each event's secret store alongside the event
@@ -577,30 +588,26 @@ fn execute_vrl(
 #[pyfunction]
 #[pyo3(signature = (vrl_code, input_data, secrets=None))]
 fn execute_vrl_with_secrets(
+    py: Python<'_>,
     vrl_code: String,
     input_data: Vec<String>,
     secrets: Option<SecretMap>,
 ) -> PyResult<Vec<Py<PyAny>>> {
-    let outcomes = run_events_py(&vrl_code, &input_data, &secrets.unwrap_or_default())?;
-
-    Python::attach(|py| {
-        let mut results = Vec::with_capacity(input_data.len());
-
-        for (input, outcome) in input_data.iter().zip(outcomes) {
-            let entry = PyDict::new(py);
-            entry.set_item("event", vrl_outcome_to_py_dict(py, outcome.result, input)?)?;
-            entry.set_item("secrets", outcome.secrets)?;
-            results.push(entry.into());
-        }
-
-        Ok(results)
-    })
+    let outcomes = run_events_py(py, &vrl_code, &input_data, &secrets.unwrap_or_default())?;
+    let mut results = Vec::with_capacity(input_data.len());
+    for (input, outcome) in input_data.iter().zip(outcomes) {
+        let entry = PyDict::new(py);
+        entry.set_item("event", vrl_outcome_to_py_dict(py, outcome.result, input)?)?;
+        entry.set_item("secrets", outcome.secrets)?;
+        results.push(entry.into());
+    }
+    Ok(results)
 }
 
 /// Validate VRL syntax using real Vector VRL compiler
 #[pyfunction]
-fn validate_vrl(vrl_code: String) -> PyResult<VrlResult> {
-    match on_vrl_stack(|| compile_vrl_program(&vrl_code).map(drop)) {
+fn validate_vrl(py: Python<'_>, vrl_code: String) -> PyResult<VrlResult> {
+    match py.detach(|| on_vrl_stack(|| compile_vrl_program(&vrl_code).map(drop))) {
         Ok(()) => Ok(VrlResult {
             success: true,
             output: Some("VRL syntax valid".to_string()),
@@ -628,6 +635,7 @@ fn validate_vrl(vrl_code: String) -> PyResult<VrlResult> {
 #[pyfunction]
 #[pyo3(signature = (name, kind, path, delimiter=None))]
 fn register_enrichment_table(
+    py: Python<'_>,
     name: String,
     kind: String,
     path: String,
@@ -648,8 +656,10 @@ fn register_enrichment_table(
         }
     };
 
-    enrichment::register_table(&name, &kind, std::path::Path::new(&path), delimiter)
-        .map_err(PyErr::new::<pyo3::exceptions::PyValueError, _>)
+    py.detach(|| {
+        enrichment::register_table(&name, &kind, std::path::Path::new(&path), delimiter)
+    })
+    .map_err(PyErr::new::<pyo3::exceptions::PyValueError, _>)
 }
 
 /// Drop every registered enrichment table.
@@ -686,6 +696,7 @@ fn list_enrichment_tables() -> PyResult<Vec<Py<PyAny>>> {
 #[pyfunction]
 #[pyo3(signature = (vrl_code, test_data, iterations=None))]
 fn get_vrl_performance(
+    py: Python<'_>,
     vrl_code: String,
     test_data: Vec<String>,
     iterations: Option<u32>,
@@ -703,17 +714,18 @@ fn get_vrl_performance(
 
     // Each pass over test_data is run and dropped in turn, so memory stays
     // at one event however many iterations are asked for.
-    let processing_time = on_vrl_stack(|| -> Result<Duration, String> {
-        let start_time = Instant::now();
-        let program = compile_vrl_program(&vrl_code)?;
-        for event in test_data.iter().cycle().take(total_events) {
-            drop(execute_vrl_on_event(&program, event, SecretMap::new()));
-        }
-        Ok(start_time.elapsed())
-    })
-    .map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("VRL compilation failed: {e}"))
-    })?;
+    let processing_time = py
+        .detach(|| {
+            on_vrl_stack(|| -> Result<Duration, String> {
+                let start_time = Instant::now();
+                let program = compile_vrl_program(&vrl_code)?;
+                for event in test_data.iter().cycle().take(total_events) {
+                    drop(execute_vrl_on_event(&program, event, SecretMap::new()));
+                }
+                Ok(start_time.elapsed())
+            })
+        })
+        .map_err(compile_error)?;
 
     let events_per_second = if processing_time.as_secs_f64() > 0.0 {
         total_events as f64 / processing_time.as_secs_f64()
@@ -721,15 +733,12 @@ fn get_vrl_performance(
         0.0
     };
 
-    Python::attach(|py| {
-        let metrics_dict = PyDict::new(py);
-        metrics_dict.set_item("events_per_second", events_per_second)?;
-        metrics_dict.set_item("processing_time_seconds", processing_time.as_secs_f64())?;
-        metrics_dict.set_item("total_events", total_events)?;
-        metrics_dict.set_item("thg_score", events_per_second.min(1000.0))?;
-
-        Ok(metrics_dict.into())
-    })
+    let metrics_dict = PyDict::new(py);
+    metrics_dict.set_item("events_per_second", events_per_second)?;
+    metrics_dict.set_item("processing_time_seconds", processing_time.as_secs_f64())?;
+    metrics_dict.set_item("total_events", total_events)?;
+    metrics_dict.set_item("thg_score", events_per_second.min(1000.0))?;
+    Ok(metrics_dict.into())
 }
 
 /// Vector data processing bindings for Python with real VRL execution

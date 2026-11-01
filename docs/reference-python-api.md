@@ -23,6 +23,11 @@ vector_vrl.get_bindings_info()
 
 `source` is `bundled`, `external` or `none`.
 
+Every call that compiles or runs VRL releases the GIL while the VRL works, so
+other Python threads keep running. Only building the returned dicts holds it.
+Several threads may share one `Vector`: each `process_logs` call adds its own
+counts to `get_stats()`.
+
 ## execute_vrl
 
 ```python

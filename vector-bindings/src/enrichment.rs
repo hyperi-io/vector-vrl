@@ -265,7 +265,9 @@ impl GeoipTable {
         let Some(record) = record else {
             return Ok(Vec::new());
         };
-        match json_to_vrl_value(record) {
+        let record =
+            json_to_vrl_value(record).map_err(|e| format!("mmdb record for {text}: {e}"))?;
+        match record {
             Value::Object(row) => Ok(vec![apply_select(row, select)?]),
             _ => Err(format!("mmdb record for {text} is not an object")),
         }

@@ -182,26 +182,25 @@ fn run_events_py(
 /// `secrets` seeds the event's secret store before the program runs; pass an
 /// empty map for an event with no secrets.
 fn execute_vrl_on_event(program: &Program, event_data: &str, secrets: SecretMap) -> EventOutcome {
-    // Parse input as JSON or plain text
-    let event_value = if event_data.trim().starts_with('{') {
-        // Try JSON parsing
-        match serde_json::from_str::<JsonValue>(event_data) {
-            Ok(json_val) => {
-                // Convert JSON to VRL Value
-                json_to_vrl_value(json_val)
-            }
-            Err(_) => {
-                // Fallback to plain text
-                let mut obj = BTreeMap::new();
-                obj.insert("message".into(), Value::from(event_data));
-                Value::Object(obj)
-            }
+    // A string starting with `{` that parses is the event. Anything else is
+    // plain text, wrapped as `message`.
+    let parsed = event_data
+        .trim()
+        .starts_with('{')
+        .then(|| serde_json::from_str::<JsonValue>(event_data).ok())
+        .flatten();
+    let event_value = match parsed.map(json_to_vrl_value) {
+        Some(Ok(value)) => value,
+        Some(Err(out_of_range)) => {
+            return EventOutcome {
+                result: Err(format!("VRL error: input {out_of_range}")),
+                secrets,
+            };
         }
-    } else {
-        // Plain text - wrap in message field
-        let mut obj = BTreeMap::new();
-        obj.insert("message".into(), Value::from(event_data));
-        Value::Object(obj)
+        None => Value::Object(BTreeMap::from([(
+            "message".into(),
+            Value::from(event_data),
+        )])),
     };
 
     // EventTarget rather than vrl's TargetValue: its secret store is a map this
@@ -219,11 +218,15 @@ fn execute_vrl_on_event(program: &Program, event_data: &str, secrets: SecretMap)
         // The VRL program's own return value is discarded here; the mutated
         // `target.value` (the event after any `.field = ...` assignments) is
         // what callers expect back.
-        Ok(_) => match first_infinite_float(&target.value, "") {
-            Some(path) => Err(format!(
+        Ok(_) => match (&target.value, first_infinite_float(&target.value, "")) {
+            (Value::Object(_), None) => Ok(target.value),
+            (Value::Object(_), Some(path)) => Err(format!(
                 "VRL error: field `{path}` is an infinite float, which has no JSON form"
             )),
-            None => Ok(target.value),
+            (other, _) => Err(format!(
+                "VRL error: the program set the event to a {}, and an event must be an object",
+                other.kind_str()
+            )),
         },
         Err(terminate) => {
             let error_msg = match terminate {
@@ -241,35 +244,74 @@ fn execute_vrl_on_event(program: &Program, event_data: &str, secrets: SecretMap)
     }
 }
 
-/// Convert JSON value to VRL value
-pub(crate) fn json_to_vrl_value(json: JsonValue) -> Value {
-    match json {
+/// A JSON integer above `i64::MAX`, which VRL's signed 64-bit integer cannot hold.
+///
+/// Rejected rather than rounded to a float, which would silently change an id
+/// or a counter. An integer past `u64::MAX` reaches here already parsed as a
+/// float by serde_json, so that range cannot be told apart from a float.
+#[derive(Debug)]
+pub(crate) struct IntegerOutOfRange {
+    path: String,
+    value: u64,
+}
+
+impl std::fmt::Display for IntegerOutOfRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "field `{}` holds {}, outside VRL's 64-bit signed integer range",
+            self.path, self.value
+        )
+    }
+}
+
+/// `path` with `segment` in front, built only once a lookup has found something.
+fn under(segment: impl std::fmt::Display, mut path: String) -> String {
+    path.insert_str(0, &segment.to_string());
+    path
+}
+
+/// Convert a JSON value to a VRL value.
+pub(crate) fn json_to_vrl_value(json: JsonValue) -> Result<Value, IntegerOutOfRange> {
+    Ok(match json {
         JsonValue::Null => Value::Null,
         JsonValue::Bool(b) => Value::Boolean(b),
-        JsonValue::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                Value::Integer(i)
-            } else if let Some(f) = n.as_f64() {
-                // Value::Float requires vrl's own NotNan type, not a separately
-                // pinned ordered-float crate -- the two can diverge in version.
-                // 0.0 is never NaN, so this fallback can never fail.
-                Value::Float(
-                    NotNan::new(f).unwrap_or_else(|_| NotNan::new(0.0).expect("0.0 is never NaN")),
-                )
-            } else {
-                Value::Null
+        JsonValue::Number(n) => match (n.as_i64(), n.as_u64(), n.as_f64()) {
+            (Some(i), _, _) => Value::Integer(i),
+            (None, Some(value), _) => {
+                return Err(IntegerOutOfRange {
+                    path: String::new(),
+                    value,
+                });
             }
-        }
+            // serde_json never parses NaN, so the 0.0 floor is never taken.
+            (None, None, Some(f)) => Value::Float(NotNan::new(f).unwrap_or_default()),
+            (None, None, None) => Value::Null,
+        },
         JsonValue::String(s) => Value::Bytes(s.into()),
-        JsonValue::Array(arr) => Value::Array(arr.into_iter().map(json_to_vrl_value).collect()),
-        JsonValue::Object(obj) => {
-            let mut map = BTreeMap::new();
-            for (k, v) in obj {
-                map.insert(k.into(), json_to_vrl_value(v));
-            }
-            Value::Object(map)
-        }
-    }
+        JsonValue::Array(arr) => Value::Array(
+            arr.into_iter()
+                .enumerate()
+                .map(|(index, item)| {
+                    json_to_vrl_value(item).map_err(|e| IntegerOutOfRange {
+                        path: under(format_args!("[{index}]"), e.path),
+                        ..e
+                    })
+                })
+                .collect::<Result<Vec<Value>, IntegerOutOfRange>>()?,
+        ),
+        JsonValue::Object(obj) => Value::Object(
+            obj.into_iter()
+                .map(|(key, item)| match json_to_vrl_value(item) {
+                    Ok(value) => Ok((key.into(), value)),
+                    Err(e) => Err(IntegerOutOfRange {
+                        path: under(format_args!(".{key}"), e.path),
+                        ..e
+                    }),
+                })
+                .collect::<Result<BTreeMap<_, _>, IntegerOutOfRange>>()?,
+        ),
+    })
 }
 
 /// Convert VRL value to JSON value
@@ -985,6 +1027,47 @@ mod tests {
         let caught =
             std::panic::catch_unwind(|| on_vrl_stack(|| -> u8 { panic!("from the vrl stack") }));
         assert!(caught.is_err());
+    }
+
+    fn run_seed(vrl: &str, event: &str) -> Result<Value, String> {
+        let program = compile_vrl_program(vrl).expect("compiles");
+        execute_vrl_on_event(&program, event, SecretMap::new()).result
+    }
+
+    #[test]
+    fn a_program_that_replaces_the_event_with_a_non_object_fails_the_event() {
+        for (vrl, kind) in [
+            (". = [1, 2]", "array"),
+            (r#". = "value""#, "string"),
+            (". = 3", "integer"),
+        ] {
+            let error = run_seed(vrl, r#"{"message":"seed"}"#)
+                .expect_err("a non-object event has no dict form");
+            assert!(
+                error.contains(&format!("set the event to a {kind}")),
+                "for {vrl:?}: {error}"
+            );
+        }
+        assert!(run_seed(". = {\"a\": 1}", r#"{"message":"seed"}"#).is_ok());
+    }
+
+    #[test]
+    fn an_input_integer_outside_the_vrl_range_fails_the_event() {
+        for (event, path) in [
+            (r#"{"id": 18446744073709551615}"#, ".id"),
+            (r#"{"a": [1, {"b": 9223372036854775808}]}"#, ".a[1].b"),
+        ] {
+            let error = run_seed(".seen = true", event).expect_err("must not round to a float");
+            assert!(
+                error.contains(&format!("field `{path}`")) && error.contains("outside"),
+                "for {event}: {error}"
+            );
+        }
+        for edge in [i64::MAX, i64::MIN] {
+            let event = format!(r#"{{"id": {edge}}}"#);
+            let json = vrl_value_to_json(run_seed(".seen = true", &event).expect("in range"));
+            assert_eq!(json["id"], json!(edge), "for {edge}");
+        }
     }
 
     #[test]

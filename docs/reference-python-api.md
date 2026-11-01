@@ -97,6 +97,16 @@ A float that is infinite (`parse_float!("1e999")`) has no JSON form, so that
 event comes back as an `error` naming the field (``field `.x` is an infinite
 float``) rather than as a number.
 
+Two more shapes fail the event the same way rather than coming back wrong:
+
+- A program that sets the whole event to something other than an object
+  (`. = [1, 2]`, `. = "text"`) has no dict to return. The `error` says what it
+  was set to.
+- An input integer above `9223372036854775807` (`i64::MAX`) does not fit VRL's
+  integer. The `error` names the field instead of rounding it to a float. An
+  integer past `18446744073709551615` is parsed as a float before VRL sees it,
+  so that range still arrives rounded.
+
 ## Event secrets
 
 Vector attaches a secret store to every event, separate from the event's

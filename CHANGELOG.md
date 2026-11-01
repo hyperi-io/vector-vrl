@@ -3,6 +3,12 @@
 Rendered by CI and committed back at the end of a release -- do not edit by
 hand. Release notes also appear on the GitHub Releases page, one per tag.
 
+## [1.0.13](https://github.com/hyperi-io/vector-vrl/compare/v1.0.12...v1.0.13) (2026-11-01)
+
+### Bug Fixes
+
+* **vector-vrl:** fix VRL guards, GIL handling and test runner ([#60](https://github.com/hyperi-io/vector-vrl/issues/60)) ([4d0beab](https://github.com/hyperi-io/vector-vrl/commit/4d0beab2042718c1b8e23799669fc9e5fd96ff10))
+
 ## [1.0.12](https://github.com/hyperi-io/vector-vrl/compare/v1.0.11...v1.0.12) (2026-10-31)
 
 ### Bug Fixes

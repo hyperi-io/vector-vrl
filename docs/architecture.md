@@ -72,7 +72,9 @@ still links none of it. If you add a dependency on a broader `vrl` feature
 set, check what it re-enables before you ship it.
 
 A VRL source string also can't nest more than 64 levels deep
-(`MAX_VRL_NESTING_DEPTH` in `lib.rs`) - past a few hundred levels the
-parser's own recursion overflows the stack and crashes the process. Both
-of these are covered by regression tests in `vector-bindings/src/lib.rs`'s
-`#[cfg(test)]` module.
+(`MAX_VRL_NESTING_DEPTH` in `nesting.rs`) - past a few hundred levels the
+parser's own recursion overflows the stack and crashes the process. The
+count skips string, raw string, regex and timestamp literals and `#`
+comments, as VRL's own lexer does, so a `")"` inside a literal cannot hide a
+real level. Both of these are covered by regression tests in
+`vector-bindings/src/lib.rs` and `vector-bindings/src/nesting.rs`.

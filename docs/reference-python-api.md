@@ -405,8 +405,9 @@ posture".
 VRL source may not nest brackets more than 64 levels deep
 (`MAX_VRL_NESTING_DEPTH`). Past a few hundred the parser's own recursion
 overflows the stack and takes the process down, which no Python `except`
-can catch, so the check runs before the parser sees the input. Over the
-limit you get a message containing `nests`:
+can catch, so the check runs before the parser sees the input. Brackets
+inside string, raw string, regex and timestamp literals and `#` comments do
+not count. Over the limit you get a message containing `nests`:
 
 ```python
 >>> validate_vrl('.x = ' + '(' * 1000 + 'true' + ')' * 1000).error

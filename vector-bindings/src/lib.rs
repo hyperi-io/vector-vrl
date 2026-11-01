@@ -1,4 +1,5 @@
 mod enrichment;
+mod nesting;
 mod secrets;
 
 use pyo3::IntoPyObjectExt;
@@ -15,6 +16,7 @@ use vrl::compiler::state::RuntimeState;
 use vrl::compiler::{Program, TimeZone, compile};
 use vrl::value::Value;
 
+use crate::nesting::check_nesting_depth;
 use crate::secrets::EventTarget;
 
 /// A secret store as it crosses the Python boundary, and as one event's VRL
@@ -43,37 +45,6 @@ impl VrlResult {
             self.success, self.output, self.error
         )
     }
-}
-
-// The VRL parser recurses per nesting level with no depth limit of its
-// own; past a few hundred levels of (), {}, or [] it overflows the stack
-// and segfaults the whole process (uncatchable in Rust - a Python caller
-// could crash the interpreter with a single malicious VRL string). This
-// cap rejects the input before it reaches the parser; ordinary VRL never
-// nests anywhere near this deep.
-const MAX_VRL_NESTING_DEPTH: usize = 64;
-
-fn check_nesting_depth(vrl_code: &str) -> Result<(), String> {
-    let mut depth: usize = 0;
-    let mut max_depth: usize = 0;
-    for c in vrl_code.chars() {
-        match c {
-            '(' | '{' | '[' => {
-                depth += 1;
-                max_depth = max_depth.max(depth);
-            }
-            ')' | '}' | ']' => {
-                depth = depth.saturating_sub(1);
-            }
-            _ => {}
-        }
-    }
-    if max_depth > MAX_VRL_NESTING_DEPTH {
-        return Err(format!(
-            "VRL source nests {max_depth} levels deep, exceeding the {MAX_VRL_NESTING_DEPTH}-level limit"
-        ));
-    }
-    Ok(())
 }
 
 /// Stack for compiling, running and dropping a VRL program.
@@ -748,15 +719,11 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn nesting_depth_within_limit_is_accepted() {
-        let vrl = format!("{}{}{}", "(".repeat(64), "true", ")".repeat(64));
-        assert!(check_nesting_depth(&vrl).is_ok());
-    }
-
-    #[test]
-    fn nesting_depth_over_limit_is_rejected() {
-        let vrl = format!("{}{}{}", "(".repeat(65), "true", ")".repeat(65));
-        assert!(check_nesting_depth(&vrl).is_err());
+    fn compile_rejects_arrays_nested_behind_string_closers() {
+        let deep = 1000;
+        let vrl = format!(".x = {}1{}", "[\")\", ".repeat(deep), "]".repeat(deep));
+        let error = compile_vrl_program(&vrl).expect_err("must be rejected before parsing");
+        assert!(error.contains("nests 1000 levels"), "{error}");
     }
 
     #[test]

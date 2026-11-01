@@ -14,19 +14,19 @@ NC='\033[0m' # No Color
 
 # Logging functions
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    printf '%b\n' "${BLUE}[INFO]${NC} $1"
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    printf '%b\n' "${GREEN}[SUCCESS]${NC} $1"
 }
 
 log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    printf '%b\n' "${YELLOW}[WARNING]${NC} $1"
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    printf '%b\n' "${RED}[ERROR]${NC} $1"
 }
 
 # Detect operating system
@@ -109,7 +109,7 @@ install_fedora_deps() {
     fi
     
     log_info "Using package manager: $PKG_MANAGER"
-    sudo $PKG_MANAGER install -y "${packages[@]}"
+    sudo "${PKG_MANAGER}" install -y "${packages[@]}"
     
     log_success "Fedora/RHEL dependencies installed successfully"
 }
@@ -194,7 +194,7 @@ verify_installation() {
     
     # Check essential tools
     for tool in gcc rustc uv; do
-        if ! command -v $tool &> /dev/null; then
+        if ! command -v "${tool}" &> /dev/null; then
             log_error "$tool is not installed or not in PATH"
             errors=$((errors + 1))
         else

@@ -151,7 +151,7 @@ class TestEventsTheVrlEngineMustNotMangle:
 
         (result,) = pipeline.process_logs(['{"message": "m"}'], vrl)
 
-        assert f"set the event to a {kind}" in result["error"]
+        assert f"replaced the event with a value of type {kind}" in result["error"]
         stats = pipeline.get_stats()
         assert (stats["events_processed"], stats["errors"]) == (0, 1)
 

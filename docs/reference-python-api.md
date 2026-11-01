@@ -105,8 +105,10 @@ float``) rather than as a number.
 Two more shapes fail the event the same way rather than coming back wrong:
 
 - A program that sets the whole event to something other than an object
-  (`. = [1, 2]`, `. = "text"`) has no dict to return. The `error` says what it
-  was set to.
+  (`. = [1, 2]`, `. = "text"`) has no dict to return. The `error` names the
+  type it was set to. Vector splits an event set to an array, as
+  `. = unnest(.messages)` does, into several events, and one input here
+  returns one dict, so that event fails too.
 - An input integer above `9223372036854775807` (`i64::MAX`) does not fit VRL's
   integer. The `error` names the field instead of rounding it to a float. An
   integer past `18446744073709551615` is parsed as a float before VRL sees it,

@@ -228,7 +228,7 @@ fn execute_vrl_on_event(program: &Program, event_data: &str, secrets: SecretMap)
                 "VRL error: field `{path}` is an infinite float, which has no JSON form"
             )),
             (other, _) => Err(format!(
-                "VRL error: the program set the event to a {}, and an event must be an object",
+                "VRL error: the program replaced the event with a value of type {}, and an event must be an object",
                 other.kind_str()
             )),
         },
@@ -1051,7 +1051,7 @@ mod tests {
             let error = run_seed(vrl, r#"{"message":"seed"}"#)
                 .expect_err("a non-object event has no dict form");
             assert!(
-                error.contains(&format!("set the event to a {kind}")),
+                error.contains(&format!("replaced the event with a value of type {kind}")),
                 "for {vrl:?}: {error}"
             );
         }

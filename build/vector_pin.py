@@ -69,6 +69,8 @@ def _release_published_at(tag: str) -> str | None:
     url = f"https://api.github.com/repos/vectordotdev/vector/releases/tags/{tag}"
     req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
     try:
+        # The URL is a fixed https:// prefix plus a tag VECTOR_TAG_RE matched.
+        # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.load(resp)
     except urllib.error.HTTPError as error:

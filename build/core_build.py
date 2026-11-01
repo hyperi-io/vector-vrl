@@ -128,6 +128,8 @@ class CoreBuildSystem:
             import io
             import tarfile
 
+            # extractall's filter="data" refuses absolute paths, `..` and links out of the target.
+            # nosemgrep: trailofbits.python.tarfile-extractall-traversal.tarfile-extractall-traversal
             with tarfile.open(fileobj=io.BytesIO(response.content), mode="r:gz") as tar:
                 # Extract to temporary location first
                 temp_extract = self.tmp_dir / f"vector-extract-{version}"

@@ -21,26 +21,28 @@ def remap_chain(config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
         ValueError: the config has no transforms, one is not an inline
             remap, or they do not form a single chain.
     """
-    transforms = config.get("transforms")
-    if not isinstance(transforms, dict) or not transforms:
+    found = config.get("transforms")
+    if not isinstance(found, dict) or not found:
         raise ValueError("the config has no transforms to run")
+    transforms: dict[str, Any] = found
     for name, transform in transforms.items():
         if not isinstance(transform, dict) or transform.get("type") != "remap":
             raise ValueError(f"transform {name!r} is not a remap")
         if not isinstance(transform.get("source"), str):
             raise ValueError(f"remap {name!r} has no inline source")
 
-    def upstream(name: str) -> list[str]:
-        inputs = transforms[name].get("inputs") or []
-        return [i for i in inputs if i in transforms]
-
-    heads = [name for name in transforms if not upstream(name)]
+    upstream = {
+        name: [i for i in transform.get("inputs") or [] if i in transforms]
+        for name, transform in transforms.items()
+    }
+    heads = [name for name, before in upstream.items() if not before]
     following = {
-        name: [n for n in transforms if name in upstream(n)] for name in transforms
+        name: [n for n, before in upstream.items() if name in before]
+        for name in transforms
     }
     if (
         len(heads) != 1
-        or any(len(upstream(n)) > 1 for n in transforms)
+        or any(len(before) > 1 for before in upstream.values())
         or any(len(after) > 1 for after in following.values())
     ):
         raise ValueError("the remap transforms must form one chain through `inputs`")

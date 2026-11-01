@@ -159,7 +159,7 @@ try:
         THGResult,
         quick_thg_assessment,
     )
-    from .vector_test_utils import VectorTestRunner
+    from .vector_test_utils import VectorTestRunner, remap_chain
 
     _performance_available = True
 except (
@@ -245,31 +245,35 @@ def assess_vrl_performance(
 
 
 def execute_vector_pipeline(
-    config: dict, input_data: list, timeout: int = 30
+    config: dict, input_data: list, timeout: float = 30
 ) -> dict:  # pragma: no cover - delegates to vector_test_utils.py, outside the tested bindings surface
-    """Execute a Vector pipeline configuration with performance monitoring.
+    """Run a Vector config's remap transforms over `input_data` in a real Vector.
+
+    The config's remap transforms run in the order their `inputs` chain them,
+    each with its own options. Its sources and sinks are not used: the events
+    come from `input_data` and what comes out is returned.
 
     Args:
         config: Vector configuration dictionary
         input_data: List of input log entries
-        timeout: Execution timeout in seconds
+        timeout: Seconds before the Vector run is killed and reported failed
 
     Returns:
         dict: Execution results with performance metrics
+
+    Raises:
+        ValueError: the transforms are not one chain of inline remaps.
     """
     if not _performance_available:
         raise ImportError("Vector pipeline execution not available")
 
+    transforms = remap_chain(config)
     runner = VectorTestRunner()
 
-    # Convert config to VRL if needed
-    if "transforms" in config and "vrl" in str(config["transforms"]):
-        vrl_code = str(config["transforms"])
-    else:
-        vrl_code = "# Configuration-based processing\n."
-
     start_time = time.time()
-    success, results, error_msg = runner.test_vrl_with_vector(vrl_code, input_data)
+    success, results, error_msg = runner.run_remap_chain(
+        transforms, input_data, "pipeline", timeout
+    )
     end_time = time.time()
 
     processing_time = end_time - start_time

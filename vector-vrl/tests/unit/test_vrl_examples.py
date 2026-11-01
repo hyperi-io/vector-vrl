@@ -39,6 +39,12 @@ def _needs_upstream_files(example: dict) -> bool:
     return any(marker in example["source"] for marker in NEEDS_UPSTREAM_FILES)
 
 
+# Examples whose program replaces the event with an array, which Vector splits
+# into several events. execute_vrl returns one dict per input, so that event
+# fails with an error naming the array rather than coming back empty.
+SPLITS_THE_EVENT = ("unnest",)
+
+
 def _gated() -> set[str]:
     """Functions the default build does not compile, per the coverage table."""
     out = set()
@@ -117,6 +123,11 @@ def test_upstream_example(example: dict):
         assert outcome in ("error", "compile_fail"), (
             f"upstream expects this to fail: {example['err']}"
         )
+        return
+
+    if example["function"] in SPLITS_THE_EVENT:
+        assert outcome == "error", f"expected the array event to fail: {value}"
+        assert "value of type array" in str(value)
         return
 
     assert outcome != "compile_fail", f"upstream example does not compile: {value}"

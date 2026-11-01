@@ -10,9 +10,9 @@
 //! unknown key is a compile-time error.
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, OnceLock, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use vrl::compiler::prelude::*;
 
@@ -41,7 +41,36 @@ fn write_tables(lock: &RwLock<TableMap>) -> RwLockWriteGuard<'_, TableMap> {
 /// A CSV file loaded into memory at registration time.
 pub(crate) struct FileTable {
     path: PathBuf,
+    headers: Vec<KeyString>,
     rows: Vec<ObjectMap>,
+    /// Indexes built for the condition fields of compiled programs, kept for
+    /// the table's lifetime so a recompile reuses them.
+    indexes: Mutex<HashMap<IndexKey, Arc<RowIndex>>>,
+}
+
+/// Case sensitivity and the condition fields, in the order VRL resolves them.
+type IndexKey = (bool, Vec<String>);
+
+/// Row numbers by the comparable text of the indexed fields, in field order.
+pub(crate) type RowIndex = HashMap<Vec<String>, Vec<usize>>;
+
+/// How many matching rows a lookup wants back.
+#[derive(Clone, Copy)]
+enum Wanted {
+    /// `get_enrichment_table_record`: exactly one, so a second match is an error.
+    One,
+    /// `find_enrichment_table_records`: every match.
+    All,
+}
+
+impl Wanted {
+    /// Rows worth copying out: a second one is enough to report ambiguity.
+    fn limit(self) -> usize {
+        match self {
+            Wanted::One => 2,
+            Wanted::All => usize::MAX,
+        }
+    }
 }
 
 /// A MaxMind DB (GeoIP2/GeoLite2) opened at registration time.
@@ -92,14 +121,27 @@ impl EnrichmentTable {
         }
     }
 
+    /// The index a compiled lookup on `fields` uses, or None for a geoip table
+    /// or a field the CSV has no column for.
+    fn index_for(&self, case_sensitive: bool, fields: Vec<String>) -> Option<Arc<RowIndex>> {
+        match self {
+            EnrichmentTable::File(t) => t.index_for(case_sensitive, fields),
+            EnrichmentTable::Geoip(_) => None,
+        }
+    }
+
     fn find_rows(
         &self,
+        index: Option<&RowIndex>,
         conditions: &[(String, Value)],
         case_sensitive: bool,
         select: Option<&[String]>,
+        wanted: Wanted,
     ) -> Result<Vec<ObjectMap>, String> {
         match self {
-            EnrichmentTable::File(t) => t.find_rows(conditions, case_sensitive, select),
+            EnrichmentTable::File(t) => {
+                t.find_rows(index, conditions, case_sensitive, select, wanted)
+            }
             EnrichmentTable::Geoip(t) => t.find_rows(conditions, select),
         }
     }
@@ -122,10 +164,19 @@ fn comparable_text<'a>(field: &str, value: &'a Value) -> Result<Cow<'a, str>, St
     }
 }
 
-/// Keep only the requested keys, erroring on a key the row does not carry.
-fn apply_select(row: ObjectMap, select: Option<&[String]>) -> Result<ObjectMap, String> {
+/// `text` as an index key compares it: lowercased when the lookup ignores case.
+fn comparable_key(text: Cow<'_, str>, case_sensitive: bool) -> String {
+    if case_sensitive {
+        text.into_owned()
+    } else {
+        text.to_lowercase()
+    }
+}
+
+/// Copy out only the requested keys, erroring on a key the row does not carry.
+fn apply_select(row: &ObjectMap, select: Option<&[String]>) -> Result<ObjectMap, String> {
     let Some(select) = select else {
-        return Ok(row);
+        return Ok(row.clone());
     };
     let mut out = ObjectMap::new();
     for key in select {
@@ -184,47 +235,94 @@ impl FileTable {
 
         Ok(FileTable {
             path: path.to_path_buf(),
+            headers,
             rows,
+            indexes: Mutex::new(HashMap::new()),
         })
     }
 
-    /// Linear scan; every condition must match (AND), equality only.
+    /// The index on `fields`, built on first use and cached.
+    ///
+    /// None when a field is not a column, which the lookup reports at run time
+    /// as Vector does. A poisoned cache builds the index uncached rather than
+    /// trusting a map a panicking writer left.
+    fn index_for(&self, case_sensitive: bool, fields: Vec<String>) -> Option<Arc<RowIndex>> {
+        if !fields
+            .iter()
+            .all(|field| self.headers.iter().any(|header| header.as_str() == field))
+        {
+            return None;
+        }
+        let key: IndexKey = (case_sensitive, fields);
+        if let Ok(cache) = self.indexes.lock()
+            && let Some(index) = cache.get(&key)
+        {
+            return Some(Arc::clone(index));
+        }
+
+        let mut index = RowIndex::new();
+        for (number, row) in self.rows.iter().enumerate() {
+            let values: Option<Vec<String>> = key
+                .1
+                .iter()
+                .map(|field| {
+                    let cell = row.get(field.as_str())?;
+                    let text = comparable_text(field, cell).ok()?;
+                    Some(comparable_key(text, case_sensitive))
+                })
+                .collect();
+            if let Some(values) = values {
+                index.entry(values).or_default().push(number);
+            }
+        }
+        let index = Arc::new(index);
+        if let Ok(mut cache) = self.indexes.lock() {
+            cache.insert(key, Arc::clone(&index));
+        }
+        Some(index)
+    }
+
+    /// Every row whose condition fields all equal the condition values.
+    ///
+    /// `index` is the one `index_for` built for these condition fields, and
+    /// None only when a field has no column.
     fn find_rows(
         &self,
+        index: Option<&RowIndex>,
         conditions: &[(String, Value)],
         case_sensitive: bool,
         select: Option<&[String]>,
+        wanted: Wanted,
     ) -> Result<Vec<ObjectMap>, String> {
-        let mut wanted = Vec::with_capacity(conditions.len());
-        for (field, value) in conditions {
-            let text = comparable_text(field, value)?;
-            let text = if case_sensitive {
-                text.into_owned()
-            } else {
-                text.to_lowercase()
-            };
-            wanted.push((field.as_str(), text));
-        }
-
-        let mut out = Vec::new();
-        'rows: for row in &self.rows {
-            for (field, expected) in &wanted {
-                let Some(cell) = row.get(*field) else {
-                    return Err(format!("field {field:?} not found in enrichment table"));
-                };
-                let actual = comparable_text(field, cell)?;
-                let matched = if case_sensitive {
-                    actual.as_ref() == expected.as_str()
-                } else {
-                    actual.to_lowercase() == *expected
-                };
-                if !matched {
-                    continue 'rows;
+        let Some(index) = index else {
+            return match conditions
+                .iter()
+                .find(|(field, _)| !self.headers.iter().any(|h| h.as_str() == field))
+            {
+                Some((field, _)) if !self.rows.is_empty() => {
+                    Err(format!("field {field:?} not found in enrichment table"))
                 }
-            }
-            out.push(apply_select(row.clone(), select)?);
-        }
-        Ok(out)
+                _ => Ok(Vec::new()),
+            };
+        };
+
+        let key = conditions
+            .iter()
+            .map(|(field, value)| {
+                Ok(comparable_key(
+                    comparable_text(field, value)?,
+                    case_sensitive,
+                ))
+            })
+            .collect::<Result<Vec<String>, String>>()?;
+        index
+            .get(&key)
+            .map_or(&[][..], Vec::as_slice)
+            .iter()
+            .take(wanted.limit())
+            .filter_map(|&number| self.rows.get(number))
+            .map(|row| apply_select(row, select))
+            .collect()
     }
 }
 
@@ -265,8 +363,10 @@ impl GeoipTable {
         let Some(record) = record else {
             return Ok(Vec::new());
         };
-        match json_to_vrl_value(record) {
-            Value::Object(row) => Ok(vec![apply_select(row, select)?]),
+        let record =
+            json_to_vrl_value(record).map_err(|e| format!("mmdb record for {text}: {e}"))?;
+        match record {
+            Value::Object(row) => Ok(vec![apply_select(&row, select)?]),
             _ => Err(format!("mmdb record for {text} is not an object")),
         }
     }
@@ -404,6 +504,7 @@ impl DiagnosticMessage for UnknownTable {
 struct CompiledArgs {
     table: String,
     data: Arc<EnrichmentTable>,
+    index: Option<Arc<RowIndex>>,
     condition: BTreeMap<KeyString, expression::Expr>,
     select: Option<Box<dyn Expression>>,
     case_sensitive: bool,
@@ -445,9 +546,16 @@ fn compile_args(
         .and_then(|value| value.as_boolean())
         .unwrap_or(true);
 
+    let fields: Vec<String> = condition
+        .keys()
+        .map(|key| key.as_str().to_owned())
+        .collect();
+    let index = data.index_for(case_sensitive, fields);
+
     Ok(CompiledArgs {
         table,
         data,
+        index,
         condition,
         select,
         case_sensitive,
@@ -550,6 +658,7 @@ impl Function for GetEnrichmentTableRecord {
         Ok(GetEnrichmentTableRecordFn {
             table: args.table,
             data: args.data,
+            index: args.index,
             condition: args.condition,
             select: args.select,
             case_sensitive: args.case_sensitive,
@@ -562,6 +671,7 @@ impl Function for GetEnrichmentTableRecord {
 struct GetEnrichmentTableRecordFn {
     table: String,
     data: Arc<EnrichmentTable>,
+    index: Option<Arc<RowIndex>>,
     condition: BTreeMap<KeyString, expression::Expr>,
     select: Option<Box<dyn Expression>>,
     case_sensitive: bool,
@@ -572,7 +682,13 @@ impl FunctionExpression for GetEnrichmentTableRecordFn {
         let (conditions, select) = resolve_lookup(&self.condition, self.select.as_deref(), ctx)?;
         let mut rows = self
             .data
-            .find_rows(&conditions, self.case_sensitive, select.as_deref())
+            .find_rows(
+                self.index.as_deref(),
+                &conditions,
+                self.case_sensitive,
+                select.as_deref(),
+                Wanted::One,
+            )
             .map_err(ExpressionError::from)?;
 
         if rows.len() > 1 {
@@ -647,6 +763,7 @@ impl Function for FindEnrichmentTableRecords {
         let args = compile_args(&self.registry, state, &arguments)?;
         Ok(FindEnrichmentTableRecordsFn {
             data: args.data,
+            index: args.index,
             condition: args.condition,
             select: args.select,
             case_sensitive: args.case_sensitive,
@@ -658,6 +775,7 @@ impl Function for FindEnrichmentTableRecords {
 #[derive(Debug, Clone)]
 struct FindEnrichmentTableRecordsFn {
     data: Arc<EnrichmentTable>,
+    index: Option<Arc<RowIndex>>,
     condition: BTreeMap<KeyString, expression::Expr>,
     select: Option<Box<dyn Expression>>,
     case_sensitive: bool,
@@ -668,7 +786,13 @@ impl FunctionExpression for FindEnrichmentTableRecordsFn {
         let (conditions, select) = resolve_lookup(&self.condition, self.select.as_deref(), ctx)?;
         let rows = self
             .data
-            .find_rows(&conditions, self.case_sensitive, select.as_deref())
+            .find_rows(
+                self.index.as_deref(),
+                &conditions,
+                self.case_sensitive,
+                select.as_deref(),
+                Wanted::All,
+            )
             .map_err(ExpressionError::from)?;
         Ok(Value::Array(rows.into_iter().map(Value::Object).collect()))
     }
@@ -895,6 +1019,65 @@ mod tests {
         let err = run(r#". = get_enrichment_table_record!("users", {"nosuch":"1"})"#)
             .expect_err("an unknown column must abort");
         assert!(err.contains("not found"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn indexed_lookups_match_every_condition_and_shape() {
+        let _guard = lock();
+        let _csv = register_users("indexed");
+        for (vrl, want) in [
+            (
+                r#". = {"r": find_enrichment_table_records!("users", {"team": "red", "name": "Alice"})}"#,
+                Ok(serde_json::json!({"r": [{"id": "3", "name": "Alice", "team": "red"}]})),
+            ),
+            (
+                r#". = {"r": find_enrichment_table_records!("users", {"team": "RED"}, select: ["id"], case_sensitive: false)}"#,
+                Ok(serde_json::json!({"r": [{"id": "1"}, {"id": "3"}]})),
+            ),
+            (
+                r#". = get_enrichment_table_record!("users", {"id": 2}, select: ["name"])"#,
+                Ok(serde_json::json!({"name": "Fred"})),
+            ),
+            (
+                r#". = get_enrichment_table_record!("users", {"team": "red", "id": "9"})"#,
+                Err("No rows found"),
+            ),
+        ] {
+            match (run(vrl), want) {
+                (Ok(got), Ok(want)) => assert_eq!(got, want, "for {vrl}"),
+                (Err(got), Err(want)) => assert!(got.contains(want), "for {vrl}: {got}"),
+                (got, want) => panic!("for {vrl}: got {got:?}, wanted {want:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn programs_on_the_same_condition_fields_share_one_index() {
+        let _guard = lock();
+        let _csv = register_users("shared-index");
+        for vrl in [
+            r#". = get_enrichment_table_record!("users", {"id": "1"})"#,
+            r#". = {"r": find_enrichment_table_records!("users", {"id": "2"})}"#,
+            r#". = get_enrichment_table_record!("users", {"id": "1"}, case_sensitive: false)"#,
+        ] {
+            compile_vrl_program(vrl).expect("compiles");
+        }
+        let tables = read_tables(registry());
+        let Some(EnrichmentTable::File(table)) = tables.get("users").map(Arc::as_ref) else {
+            panic!("users is a file table");
+        };
+        let cached = table.indexes.lock().expect("cache lock").len();
+        assert_eq!(cached, 2, "one index per (case, fields), got {cached}");
+    }
+
+    #[test]
+    fn an_unknown_condition_field_on_an_empty_table_finds_nothing() {
+        let _guard = lock();
+        let csv = TempCsv::new("empty", "id,name\n");
+        register_table("empty", "file", csv.path(), b',').expect("csv loads");
+        let out = run(r#". = {"r": find_enrichment_table_records!("empty", {"nosuch": "1"})}"#)
+            .expect("an empty table has no row to report a missing column on");
+        assert_eq!(out, serde_json::json!({"r": []}));
     }
 
     #[test]

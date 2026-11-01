@@ -20,6 +20,7 @@ import json
 import re
 import subprocess
 import sys
+import urllib.error
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,63 +33,85 @@ VECTOR_TAG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 COOLDOWN_DAYS = 7
 
 
-def _tags_newest_first() -> list[tuple[str, str]]:
-    """[(tag, commit_sha), ...] for real product tags, newest version first.
+def _tags_newest_first() -> list[str]:
+    """Real product tags, newest version first.
 
-    An annotated tag's own ref SHA points at the TAG OBJECT, not the
-    commit - the GitHub commits API 422s on that. `git ls-remote` without
-    `--refs` also emits a `^{}`-suffixed "peeled" line carrying the actual
-    commit SHA for each annotated tag; that line, when present, replaces
-    the plain one. A lightweight tag has no peeled line and its ref SHA
-    already is the commit SHA.
+    `git ls-remote` also lists a `^{}`-suffixed peeled line for each annotated
+    tag, so the set removes the duplicate.
     """
     result = subprocess.run(
         ["git", "ls-remote", "--tags", "https://github.com/vectordotdev/vector.git"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=30,
         check=True,
     )
-    commit_sha_by_tag: dict[str, str] = {}
-    for line in result.stdout.splitlines():
-        sha, _, ref = line.partition("\t")
-        ref = ref.removesuffix("^{}")
-        tag = ref.rsplit("refs/tags/", 1)[-1]
-        if VECTOR_TAG_RE.match(tag):
-            commit_sha_by_tag[tag] = sha
-    if not commit_sha_by_tag:
+    tags = {
+        ref.removesuffix("^{}").rsplit("refs/tags/", 1)[-1]
+        for _, _, ref in (line.partition("\t") for line in result.stdout.splitlines())
+    }
+    product_tags = [tag for tag in tags if VECTOR_TAG_RE.match(tag)]
+    if not product_tags:
         raise RuntimeError(
             "no vX.Y.Z tags found on vectordotdev/vector - check the filter"
         )
-    pairs = list(commit_sha_by_tag.items())
-    pairs.sort(key=lambda p: tuple(int(x) for x in p[0][1:].split(".")), reverse=True)
-    return pairs
+    return sorted(product_tags, key=_version_tuple, reverse=True)
 
 
-def _commit_age_days(sha: str) -> float:
-    """Age in days of a commit, via the public (unauthenticated) GitHub API."""
-    url = f"https://api.github.com/repos/vectordotdev/vector/commits/{sha}"
+def _release_published_at(tag: str) -> str | None:
+    """When the GitHub release for `tag` was published, or None if it has none.
+
+    The release date, not the tagged commit's: a release cut from an older
+    commit is as fresh as its publication.
+    """
+    url = f"https://api.github.com/repos/vectordotdev/vector/releases/tags/{tag}"
     req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        data = json.load(resp)
-    date_str = data["commit"]["committer"]["date"]  # e.g. "2026-08-20T10:00:00Z"
-    committed_at = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-    return (datetime.now(UTC) - committed_at).total_seconds() / 86400
+    try:
+        # The URL is a fixed https:// prefix plus a tag VECTOR_TAG_RE matched.
+        # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.load(resp)
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return None
+        raise
+    return data.get("published_at")
+
+
+def first_cleared_release(
+    published: list[tuple[str, str | None]], now: datetime
+) -> str | None:
+    """The first `(tag, published_at)` published at least COOLDOWN_DAYS before `now`.
+
+    A tag with no published release is skipped, never adopted on its commit date.
+    """
+    for tag, published_at in published:
+        if published_at is None:
+            log_message(f"{tag} has no published GitHub release - skipping")
+            continue
+        released = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+        age_days = (now - released).total_seconds() / 86400
+        if age_days >= COOLDOWN_DAYS:
+            return tag
+        log_message(
+            f"{tag} was released {age_days:.1f}d ago - within the {COOLDOWN_DAYS}d cooldown, skipping"
+        )
+    return None
 
 
 def latest_vector_version() -> str | None:
-    """Newest Vector product tag that has cleared the 7-day cooldown.
+    """Newest Vector product release that has cleared the 7-day cooldown.
 
     None if every release newer than the current pin is still too fresh -
     that's a normal, expected outcome on most days, not an error.
     """
-    for tag, sha in _tags_newest_first():
-        age_days = _commit_age_days(sha)
-        if age_days >= COOLDOWN_DAYS:
-            return tag
-        log_message(
-            f"{tag} is only {age_days:.1f}d old - within the {COOLDOWN_DAYS}d cooldown, skipping"
-        )
+    now = datetime.now(UTC)
+    for tag in _tags_newest_first():
+        cleared = first_cleared_release([(tag, _release_published_at(tag))], now)
+        if cleared is not None:
+            return cleared
     return None
 
 

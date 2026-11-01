@@ -6,8 +6,11 @@ No mocks - every case here executes the real compiled bindings.
 
 from __future__ import annotations
 
+import itertools
 import subprocess
 import sys
+import threading
+import time
 
 import pytest
 
@@ -19,6 +22,7 @@ pytest.importorskip(
 from vector_vrl._bindings import (  # noqa: E402
     Vector,
     execute_vrl,
+    execute_vrl_with_secrets,
     get_vrl_performance,
     validate_vrl,
 )
@@ -135,6 +139,144 @@ class TestEventsTheVrlEngineMustNotMangle:
         )
 
         assert "`.n.a[1]` is an infinite float" in result["error"]
+
+    @pytest.mark.parametrize(
+        ("vrl", "kind"),
+        [(". = [1, 2]", "array"), ('. = "value"', "string")],
+        ids=["array", "string"],
+    )
+    def test_a_non_object_event_fails_instead_of_coming_back_empty(self, vrl, kind):
+        pipeline = Vector({})
+        pipeline.initialize()
+
+        (result,) = pipeline.process_logs(['{"message": "m"}'], vrl)
+
+        assert f"replaced the event with a value of type {kind}" in result["error"]
+        stats = pipeline.get_stats()
+        assert (stats["events_processed"], stats["errors"]) == (0, 1)
+
+    @pytest.mark.parametrize(
+        ("event", "outcome"),
+        [
+            ('{"id": 18446744073709551615}', "`.id` holds 18446744073709551615"),
+            ('{"id": 9223372036854775807}', 9223372036854775807),
+            ('{"id": -9223372036854775808}', -9223372036854775808),
+        ],
+        ids=["above_i64", "i64_max", "i64_min"],
+    )
+    def test_an_integer_is_kept_exactly_or_its_event_fails(self, event, outcome):
+        (result,) = execute_vrl(".seen = true", [event])
+
+        if isinstance(outcome, str):
+            assert outcome in result["error"]
+        else:
+            assert result == {"id": outcome, "seen": True}
+
+
+def _longest_stall_of_another_thread(call) -> tuple[float, float]:
+    """Run `call` while a second thread ticks every millisecond.
+
+    Returns the call's duration and the longest gap between ticks during it.
+    A call holding the GIL stalls the ticking thread for its whole duration.
+    """
+    ticks: list[float] = []
+    stop = threading.Event()
+
+    def tick() -> None:
+        while not stop.is_set():
+            ticks.append(time.perf_counter())
+            time.sleep(0.001)
+
+    ticker = threading.Thread(target=tick)
+    ticker.start()
+    try:
+        time.sleep(0.01)
+        start = time.perf_counter()
+        call()
+        end = time.perf_counter()
+    finally:
+        stop.set()
+        ticker.join()
+    inside = [start, *(t for t in ticks if start < t < end), end]
+    return end - start, max(b - a for a, b in itertools.pairwise(inside))
+
+
+def _chain(depth: int) -> str:
+    return ".x = " + "1 + " * depth + "1"
+
+
+def _initialized_vector() -> Vector:
+    pipeline = Vector({})
+    pipeline.initialize()
+    return pipeline
+
+
+class TestGilRelease:
+    """Compiling and running VRL leaves the GIL free for other Python threads."""
+
+    @pytest.mark.parametrize(
+        "make_call",
+        [
+            pytest.param(
+                lambda size: (
+                    lambda: get_vrl_performance(
+                        ".y = 1", ['{"a":1}'], iterations=size * 500
+                    )
+                ),
+                id="get_vrl_performance",
+            ),
+            pytest.param(
+                lambda size: lambda: validate_vrl(_chain(size)), id="validate_vrl"
+            ),
+            pytest.param(
+                lambda size: lambda: execute_vrl(_chain(size), ["{}"]),
+                id="execute_vrl",
+            ),
+            pytest.param(
+                lambda size: lambda: execute_vrl_with_secrets(_chain(size), ["{}"]),
+                id="execute_vrl_with_secrets",
+            ),
+            pytest.param(
+                lambda size: (
+                    lambda: _initialized_vector().process_logs(["{}"], _chain(size))
+                ),
+                id="process_logs",
+            ),
+        ],
+    )
+    def test_another_thread_keeps_running_during_the_call(self, make_call):
+        size = 100
+        duration, stall = _longest_stall_of_another_thread(make_call(size))
+        while duration < 0.2 and size < 4000:
+            size *= 2
+            duration, stall = _longest_stall_of_another_thread(make_call(size))
+
+        assert duration >= 0.2, f"size {size} still ran in {duration:.3f}s"
+        assert stall < duration / 2, (
+            f"another thread stalled {stall:.3f}s of a {duration:.3f}s call"
+        )
+
+    def test_threads_sharing_one_pipeline_all_land_in_its_stats(self):
+        pipeline = _initialized_vector()
+        failures: list[BaseException] = []
+
+        def work() -> None:
+            try:
+                for _ in range(20):
+                    pipeline.process_logs(['{"a": 1}', "plain"], _chain(50))
+            except BaseException as error:  # noqa: BLE001 -- reported below
+                failures.append(error)
+
+        workers = [threading.Thread(target=work) for _ in range(4)]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join()
+
+        assert failures == []
+        stats = pipeline.get_stats()
+        assert (stats["events_processed"], stats["errors"]) == (160, 0)
+        assert stats["bytes_processed"] == 4 * 20 * (len('{"a": 1}') + len("plain"))
 
 
 class TestCallerStack:

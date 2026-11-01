@@ -1,15 +1,58 @@
-"""Vector testing utilities with proper shell escaping and configuration management.
-
-Provides a centralized way to test VRL code with Vector CLI without shell escaping issues.
-"""
+"""Run VRL through a real `vector` binary, configured by file, fed on stdin."""
 
 import json
 import shutil
 import subprocess
 import tempfile
-import time
 from pathlib import Path
 from typing import Any
+
+DEFAULT_TIMEOUT_SECONDS = 60.0
+
+
+def remap_chain(config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """The remap transforms of a Vector config, in the order events pass them.
+
+    The config's sources and sinks are not used: the runner feeds the events
+    in and collects what comes out. Transforms must form one chain through
+    their `inputs`, and each must be a `remap` with its VRL inline.
+
+    Raises:
+        ValueError: the config has no transforms, one is not an inline
+            remap, or they do not form a single chain.
+    """
+    found = config.get("transforms")
+    if not isinstance(found, dict) or not found:
+        raise ValueError("the config has no transforms to run")
+    transforms: dict[str, Any] = found
+    for name, transform in transforms.items():
+        if not isinstance(transform, dict) or transform.get("type") != "remap":
+            raise ValueError(f"transform {name!r} is not a remap")
+        if not isinstance(transform.get("source"), str):
+            raise ValueError(f"remap {name!r} has no inline source")
+
+    upstream = {
+        name: [i for i in transform.get("inputs") or [] if i in transforms]
+        for name, transform in transforms.items()
+    }
+    heads = [name for name, before in upstream.items() if not before]
+    following = {
+        name: [n for n, before in upstream.items() if name in before]
+        for name in transforms
+    }
+    if (
+        len(heads) != 1
+        or any(len(before) > 1 for before in upstream.values())
+        or any(len(after) > 1 for after in following.values())
+    ):
+        raise ValueError("the remap transforms must form one chain through `inputs`")
+
+    order = [heads[0]]
+    while following[order[-1]]:
+        order.append(following[order[-1]][0])
+    if len(order) != len(transforms):
+        raise ValueError("the remap transforms must form one chain through `inputs`")
+    return [(name, transforms[name]) for name in order]
 
 
 class VectorTestRunner:
@@ -29,156 +72,127 @@ class VectorTestRunner:
             raise RuntimeError(f"Vector binary not found: {self.vector_binary}")
 
     def test_vrl_with_vector(
-        self, vrl_code: str, input_logs: list[str], test_name: str = "test"
+        self,
+        vrl_code: str,
+        input_logs: list[str],
+        test_name: str = "test",
+        timeout: float = DEFAULT_TIMEOUT_SECONDS,
     ) -> tuple[bool, list[dict], str]:
-        """Test VRL code with Vector CLI using file-based communication (NO shell escaping).
+        """Run `vrl_code` as one remap transform over `input_logs` in a real Vector.
 
         Returns:
-            (success: bool, results: List[Dict], error_message: str)
+            (success, results, error_message), as `run_remap_chain` does.
         """
-        # Isolated test environment outside the caller's working directory
+        return self.run_remap_chain(
+            [("vrl_test", {"type": "remap", "source": vrl_code})],
+            input_logs,
+            test_name,
+            timeout,
+        )
+
+    def run_remap_chain(
+        self,
+        transforms: list[tuple[str, dict[str, Any]]],
+        input_logs: list[str],
+        test_name: str = "test",
+        timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    ) -> tuple[bool, list[dict], str]:
+        """Run `input_logs` through `transforms`, in order, in a real Vector.
+
+        Vector reads the logs from stdin and exits once every event is written,
+        so the run ends when the work does. `timeout` bounds it: a run still
+        going then is killed and reported as a failure.
+
+        Each transform keeps its own options (`drop_on_error`, `drop_on_abort`
+        and so on), and only its `inputs` is rewired to the one before it.
+
+        Returns:
+            (success, results, error_message). `success` means Vector exited 0
+            and every output line was JSON. An event a program aborts is
+            dropped by Vector, so `results` can be shorter than `input_logs`.
+            `error_message` carries Vector's stderr, including the VRL runtime
+            errors of a successful run.
+        """
         test_dir = Path(tempfile.mkdtemp(prefix=f"vector_test_{test_name}_"))
-
         try:
-            # Create input file
-            input_file = test_dir / "input.log"
-            with open(input_file, "w") as f:
-                for log in input_logs:
-                    f.write(log + "\n")
-
-            # Create output file and data directory
-            output_file = test_dir / "output.jsonl"
             data_dir = test_dir / "vector_data"
-            data_dir.mkdir(exist_ok=True)
-
-            # Create Vector YAML configuration (NO shell escaping needed)
-            config_content = self._create_vector_yaml_config(
-                input_file, output_file, data_dir, vrl_code
+            data_dir.mkdir()
+            config_file = test_dir / "config.json"
+            config_file.write_text(
+                json.dumps(self._vector_config(transforms, data_dir)),
+                encoding="utf-8",
+                newline="\n",
             )
-
-            config_file = test_dir / "config.yaml"
-            with open(config_file, "w") as f:
-                f.write(config_content)
-
             if self.verbose:
-                print(f"   Test: {test_name}")
-                print(f"   Dir: {test_dir}")
-                print(f"   Logs: {len(input_logs)}")
-                print(f"   VRL: {len(vrl_code)} chars")
+                print(f"   Test: {test_name}, {len(input_logs)} logs, dir {test_dir}")
 
-            # Run Vector with file-based config (NO command line VRL). `-qq`
-            # keeps Vector's own logging to error level so the stderr check
-            # below is not tripped by startup chatter.
-            error_msg = ""
             try:
                 # An argv list with no shell, reading a config this runner wrote.
-                process = subprocess.Popen(  # noqa: S603
+                # `-qq` keeps Vector's own logging to errors.
+                completed = subprocess.run(  # noqa: S603
                     [self.vector_binary, "-qq", "--config", str(config_file)],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    input="".join(f"{log}\n" for log in input_logs),
+                    capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=timeout,
+                    check=False,
                 )
-
-                # Let Vector process the logs
-                time.sleep(3)
-
-                # Stop Vector gracefully
-                process.terminate()
-                stdout, stderr = process.communicate(timeout=10)
-
-                if stderr and ("error" in stderr.lower() or "failed" in stderr.lower()):
-                    error_msg = stderr[:500]  # Capture error details
-
             except subprocess.TimeoutExpired:
-                process.kill()
-                error_msg = "Vector process timeout"
-            except Exception as e:
-                error_msg = f"Vector execution error: {e}"
+                return False, [], f"Vector did not finish within {timeout}s"
+            except OSError as error:
+                return False, [], f"Vector execution error: {error}"
 
-            # Parse output results
-            results = []
-            success = False
-
-            if output_file.exists():
+            results: list[dict] = []
+            undecodable: list[int] = []
+            for number, line in enumerate(completed.stdout.splitlines(), start=1):
+                if not line.strip():
+                    continue
                 try:
-                    with open(output_file) as f:
-                        for line in f:
-                            if line.strip():
-                                try:
-                                    results.append(json.loads(line.strip()))
-                                except json.JSONDecodeError:
-                                    continue
+                    results.append(json.loads(line))
+                except json.JSONDecodeError:
+                    undecodable.append(number)
 
-                    success = len(results) > 0
-
-                except Exception as e:
-                    error_msg += f" | Output read error: {e}"
+            problems = []
+            if completed.returncode != 0:
+                problems.append(f"Vector exited {completed.returncode}")
+            if undecodable:
+                problems.append(f"output lines {undecodable[:5]} are not JSON")
+            if completed.stderr.strip():
+                problems.append(completed.stderr.strip()[:500])
+            success = completed.returncode == 0 and not undecodable
 
             if self.verbose:
-                if success:
-                    print(f"   SUCCESS: {len(results)}/{len(input_logs)} processed")
-                else:
-                    print(f"   FAILED: {error_msg[:100]}...")
-
-            return success, results, error_msg
-
+                outcome = "SUCCESS" if success else "FAILED"
+                print(f"   {outcome}: {len(results)}/{len(input_logs)} events back")
+            return success, results, " | ".join(problems)
         finally:
-            # Cleanup temp directory
-            if test_dir.exists():
-                try:
-                    shutil.rmtree(test_dir)
-                except Exception as e:
-                    if self.verbose:
-                        print(f"   Cleanup: {e}")
+            shutil.rmtree(test_dir, ignore_errors=True)
 
-    def _create_vector_yaml_config(
-        self, input_file: Path, output_file: Path, data_dir: Path, vrl_code: str
-    ) -> str:
-        """Create Vector YAML configuration with proper VRL code formatting.
-
-        NO shell escaping issues - pure YAML with literal block.
-        """
-        # Properly indent VRL code for YAML literal block (6 spaces)
-        indented_vrl = "\n".join(f"      {line}" for line in vrl_code.split("\n"))
-
-        return f'''# Vector configuration for VRL testing
-# Generated by VectorTestRunner - no shell escaping issues
-data_dir: "{data_dir}"
-
-sources:
-  file_input:
-    type: file
-    include:
-      - "{input_file}"
-    read_from: beginning
-    max_read_bytes: 10485760
-    ignore_older_secs: 300
-
-transforms:
-  vrl_test:
-    type: remap
-    inputs:
-      - file_input
-    source: |
-{indented_vrl}
-
-sinks:
-  file_output:
-    type: file
-    inputs:
-      - vrl_test
-    path: "{output_file}"
-    encoding:
-      codec: json
-    # Memory-only buffering for testing
-    buffer:
-      type: memory
-      max_events: 1000
-      when_full: block
-
-api:
-  enabled: false
-'''
+    @staticmethod
+    def _vector_config(
+        transforms: list[tuple[str, dict[str, Any]]], data_dir: Path
+    ) -> dict[str, Any]:
+        """A stdin -> transforms -> stdout Vector config, transforms chained in order."""
+        chained: dict[str, Any] = {}
+        upstream = "runner_stdin"
+        for name, transform in transforms:
+            chained[name] = {**transform, "inputs": [upstream]}
+            upstream = name
+        return {
+            "data_dir": str(data_dir),
+            "sources": {"runner_stdin": {"type": "stdin"}},
+            "transforms": chained,
+            "sinks": {
+                "runner_stdout": {
+                    "type": "console",
+                    "inputs": [upstream],
+                    "encoding": {"codec": "json"},
+                }
+            },
+            "api": {"enabled": False},
+        }
 
     def validate_field_extraction(
         self, results: list[dict], expected_fields: list[str]

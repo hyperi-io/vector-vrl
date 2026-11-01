@@ -23,6 +23,11 @@ vector_vrl.get_bindings_info()
 
 `source` is `bundled`, `external` or `none`.
 
+Every call that compiles or runs VRL releases the GIL while the VRL works, so
+other Python threads keep running. Only building the returned dicts holds it.
+Several threads may share one `Vector`: each `process_logs` call adds its own
+counts to `get_stats()`.
+
 ## execute_vrl
 
 ```python
@@ -96,6 +101,18 @@ Note there is no `success` key here. Detect failure with
 A float that is infinite (`parse_float!("1e999")`) has no JSON form, so that
 event comes back as an `error` naming the field (``field `.x` is an infinite
 float``) rather than as a number.
+
+Two more shapes fail the event the same way rather than coming back wrong:
+
+- A program that sets the whole event to something other than an object
+  (`. = [1, 2]`, `. = "text"`) has no dict to return. The `error` names the
+  type it was set to. Vector splits an event set to an array, as
+  `. = unnest(.messages)` does, into several events, and one input here
+  returns one dict, so that event fails too.
+- An input integer above `9223372036854775807` (`i64::MAX`) does not fit VRL's
+  integer. The `error` names the field instead of rounding it to a float. An
+  integer past `18446744073709551615` is parsed as a float before VRL sees it,
+  so that range still arrives rounded.
 
 ## Event secrets
 
@@ -217,6 +234,87 @@ Python result dicts.
 
 This measures the in-process runtime and nothing else. It does not compare
 against the `vector` binary.
+
+## Enrichment tables
+
+Vector's two enrichment functions, `get_enrichment_table_record` and
+`find_enrichment_table_records`, are compiled in on every build. VRL names a
+table by a literal key, never a path. The path is handed over from Python.
+
+### register_enrichment_table
+
+```python
+register_enrichment_table(name: str, kind: str, path: str, delimiter: str | None = None) -> None
+```
+
+Loads the file at `path` and registers it under `name`. `kind` is `file`, a
+CSV whose first row is the header, or `geoip`, a GeoIP2/GeoLite2 `.mmdb`.
+`delimiter` applies to `file` only, defaults to `,`, and must be one ASCII
+character. Registering a name again replaces that table.
+
+The file is read here, so a bad table raises `ValueError` now rather than at
+VRL runtime: an unknown `kind`, an empty `name`, a delimiter longer than one
+character, an unreadable file, or a CSV row with the wrong number of fields.
+
+```python
+>>> register_enrichment_table("users", "file", "users.csv")
+>>> execute_vrl('. = get_enrichment_table_record!("users", {"id": .id})', ['{"id": 2}'])
+[{'id': '2', 'name': 'Fred', 'team': 'blue'}]
+```
+
+Register before compiling the VRL that uses the table. The name is resolved
+at compile time, so an unregistered one fails `validate_vrl` and raises from
+`execute_vrl`, naming what is registered:
+
+```python
+>>> validate_vrl('. = get_enrichment_table_record!("nope", {"id": "1"})').error
+'function compilation error: error[E111] unknown enrichment table "nope"; registered tables: users'
+```
+
+### Lookups
+
+`condition` is an object of field and value pairs, and a row must equal every
+one of them. Only equality is supported. A `file` table stores every cell as
+text, so an integer, float or boolean condition is compared in its text form:
+`{"id": 2}` matches the cell `2`. `case_sensitive` defaults to `true`, and
+`select` returns only the fields it names.
+
+| VRL | No row matches | More than one row matches |
+|---|---|---|
+| `get_enrichment_table_record` | error `No rows found` | error `More than one row found` |
+| `find_enrichment_table_records` | `[]` | every match, in file order |
+
+```python
+>>> execute_vrl('.r = find_enrichment_table_records!("users", {"team": "RED"}, select: ["name"], case_sensitive: false)', ['{}'])
+[{'r': '[{"name":"Bob"},{"name":"Alice"}]'}]
+```
+
+A condition field that is not a column fails the event at runtime, unless the
+table has no rows. Compiling
+a lookup indexes a `file` table on its condition fields, so a lookup costs the
+same however many rows the table holds.
+
+A `geoip` table takes exactly one condition, whose value is the IP address.
+An address with no record in the database is a no-row match.
+
+### clear_enrichment_tables and list_enrichment_tables
+
+```python
+clear_enrichment_tables() -> None
+list_enrichment_tables() -> list[dict]
+```
+
+`clear_enrichment_tables` empties the registry. Programs already compiled keep
+the tables they captured, and only later compilations see the empty registry.
+
+`list_enrichment_tables` returns one dict per table, name-ordered, with
+`name`, `kind`, `path` and `rows`. `rows` is the row count of a `file` table
+and `None` for a `geoip` table.
+
+```python
+>>> list_enrichment_tables()
+[{'name': 'users', 'kind': 'file', 'path': 'users.csv', 'rows': 3}]
+```
 
 ## Vector
 
@@ -405,8 +503,9 @@ posture".
 VRL source may not nest brackets more than 64 levels deep
 (`MAX_VRL_NESTING_DEPTH`). Past a few hundred the parser's own recursion
 overflows the stack and takes the process down, which no Python `except`
-can catch, so the check runs before the parser sees the input. Over the
-limit you get a message containing `nests`:
+can catch, so the check runs before the parser sees the input. Brackets
+inside string, raw string, regex and timestamp literals and `#` comments do
+not count. Over the limit you get a message containing `nests`:
 
 ```python
 >>> validate_vrl('.x = ' + '(' * 1000 + 'true' + ')' * 1000).error
@@ -436,6 +535,18 @@ These are a different thing to everything above. They shell out to a
 the path you pass - and `VectorTestRunner` raises `RuntimeError` at
 construction if no binary exists there. They do not use the compiled
 bindings.
+
+`VectorTestRunner` feeds the logs to Vector on stdin and returns when Vector
+exits, so a run takes as long as the work. Its `timeout` (60 s by default)
+kills a run that goes past it and reports it failed. A run succeeds when
+Vector exits 0 and every output line is JSON. Events a program aborts do not
+come back, and Vector's stderr is in the error message either way.
+
+`execute_vector_pipeline(config, input_data, timeout)` runs the config's own
+remap transforms, in the order their `inputs` chain them and each with its
+own options, over `input_data`. The config's sources and sinks are not used.
+A config whose transforms are not one chain of inline remaps raises
+`ValueError`.
 
 They are not part of the in-process API this package is for, and they are
 not covered by the test files that describe it. If you want VRL executed,

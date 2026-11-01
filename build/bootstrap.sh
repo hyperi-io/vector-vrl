@@ -144,7 +144,15 @@ install_macos_deps() {
     # Check if Homebrew is installed
     if ! command -v brew &> /dev/null; then
         log_info "Installing Homebrew..."
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        # Homebrew/install pinned to a commit, run only when its checksum matches.
+        local brew_commit="8c82c081753d4263da0cfe615ef8d9433425f22b"
+        local brew_sha256="5f333bbe53bc490e51e7ccb1df8779b3dd6ee73a1a7379efda216edb08ccb148"
+        local installer
+        installer="$(mktemp)"
+        curl -fsSL "https://raw.githubusercontent.com/Homebrew/install/${brew_commit}/install.sh" -o "${installer}"
+        echo "${brew_sha256}  ${installer}" | shasum -a 256 -c - >/dev/null || { log_error "Homebrew installer checksum mismatch"; rm -f "${installer}"; return 1; }
+        /bin/bash "${installer}"
+        rm -f "${installer}"
     else
         log_info "Homebrew is already installed"
     fi

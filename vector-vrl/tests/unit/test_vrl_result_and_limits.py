@@ -218,8 +218,10 @@ class TestGilRelease:
         "make_call",
         [
             pytest.param(
-                lambda size: lambda: get_vrl_performance(
-                    ".y = 1", ['{"a":1}'], iterations=size * 500
+                lambda size: (
+                    lambda: get_vrl_performance(
+                        ".y = 1", ['{"a":1}'], iterations=size * 500
+                    )
                 ),
                 id="get_vrl_performance",
             ),
@@ -235,8 +237,8 @@ class TestGilRelease:
                 id="execute_vrl_with_secrets",
             ),
             pytest.param(
-                lambda size: lambda: _initialized_vector().process_logs(
-                    ["{}"], _chain(size)
+                lambda size: (
+                    lambda: _initialized_vector().process_logs(["{}"], _chain(size))
                 ),
                 id="process_logs",
             ),

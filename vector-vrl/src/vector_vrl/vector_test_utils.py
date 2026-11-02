@@ -99,9 +99,10 @@ class VectorTestRunner:
     ) -> tuple[bool, list[dict], str]:
         """Run `input_logs` through `transforms`, in order, in a real Vector.
 
-        Vector reads the logs from stdin and exits once every event is written,
-        so the run ends when the work does. `timeout` bounds it: a run still
-        going then is killed and reported as a failure.
+        Vector reads the logs from stdin and writes the results to a file, then
+        exits once the file is flushed, so the run ends when the work does.
+        `timeout` bounds it: a run still going then is killed and reported as a
+        failure.
 
         Each transform keeps its own options (`drop_on_error`, `drop_on_abort`
         and so on), and only its `inputs` is rewired to the one before it.
@@ -117,9 +118,10 @@ class VectorTestRunner:
         try:
             data_dir = test_dir / "vector_data"
             data_dir.mkdir()
+            output_file = test_dir / "output.ndjson"
             config_file = test_dir / "config.json"
             config_file.write_text(
-                json.dumps(self._vector_config(transforms, data_dir)),
+                json.dumps(self._vector_config(transforms, data_dir, output_file)),
                 encoding="utf-8",
                 newline="\n",
             )
@@ -146,7 +148,13 @@ class VectorTestRunner:
 
             results: list[dict] = []
             undecodable: list[int] = []
-            for number, line in enumerate(completed.stdout.splitlines(), start=1):
+            # The file sink creates the file on its first event, so none means no output.
+            output = (
+                output_file.read_text(encoding="utf-8", errors="replace")
+                if output_file.exists()
+                else ""
+            )
+            for number, line in enumerate(output.splitlines(), start=1):
                 if not line.strip():
                     continue
                 try:
@@ -172,9 +180,16 @@ class VectorTestRunner:
 
     @staticmethod
     def _vector_config(
-        transforms: list[tuple[str, dict[str, Any]]], data_dir: Path
+        transforms: list[tuple[str, dict[str, Any]]],
+        data_dir: Path,
+        output_file: Path,
     ) -> dict[str, Any]:
-        """A stdin -> transforms -> stdout Vector config, transforms chained in order."""
+        """A stdin -> transforms -> file Vector config, transforms chained in order.
+
+        The sink is a file because the console sink hands its last write to Tokio's
+        blocking pool without a flush, and Vector's exit drops that write when it
+        has not started: one event of a short run goes missing now and then.
+        """
         chained: dict[str, Any] = {}
         upstream = "runner_stdin"
         for name, transform in transforms:
@@ -185,8 +200,9 @@ class VectorTestRunner:
             "sources": {"runner_stdin": {"type": "stdin"}},
             "transforms": chained,
             "sinks": {
-                "runner_stdout": {
-                    "type": "console",
+                "runner_output": {
+                    "type": "file",
+                    "path": str(output_file),
                     "inputs": [upstream],
                     "encoding": {"codec": "json"},
                 }

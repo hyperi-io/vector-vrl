@@ -27,6 +27,23 @@ def test_runner_processes_logs_through_the_real_binary(vector_binary):
     assert all(result["flag"] is True for result in results)
 
 
+def test_runner_reads_results_from_a_file_sink_not_the_console(tmp_path):
+    """The console sink's last write is lost when Vector exits first.
+
+    About 1 run in 1,500 of a two-event input came back with one event, exit 0 and
+    empty stderr, so no repeat-run test catches it reliably. The file sink flushes
+    and syncs before it finishes.
+    """
+    output_file = tmp_path / "out.ndjson"
+    config = VectorTestRunner._vector_config(  # noqa: SLF001
+        [("t", {"type": "remap", "source": "."})], tmp_path, output_file
+    )
+
+    (sink,) = config["sinks"].values()
+    assert sink["type"] == "file"
+    assert sink["path"] == str(output_file)
+
+
 def test_runner_reports_a_config_that_vector_rejects(vector_binary):
     runner = VectorTestRunner(vector_binary)
 

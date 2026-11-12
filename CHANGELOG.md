@@ -3,6 +3,13 @@
 Rendered by CI and committed back at the end of a release -- do not edit by
 hand. Release notes also appear on the GitHub Releases page, one per tag.
 
+## [1.0.14](https://github.com/hyperi-io/vector-vrl/compare/v1.0.13...v1.0.14) (2026-11-12)
+
+### Bug Fixes
+
+* **runner:** read results from a file sink ([#63](https://github.com/hyperi-io/vector-vrl/issues/63)) ([8987da0](https://github.com/hyperi-io/vector-vrl/commit/8987da0a78106674d0b71d16748326468e7fc8fb))
+* **vector:** bump pinned version to 0.61.0-debian ([6bb22c8](https://github.com/hyperi-io/vector-vrl/commit/6bb22c8a0211e9a0147d7fd24b2a39814f08c512))
+
 ## [1.0.13](https://github.com/hyperi-io/vector-vrl/compare/v1.0.12...v1.0.13) (2026-11-01)
 
 ### Bug Fixes

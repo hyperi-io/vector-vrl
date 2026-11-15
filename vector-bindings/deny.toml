@@ -21,6 +21,8 @@ ignore = [
     { id = "RUSTSEC-2026-0405", reason = "SeekableCStream needs zstd-safe's seekable feature, which is off." },
     { id = "RUSTSEC-2026-0406", reason = "Needs a multithreaded (zstdmt, off) context changed mid-frame. encode_all sets the level once on a new context." },
     { id = "RUSTSEC-2026-0410", reason = "The allocator shim is compiled for wasm32 only, and this crate is a native PyO3 cdylib." },
+    # reqwest-retry -> wasmtimer -> pin-utils, a cfg(target_arch = "wasm32") dependency of reqwest-retry.
+    { id = "RUSTSEC-2026-0441", reason = "pin-utils is unmaintained, not a vulnerability, and only wasmtimer pulls it in, for wasm32 only. This crate is a native PyO3 cdylib, so it never compiles pin-utils." },
     # vrl -> aes-siv -> cmac and community-id -> sha1, both on digest 0.10 -> block-buffer 0.10.4. The fix is block-buffer >= 0.12.1, which digest 0.10 excludes.
     { id = "GHSA-qwgh-2vcv-g2f7", reason = "Needs a caught panic inside the compress callback of a buffer that is then reused. The callbacks are the SHA-1 and AES block functions, which do not panic, and each hasher is dropped at the end of its VRL call. Drop when vrl takes digest 0.11." },
 ]

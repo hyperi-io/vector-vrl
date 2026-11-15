@@ -19,6 +19,12 @@ project:
   status: experimental
 quality:
   enabled: true
+  dep_licenses:
+    overrides:
+      # The wheel ships no licence file. The text is upstream's, taken at the same version.
+      - {name: loguru, version: "0.7.3", licence: MIT, reason: "Q282 A: upstream LICENSE at tag 0.7.3", licence_file: third_party/loguru-0.7.3-LICENSE}
+      # Its metadata says only "BSD License", so the gate cannot name the variant.
+      - {name: httpx, version: "0.28.1", licence: BSD-3-Clause, reason: "Q282 A: upstream LICENSE.md at tag 0.28.1 is BSD-3-Clause"}
 test:
   enabled: true
 build:

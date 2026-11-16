@@ -22,7 +22,7 @@ Each component has commit-msg and pre-push hooks, in `vector-vrl/.githooks/`, `v
 git config core.hooksPath vector-vrl/.githooks   # or vector-bindings/, build/
 ```
 
-To publish `vector-vrl` to PyPI, push to `main` with a `Release: true` trailer on the HEAD commit, or run the workflow by hand through `workflow_dispatch`. The `plan` job in `.github/workflows/ci.yml` reads the trailer and gates the `tag-and-release` job on it. Every other push runs quality and test and stops there.
+To publish `vector-vrl` to PyPI, push to `main` with a `Release: true` trailer on the HEAD commit, or run the workflow by hand through `workflow_dispatch`. The `plan` job in `.github/workflows/ci.yml` reads the trailer and gates the `tag-and-release` job on it. Every other push runs quality and test and stops there. Version, CHANGELOG.md and git tags are semantic-release's, never hand-set.
 
 ## Tests
 

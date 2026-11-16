@@ -55,7 +55,7 @@ uv run --directory build python build_system.py
 
 | Flag | Effect |
 |---|---|
-| `--clean` | Deletes `target`, `.tmp` and `vector` at the repo root, not under `build/`, then builds |
+| `--clean` | Deletes `target`, `.tmp` and `vector` at the repo root, not under `build/`, then builds. With `--test-flow` or `--skip-vector` the run ends before the clean, so nothing is deleted |
 | `--verbose`, `-v` | Sets `VECTOR_VRL_VERBOSE=true`. Setting it yourself does the same |
 | `--test-flow` | Runs build detection and release discovery without compiling, plus the dependency sync when a Vector build is there: the cheap check that the orchestrator is wired up |
 | `--skip-vector` | Runs stage 2 against an existing Vector build. Exits 1 with `No Vector build found` when there's none |

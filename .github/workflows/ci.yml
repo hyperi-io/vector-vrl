@@ -140,6 +140,7 @@ jobs:
           "$RUNNER_TEMP/vector-${target}/bin/vector" --version
 
       - run: make quality-python
+      - run: make quality-docs
       - run: make test-python
 
   build-wheels:

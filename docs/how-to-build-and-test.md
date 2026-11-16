@@ -1,111 +1,58 @@
 # How to build and test
 
-Three components, built separately. Run everything from inside the
-component directory - the root is not a working directory for anything
-except `make`.
-
-## The whole repo at once
-
-From the repo root:
+Three components, built separately. Run everything from inside the component directory: the root is a working directory for `make` and nothing else. From the root:
 
 ```bash
 make check      # quality + test, all three components
-make quality    # lint/format only
-make test       # tests only
-make build      # builds the vector-vrl wheel
+make quality    # lint and format
+make test       # tests
+make build      # the vector-vrl wheel
 ```
 
-Each target wraps `hyperi-ci run <stage> -C <component>`. Narrower targets
-exist when you only want one side: `quality-rust`, `quality-python`,
-`test-rust`, `test-python`. Read the root `Makefile` - it is 31 lines and
-tells you exactly what fans out where.
+Each target runs `uv run --directory <component> --with hyperi-ci hyperi-ci run <stage> -C .` for the components it covers. The narrower targets are `quality-rust`, `quality-python`, `test-rust` and `test-python`, and the root `Makefile` shows what fans out where.
 
-## Iterating on the Rust crate
+## Getting a Rust change into Python
 
 ```bash
 cd vector-bindings
 cargo build --release
-cargo test              # the #[cfg(test)] module in src/lib.rs
-```
-
-`cargo test` covers the compiler and sandbox guards directly. It does NOT
-rebuild the Python extension, which is the next section and the part people
-lose an afternoon to.
-
-## Getting your Rust change into Python
-
-The compiled extension lives IN the source tree, at
-`vector-vrl/src/vector-vrl/_bindings/vector_bindings.cpython-*.so`, and
-it is gitignored. Nothing rebuilds it for you. Edit `lib.rs`, run your
-Python tests, and they will happily exercise whatever `.so` was there
-before - passing or failing for reasons that have nothing to do with your
-change.
-
-Rebuild it explicitly:
-
-```bash
-cd vector-bindings
+cargo test               # the test modules in src/
 maturin develop --release
 ```
 
-If you suspect the `.so` is stale, compare timestamps:
+`cargo test` covers the compiler, the guards, enrichment tables and secrets in Rust. It doesn't rebuild the Python extension, and that's the step people miss.
+
+The compiled extension sits in the source tree at `vector-vrl/src/vector_vrl/_bindings/vector_bindings.*.so`, gitignored. The first `uv run` in `vector-vrl/` builds it when it creates the venv, and a later Rust edit doesn't trigger a rebuild. Edit `lib.rs`, run the Python tests, and they exercise whatever `.so` was there before, passing or failing for reasons that have nothing to do with your change. `maturin develop --release` is what rebuilds it.
+
+When a change you know you made seems to have no effect, compare timestamps first:
 
 ```bash
 ls -la vector-bindings/src/lib.rs
-ls -la vector-vrl/src/vector-vrl/_bindings/*.so
+ls -la vector-vrl/src/vector_vrl/_bindings/*.so
 ```
 
-An `.so` older than `lib.rs` is stale, and it fails silently - you get the
-old behaviour with no warning at all. This is worth checking first whenever
-a change you know you made appears to have no effect.
+An `.so` older than `lib.rs` is stale, and it fails silently: the old behaviour, no warning.
 
-## The stable ABI
-
-`vector-bindings` sets `pyo3/abi3-py312`, so it compiles against CPython's stable ABI rather than one version's internals.
-
-The wheel is tagged `cp312-abi3` and installs on 3.12 and every later
-release, including ones published after this crate was built - one wheel per
-platform instead of one per Python.
-
-## Testing the Python package
+## Testing and building the Python package
 
 ```bash
 cd vector-vrl
 PYTHONPATH=src uv run --with pytest --with pytest-asyncio --with pyyaml pytest tests/
 ```
 
-The two files that describe the real, working API surface are
-`tests/unit/test_vector_class.py` and `tests/unit/test_native_vrl_simple.py`
-- 34 tests, and they run in about a tenth of a second because there is no
-subprocess anywhere in them. If you want to know what the bindings actually
-do rather than what a doc claims, read those two files.
+`tests/unit/test_vector_class.py` and `tests/unit/test_native_vrl_simple.py` describe the working API surface, with no subprocess anywhere in them. To know what the bindings do rather than what a doc claims, read those two files. [vector-vrl/tests/README.md](../vector-vrl/tests/README.md) maps the rest of the suite.
 
-Tests needing the compiled extension skip cleanly when it is absent
-(`pytest.importorskip`), so a missing `.so` costs you those tests, not the
-run.
+Tests needing the compiled extension skip cleanly when it's absent (`pytest.importorskip`), so a missing `.so` costs you those tests, not the run. Markers are declared in `pyproject.toml`: `integration`, `e2e`, `slow`, `smoke`. Deselect the slow ones with `-m "not slow"`.
 
-Markers are declared in `pyproject.toml`: `integration`, `e2e`, `slow`,
-`smoke`. Deselect the slow ones with `-m "not slow"`.
+`vector-bindings` needs no Vector checkout to build or test ([architecture](architecture.md)). The [build orchestrator](how-to-run-the-build-orchestrator.md) is the one thing here that compiles Vector itself.
 
-## `vector-bindings` needs no `vector/` checkout
-
-The `vrl` crate comes straight from git in `vector-bindings/Cargo.toml`, so
-`execute_vrl`, `validate_vrl`, `get_vrl_performance` and `Vector` all build
-and run with nothing else cloned. `vector-bindings` reads no local Vector
-source at all - see [architecture.md](architecture.md).
-
-A `vector/` checkout is still used elsewhere in this repo: `build/`'s own
-orchestrator compiles actual Vector from source as a build stage. See
-[how-to-run-the-build-orchestrator.md](how-to-run-the-build-orchestrator.md).
-
-## Building the wheel
+Build the wheel with maturin:
 
 ```bash
 cd vector-vrl
 maturin build --release
 ```
 
-This compiles the Rust crate as a side effect - `pyproject.toml` sets
-`manifest-path = "../vector-bindings/Cargo.toml"`. A plain
-`pip install .` does not do what a setuptools-shaped mental model expects
-here, so use maturin.
+This compiles the Rust crate as a side effect, because `pyproject.toml` sets `manifest-path = "../vector-bindings/Cargo.toml"`. A plain `pip install .` doesn't do what a setuptools habit expects here, so use maturin.
+
+`vector-bindings` sets `pyo3/abi3-py312`, so it compiles against CPython's stable ABI and the wheel is tagged `cp312-abi3`: one wheel per platform, not one per Python release. Which releases pip installs it on is set by `requires-python` in `vector-vrl/pyproject.toml`, not by the tag.

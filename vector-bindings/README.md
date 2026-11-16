@@ -1,55 +1,24 @@
 # vector-bindings
 
-The Rust crate. Compiles and runs VRL using the real `vrl` compiler and
-exposes the result to Python through PyO3.
+The Rust crate. Compiles and runs VRL with the `vrl` compiler and hands the result to Python through PyO3. It doesn't publish standalone: the artefact that ships is `../vector-vrl`, which wraps this crate through maturin.
 
-Internal to this repo - it does not publish standalone. The artefact that
-ships is `../vector-vrl`, which wraps this crate via maturin.
-
-## Build and test
+`src/lib.rs` is the hand-written API: `execute_vrl`, `execute_vrl_with_secrets`, `validate_vrl`, `get_vrl_performance`, the enrichment-table registry functions, `Vector` and `VrlResult`. `src/enrichment.rs` and `src/secrets.rs` add the VRL functions the standalone `vrl` crate doesn't ship: the two enrichment-table lookups, and `get_secret`/`set_secret`/`remove_secret` over the event's secret store. `src/nesting.rs` is the bracket-depth guard that runs before the parser.
 
 ```bash
 cargo build --release
-cargo test                  # unit tests in src/lib.rs
+cargo test                  # the test modules in src/
 maturin develop --release   # rebuild the .so the Python package imports
 ```
 
-`cargo test` does NOT rebuild the Python extension. If you changed `lib.rs`
-and Python still shows the old behaviour, you skipped `maturin develop` -
-the `.so` lives in `../vector-vrl/src/vector-vrl/_bindings/` and goes
-stale silently.
+`cargo test` does NOT rebuild the Python extension. If you changed `lib.rs` and Python shows the old behaviour, you skipped `maturin develop`: the `.so` lives in `../vector-vrl/src/vector_vrl/_bindings/` and goes stale silently.
 
-The crate builds against CPython's stable ABI (`pyo3/abi3-py312`), so one wheel per platform serves 3.12 and every later release.
+The crate builds against CPython's stable ABI (`pyo3/abi3-py312`), so one wheel per platform serves every Python release the package supports. It reads no local Vector checkout either. The `vrl` dependency comes straight from git and is all VRL execution needs.
 
-## What is in here
-
-`src/lib.rs` is the whole hand-written API: `execute_vrl`,
-`execute_vrl_with_secrets`, `validate_vrl`, `get_vrl_performance`, `Vector`
-and `VrlResult`, plus the two guards that keep caller-supplied VRL from
-reading the host environment or overflowing the parser stack.
-
-`src/enrichment.rs` and `src/secrets.rs` add the VRL functions the standalone
-`vrl` crate does not ship - the two enrichment-table lookups, and
-`get_secret`/`set_secret`/`remove_secret` over the event's secret store.
-
-This crate reads no local Vector checkout - the `vrl` dependency is pulled
-straight from git and is the whole of what makes VRL execution work.
-
-The `vrl` dependency is pinned to a deliberately narrow feature set. The
-crate's `full-stdlib` feature widens it to vrl's complete stdlib, adding ten
-functions that read the host environment, resolve DNS and make outbound HTTP
-requests. It is off by default and the published wheel is built without it.
-Read "VRL execution's security posture" in
-[docs/architecture.md](../docs/architecture.md) before you turn it on.
+`vrl` is pinned to a narrow feature set. The crate's `full-stdlib` feature widens it to vrl's complete stdlib, adding ten functions that read the host environment, resolve DNS and make outbound HTTP requests. It's off by default and the published wheel is built without it. Read [What caller-supplied VRL cannot reach](../docs/architecture.md#what-caller-supplied-vrl-cannot-reach) before you turn it on.
 
 ```bash
 cargo build --release                        # sandboxed, the default
 cargo build --release --features full-stdlib # trusted VRL only
 ```
 
-## More
-
-- [Root README](../README.md)
-- [docs/architecture.md](../docs/architecture.md)
-- [docs/how-to-build-and-test.md](../docs/how-to-build-and-test.md)
-- [docs/reference-python-api.md](../docs/reference-python-api.md)
+More: the [root README](../README.md), [architecture](../docs/architecture.md), [how to build and test](../docs/how-to-build-and-test.md) and the [Python API reference](../docs/reference-python-api.md).

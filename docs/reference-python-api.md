@@ -11,22 +11,17 @@ from vector_vrl import execute_vrl, validate_vrl, get_vrl_performance, Vector, V
 from vector_vrl._bindings import execute_vrl   # equivalent
 ```
 
-`vector-vrl/__init__.py` re-exports from `._bindings`, falls back to a
-top-level `vector_bindings` module, and failing both installs stubs that
-raise `ImportError` on call. Check which you got:
+`vector-vrl/src/vector_vrl/__init__.py` re-exports from `._bindings`, falls back to a top-level `vector_bindings` module, and failing both installs stubs that raise `ImportError` on call. Check which you got:
 
 ```python
 import vector_vrl
 vector_vrl.get_bindings_info()
-# {'available': True, 'source': 'bundled', 'version': '1.0.5', 'bundled': True}
+# {'available': True, 'source': 'bundled', 'version': <the package version>, 'bundled': True}
 ```
 
 `source` is `bundled`, `external` or `none`.
 
-Every call that compiles or runs VRL releases the GIL while the VRL works, so
-other Python threads keep running. Only building the returned dicts holds it.
-Several threads may share one `Vector`: each `process_logs` call adds its own
-counts to `get_stats()`.
+Every call that compiles or runs VRL releases the GIL while the VRL compiles and runs, so other Python threads keep running. Converting the Python arguments and building the returned dicts hold it. Several threads may share one `Vector`: each `process_logs` call adds its counts to `get_stats()`.
 
 ## execute_vrl
 
@@ -52,9 +47,7 @@ errors are per-event and do not raise, see below.
 
 ### How input is parsed
 
-If the string starts with `{`, it is parsed as JSON. Anything else - and
-any string that starts with `{` but fails to parse - is wrapped as
-`{"message": <the raw string>}`.
+If the string starts with `{`, after any leading whitespace, it is parsed as JSON. Anything else, and any string that starts with `{` but fails to parse, is wrapped as `{"message": <the raw string>}`.
 
 ```python
 >>> execute_vrl('.seen = true', ['hello world'])
@@ -69,8 +62,7 @@ VRL.
 
 ### What comes back
 
-The event's top-level fields, flattened into the dict. The VRL program's own
-return value is discarded - what you get is the mutated event.
+The event's top-level fields, flattened into the dict. The VRL program's return value is discarded - what you get is the mutated event.
 
 Scalars arrive as native Python types. Nested objects and arrays arrive as
 JSON STRINGS, not as dicts and lists:
@@ -81,8 +73,7 @@ JSON STRINGS, not as dicts and lists:
 {'arr': '[1,2]', 'b': True, 'f': 1.5, 'n': 3, 'nul': None, 'obj': '{"a":1}', 'x': 1}
 ```
 
-`json.loads` them yourself if you need the structure. Timestamps and regexes
-also come back as strings.
+`json.loads` them yourself if you need the structure. Timestamps and regexes come back as strings as well.
 
 ### Per-event errors
 
@@ -95,8 +86,7 @@ A VRL runtime error replaces that event's dict entirely. You get `error` and
   'original': '{"message":"nope"}'}]
 ```
 
-Note there is no `success` key here. Detect failure with
-`"error" in result`. `Vector.process_logs` returns exactly this shape too.
+Note there is no `success` key here. Detect failure with `"error" in result`. `Vector.process_logs` returns exactly this shape.
 
 A float that is infinite (`parse_float!("1e999")`) has no JSON form, so that
 event comes back as an `error` naming the field (``field `.x` is an infinite
@@ -108,7 +98,7 @@ Two more shapes fail the event the same way rather than coming back wrong:
   (`. = [1, 2]`, `. = "text"`) has no dict to return. The `error` names the
   type it was set to. Vector splits an event set to an array, as
   `. = unnest(.messages)` does, into several events, and one input here
-  returns one dict, so that event fails too.
+  returns one dict, so that event fails as well.
 - An input integer above `9223372036854775807` (`i64::MAX`) does not fit VRL's
   integer. The `error` names the field instead of rounding it to a float. An
   integer past `18446744073709551615` is parsed as a float before VRL sees it,
@@ -123,11 +113,10 @@ on every build:
 | VRL | Behaviour |
 |---|---|
 | `get_secret(key)` | The secret's value, or `null` when it is not set. Infallible - no `!` needed |
-| `set_secret(key, secret)` | Stores it, replacing any value already under that key. Returns `null` |
+| `set_secret(key, secret)` | Stores it, replacing any value under that key. Returns `null` |
 | `remove_secret(key)` | Drops it. Removing a key that is not set is not an error |
 
-These match Vector 0.58.0's own semantics. Secrets never appear in the event
-dict - they are a separate channel.
+These match the semantics of Vector 0.58.0's functions. Secrets never appear in the event dict - they are a separate channel.
 
 ```python
 >>> execute_vrl('.k = get_secret("api_key")', ['{"x":1}'], {"api_key": "abc123"})
@@ -140,10 +129,7 @@ dict - they are a separate channel.
 execute_vrl_with_secrets(vrl_code: str, input_data: list[str], secrets: dict[str, str] | None = None) -> list[dict]
 ```
 
-The same execution as `execute_vrl` - only the return shape differs. Each
-entry is a dict of two keys: `event` is exactly what `execute_vrl` would
-have returned for that input, and `secrets` is the event's secret store
-after the program ran.
+The same execution as `execute_vrl`. The return shape is the difference. Each entry is a dict of two keys: `event` is exactly what `execute_vrl` would have returned for that input, and `secrets` is the event's secret store after the program ran.
 
 ```python
 >>> execute_vrl_with_secrets('set_secret("token", "s3cr3t")', ['{"x":1}'])
@@ -162,8 +148,7 @@ so one event's `set_secret` is invisible to the next:
  {'event': {'n': 2, 'seen': None}, 'secrets': {}}]
 ```
 
-An event whose program aborts still reports its secrets, as they stood when
-it failed - so `secrets` is populated even alongside an `error` event.
+An event that aborts still reports its secrets, as they stood when it failed, so `secrets` is populated even alongside an `error` event.
 
 `Vector.process_logs` has no secrets surface: it seeds an empty store and
 discards whatever the program left behind.
@@ -205,7 +190,7 @@ Python string:
 'VrlResult(success=true, output=Some("VRL syntax valid"), error=None)'
 ```
 
-Only `validate_vrl` returns one - it is not the return type of `execute_vrl`.
+`validate_vrl` is the one function that returns it. `execute_vrl` returns dicts.
 
 ## get_vrl_performance
 
@@ -247,14 +232,9 @@ table by a literal key, never a path. The path is handed over from Python.
 register_enrichment_table(name: str, kind: str, path: str, delimiter: str | None = None) -> None
 ```
 
-Loads the file at `path` and registers it under `name`. `kind` is `file`, a
-CSV whose first row is the header, or `geoip`, a GeoIP2/GeoLite2 `.mmdb`.
-`delimiter` applies to `file` only, defaults to `,`, and must be one ASCII
-character. Registering a name again replaces that table.
+Loads the file at `path` and registers it under `name`. `kind` is `file`, a CSV with a header first row, or `geoip`, a GeoIP2/GeoLite2 `.mmdb`. `delimiter` applies to `file` tables, defaults to `,`, and must be one ASCII character. Registering a name again replaces that table.
 
-The file is read here, so a bad table raises `ValueError` now rather than at
-VRL runtime: an unknown `kind`, an empty `name`, a delimiter longer than one
-character, an unreadable file, or a CSV row with the wrong number of fields.
+The file is read here, so a bad table raises `ValueError` at registration rather than at VRL runtime: an unknown `kind`, an empty `name`, a delimiter longer than one character, an unreadable file, or a CSV row with the wrong number of fields.
 
 ```python
 >>> register_enrichment_table("users", "file", "users.csv")
@@ -273,11 +253,7 @@ at compile time, so an unregistered one fails `validate_vrl` and raises from
 
 ### Lookups
 
-`condition` is an object of field and value pairs, and a row must equal every
-one of them. Only equality is supported. A `file` table stores every cell as
-text, so an integer, float or boolean condition is compared in its text form:
-`{"id": 2}` matches the cell `2`. `case_sensitive` defaults to `true`, and
-`select` returns only the fields it names.
+`condition` is an object of field and value pairs, and a row must equal every one of them. Equality is the one comparison. A `file` table stores every cell as text, so an integer, float or boolean condition is compared in its text form: `{"id": 2}` matches the cell `2`. `case_sensitive` defaults to `true`, and `select` returns just the fields it names.
 
 | VRL | No row matches | More than one row matches |
 |---|---|---|
@@ -294,8 +270,7 @@ table has no rows. Compiling
 a lookup indexes a `file` table on its condition fields, so a lookup costs the
 same however many rows the table holds.
 
-A `geoip` table takes exactly one condition, whose value is the IP address.
-An address with no record in the database is a no-row match.
+A `geoip` table takes exactly one condition, and its value is the IP address. An address with no record in the database is a no-row match.
 
 ### clear_enrichment_tables and list_enrichment_tables
 
@@ -304,8 +279,7 @@ clear_enrichment_tables() -> None
 list_enrichment_tables() -> list[dict]
 ```
 
-`clear_enrichment_tables` empties the registry. Programs already compiled keep
-the tables they captured, and only later compilations see the empty registry.
+`clear_enrichment_tables` empties the registry. Programs compiled before keep the tables they captured. Later compilations see the empty registry.
 
 `list_enrichment_tables` returns one dict per table, name-ordered, with
 `name`, `kind`, `path` and `rows`. `rows` is the row count of a `file` table
@@ -339,11 +313,7 @@ results = pipeline.process_logs(['{"level":"info"}'], '.level = upcase!(.level)'
 floats, apostrophes. A value `json` cannot serialise raises `TypeError` or
 `ValueError` at construction.
 
-`config` is then STORED AND NEVER USED. It does not affect `initialize` or
-`process_logs`. There is no sources/transforms/sinks execution - you can
-hand it a full Vector pipeline config and the only thing that runs is the
-`vrl_code` argument you pass to `process_logs`. That argument is required
-and is not derived from the config.
+`config` is then STORED AND NEVER USED. It does not affect `initialize` or `process_logs`. There is no sources/transforms/sinks execution - you can hand it a full Vector pipeline config and the one thing that runs is the `vrl_code` argument you pass to `process_logs`. That argument is required and is not derived from the config.
 
 `initialize()` sets a flag and returns `True`. Calling `process_logs` first
 raises `RuntimeError("Vector not initialized")`.
@@ -364,9 +334,7 @@ fields:
 {'error': 'VRL error: ...', 'original': '<the input string>'}
 ```
 
-So `"error" in result` is the failure check, the same as `execute_vrl`.
-Uncompilable VRL raises `ValueError("VRL compilation failed: ...")` for the
-whole batch, also the same as `execute_vrl`.
+So `"error" in result` is the failure check, the same as `execute_vrl`. Uncompilable VRL raises `ValueError("VRL compilation failed: ...")` for the whole batch, the same as `execute_vrl`.
 
 ### get_stats
 
@@ -374,16 +342,14 @@ whole batch, also the same as `execute_vrl`.
 {'events_processed': 2, 'bytes_processed': 51, 'errors': 1, 'uptime_seconds': 0.31}
 ```
 
-Real accumulated counts, measured from the most recent `initialize()` -
-calling `initialize()` again restarts the uptime clock and zeroes the
-counters, so the numbers always describe one run.
+Accumulated counts since the most recent `initialize()`: calling `initialize()` again restarts the uptime clock and zeroes the counters, so the numbers always describe one run.
 
 | Key | Counts |
 |---|---|
 | `events_processed` | events `process_logs` transformed without a runtime error |
 | `errors` | events that hit a VRL runtime error |
 | `bytes_processed` | UTF-8 bytes of every input string handed to `process_logs`, failed events included |
-| `uptime_seconds` | seconds since `initialize()`; `0.0` before it is called |
+| `uptime_seconds` | seconds since `initialize()`, and `0.0` before it is called |
 
 Every event lands in exactly one of `events_processed` or `errors`, so the
 two sum to the number of events attempted. VRL that fails to COMPILE raises
@@ -397,14 +363,9 @@ before any event is touched and moves no counter.
 validate_config(source: dict | str | Path) -> ConfigCheck
 ```
 
-Compiles the `source` of every `remap` transform in a Vector config. Runs
-in-process against the real compiler, and needs no `vector` binary.
+Compiles the `source` of every `remap` transform in a Vector config. Runs in-process against the VRL compiler, and needs no `vector` binary.
 
-`source` is either an already-parsed dict, or a path to a `.yaml`/`.yml`/
-`.toml`/`.json` config. TOML and JSON parse with the stdlib; YAML needs
-`pip install vector-vrl[yaml]` and raises `ModuleNotFoundError` naming that
-extra otherwise. An unsupported suffix, or a file that does not parse to a
-mapping, raises `ValueError`.
+`source` is either a parsed dict, or a path to a `.yaml`/`.yml`/ `.toml`/`.json` config. TOML and JSON parse with the stdlib. YAML needs `pip install vector-vrl[yaml]` and raises `ModuleNotFoundError` naming that extra otherwise. An unsupported suffix, or a file that does not parse to a mapping, raises `ValueError`.
 
 ```python
 >>> r = validate_config({"transforms": {"t": {"type": "remap", "source": ".a = 1"}}})
@@ -412,15 +373,15 @@ mapping, raises `ValueError`.
 True
 ```
 
-`ConfigCheck` carries:
+`ConfigCheck` has:
 
 | Attribute | Meaning |
 |---|---|
 | `ok` | every checked transform compiled |
 | `checked` | one `TransformCheck` per remap with inline `source` |
 | `failures` | the checked ones that did not compile |
-| `unchecked` | the checked ones this build could not judge |
-| `skipped` | remap transform names whose VRL lives in an external `file:` |
+| `unchecked` | the checked ones this build could not check |
+| `skipped` | remap transform names with their VRL in an external `file:` |
 
 `TransformCheck` is `name`, `ok`, `error`, `unchecked_reason`.
 
@@ -429,10 +390,10 @@ its VRL from `file:` is listed in `skipped` rather than guessed at.
 
 ### Why some transforms come back unchecked
 
-Two groups of VRL this build cannot judge on its own:
+Two groups of VRL this build cannot check by itself:
 
 - `get_enrichment_table_record` and `find_enrichment_table_records` DO
-  compile here, but only against a table registered through
+  compile here, but against a table registered through
   `register_enrichment_table`. Vector declares its tables in
   `enrichment_tables:` outside VRL, so a config naming a table this process
   was never given is unchecked - register it to have it checked.
@@ -440,17 +401,9 @@ Two groups of VRL this build cannot judge on its own:
   `get_hostname`, `http_request`, `dns_lookup` and six more - see VRL
   restrictions below) report ``call to undefined function `get_hostname` ``.
 
-VRL calling either group is not a broken config, so those transforms come back
-with `ok` True and an `unchecked_reason` naming the function, never in
-`failures`. That holds only while those are the source's ONLY compile errors.
-One more error of any kind, a typo'd function name included, puts the
-transform in `failures`. Use `validate_config_with_vector` to check the
-unchecked ones for real.
+VRL calling either group is not a broken config, so those transforms come back with `ok` True and an `unchecked_reason` naming the function, never in `failures`. That holds when those are the source's ONLY compile errors. One more error of any kind, a typo'd function name included, puts the transform in `failures`. Use `validate_config_with_vector` to check the unchecked ones.
 
-The event-secret functions used to be in this list. They are compiled in now,
-so a config using `get_secret`, `set_secret` or `remove_secret` is checked
-like any other - the secret BACKEND is still declared outside VRL and still
-invisible here.
+The event-secret functions compile on every build, so a config using `get_secret`, `set_secret` or `remove_secret` is checked like any other. The secret BACKEND is declared outside VRL and stays invisible here.
 
 ## validate_config_with_vector
 
@@ -465,20 +418,14 @@ validate_config_with_vector(
 ) -> VectorValidation
 ```
 
-Runs `vector validate` on a config file. Checks everything `validate_config`
-cannot - sources, sinks, wiring between components, component options, and the
-VRL whose enrichment tables or secrets are declared in the config.
+Runs `vector validate` on a config file. Checks everything `validate_config` cannot - sources, sinks, wiring between components, component options, and the VRL that uses enrichment tables or secrets declared in the config.
 
-One-shot: Vector exits as soon as it has answered. This never starts a daemon
-and never moves data. `no_environment` passes `--no-environment`, skipping the
-component and health checks that would open network connections, so checking a
-file does not dial the configured sinks.
+One-shot: Vector exits as soon as it has answered. This never starts a daemon and never moves data. `no_environment` passes `--no-environment`, skipping the component and health checks that would open network connections, so validating a file does not dial the configured sinks.
 
 Raises `FileNotFoundError` when the binary is not on PATH, and
 `subprocess.TimeoutExpired` if Vector outlives `timeout`.
 
-`VectorValidation` is `ok`, `returncode`, and `output` - Vector's own report,
-which names the offending component on failure.
+`VectorValidation` is `ok`, `returncode`, and `output` - Vector's report, which names the offending component on failure.
 
 ```python
 >>> r = validate_config_with_vector("vector.yaml")
@@ -490,45 +437,22 @@ True
 
 Two guards apply to every entry point that compiles VRL.
 
-Environment, system and network functions are not compiled in, so
-caller-supplied VRL cannot read the host or reach the network. Ten of them
-fail to compile with `undefined function`: `get_env_var`, `encode_proto`,
-`parse_proto`, `parse_etld`, `validate_json_schema`, `get_hostname`,
-`get_timezone_name`, `http_request`, `dns_lookup` and `reverse_dns`. That is
-what the published wheel ships; a source build can turn all ten on with the
-`full-stdlib` Cargo feature. The reasoning is in
-[architecture.md](architecture.md) under "VRL execution's security
-posture".
+Environment, system and network functions are not compiled in, so caller-supplied VRL cannot read the host or reach the network. Ten of them fail to compile with `undefined function`: `get_env_var`, `encode_proto`, `parse_proto`, `parse_etld`, `validate_json_schema`, `get_hostname`, `get_timezone_name`, `http_request`, `dns_lookup` and `reverse_dns`. That is what the published wheel ships. A source build can turn all ten on with the `full-stdlib` Cargo feature. The reasoning is in [What caller-supplied VRL cannot reach](architecture.md#what-caller-supplied-vrl-cannot-reach).
 
-VRL source may not nest brackets more than 64 levels deep
-(`MAX_VRL_NESTING_DEPTH`). Past a few hundred the parser's own recursion
-overflows the stack and takes the process down, which no Python `except`
-can catch, so the check runs before the parser sees the input. Brackets
-inside string, raw string, regex and timestamp literals and `#` comments do
-not count. Over the limit you get a message containing `nests`:
+VRL source may not nest brackets more than 64 levels deep (`MAX_VRL_NESTING_DEPTH`). Deep enough nesting overflows the parser's recursion and takes the process down, which no Python `except` can catch, so the check runs before the parser sees the input. Brackets inside string, raw string, regex and timestamp literals and `#` comments do not count. Over the limit you get a message containing `nests`:
 
 ```python
 >>> validate_vrl('.x = ' + '(' * 1000 + 'true' + ')' * 1000).error
 'VRL source nests 1000 levels deep, exceeding the 64-level limit'
 ```
 
-Chains that nest no bracket (`a + b + c ...`, long `else if` ladders, `!!!x`)
-recurse just as deep, so compiling and running VRL happens on a thread with a
-256 MiB stack of its own, whatever stack the calling thread has. If the
-process cannot reserve that much address space the work runs on the calling
-thread instead. A far longer chain still overflows it.
+Chains that nest no bracket (`a + b + c ...`, long `else if` ladders, `!!!x`) recurse just as deep, so compiling and running VRL happens on a thread with a 256 MiB stack, whatever stack the calling thread has. If the process cannot reserve that much address space the work runs on the calling thread instead. A far longer chain still overflows it.
 
-Both bracket and stack limits are covered by tests in
-`vector-bindings/src/lib.rs` and `vector-vrl/tests/unit/test_vector_class.py`.
+The bracket limit is tested in `vector-bindings/src/nesting.rs` and `vector-vrl/tests/unit/test_vector_class.py`, the VRL stack in `vector-bindings/src/lib.rs`.
 
 ## The subprocess surface
 
-`vector_vrl.__all__` also carries `THGPerformanceAssessor`, `THGMetrics`,
-`THGResult`, `quick_thg_assessment`, `assess_vrl_performance`,
-`execute_vector_pipeline`, `VectorTestRunner`, `ProductionPatterns`,
-`production_patterns`, and the `get_apache_combined` / `get_nginx_access` /
-`get_json_application` / `get_kubernetes_pods` / `get_docker_container`
-pattern helpers.
+`vector_vrl.__all__` lists `THGPerformanceAssessor`, `THGMetrics`, `THGResult`, `quick_thg_assessment`, `assess_vrl_performance`, `execute_vector_pipeline`, `VectorTestRunner`, `ProductionPatterns`, `production_patterns`, and the `get_apache_combined` / `get_nginx_access` / `get_json_application` / `get_kubernetes_pods` / `get_docker_container` pattern helpers.
 
 These are a different thing to everything above. They shell out to a
 `vector` BINARY - the first `vector` on PATH, else `/usr/bin/vector`, or
@@ -542,11 +466,7 @@ kills a run that goes past it and reports it failed. A run succeeds when
 Vector exits 0 and every output line is JSON. Events a program aborts do not
 come back, and Vector's stderr is in the error message either way.
 
-`execute_vector_pipeline(config, input_data, timeout)` runs the config's own
-remap transforms, in the order their `inputs` chain them and each with its
-own options, over `input_data`. The config's sources and sinks are not used.
-A config whose transforms are not one chain of inline remaps raises
-`ValueError`.
+`execute_vector_pipeline(config, input_data, timeout=30)` runs the config's remap transforms, in the order their `inputs` chain them and each with its options, over `input_data`. The config's sources and sinks are not used. A config with transforms that are not one chain of inline remaps raises `ValueError`.
 
 They are not part of the in-process API this package is for, and they are
 not covered by the test files that describe it. If you want VRL executed,

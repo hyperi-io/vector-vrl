@@ -5,11 +5,7 @@
 # License:   Apache-2.0
 # Copyright: (c) 2026 HyperSec
 #
-# Internal crate: builds and tests here, does NOT publish standalone.
-# The publishable artefact is ../vector-vrl (maturin wraps this crate).
-#
-# Override defaults with HYPERCI_* env vars.
-# Reference: config/defaults.yaml in hyperi-ci.
+# The component layout: CONTRIBUTING.md. Defaults: config/defaults.yaml in hyperi-ci.
 
 language: rust
 license: Apache-2.0
@@ -22,14 +18,9 @@ test:
   enabled: true
   coverage: false
   rust:
-    # Both feature sets, run in turn. The sandbox regression test
-    # (env_system_network_functions_are_unavailable) exists only on the
-    # default build and its mirror only under full-stdlib, so a single
-    # --all-features run would silently skip the sandbox one.
+    # In turn, not --all-features: the sandbox test exists only on the default build.
     features: default|full-stdlib
-    # Require process-per-test isolation rather than accepting whatever the
-    # runner has: a missing nextest fails the stage instead of quietly
-    # switching to cargo test's shared-process semantics.
+    # A missing nextest fails the stage rather than falling back to cargo test.
     nextest: true
 build:
   enabled: true

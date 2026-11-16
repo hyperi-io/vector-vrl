@@ -325,7 +325,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.bot.outputs.token || secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ steps.bot.outputs.token || secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
+        run: semantic-release
 
       - name: Tag HEAD (forced bump / explicit version)
         # semantic-release cannot force a version; tag-head resolves `last tag +

@@ -1,2 +1,1 @@
-# No Git LFS needed - /vector build artifacts are now gitignored
-# All large build artifacts are temporary and ignored
+# No attributes: build artefacts are gitignored, so nothing needs LFS.

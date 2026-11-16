@@ -1,14 +1,13 @@
-# Rust build artifacts (ALL excluded to prevent 10K+ changes)
+# Rust build artefacts
 /target/
 */target/
 **/target/
-# Cargo.lock IS committed for vector-bindings (the only Rust crate here) -
-# see standards/rules/rust.md "Required Tooling"
+# vector-bindings/Cargo.lock is committed.
 
-# Vector source directory (build artifact - ignore entirely)
+# The orchestrator's Vector source download
 /vector/
 
-# Python environments (NEVER track these - causes 10K+ git changes)
+# Python environments
 .venv/
 */.venv/
 **/.venv/
@@ -21,7 +20,7 @@ __pycache__/
 .Python
 build/dist/
 *.egg-info/
-# Python binary extensions (should not be tracked)
+# Python binary extensions
 *.so
 *.dylib
 *.pyd
@@ -42,7 +41,7 @@ integration.toml
 .coverage
 coverage.xml
 
-# Temporary files (controlled via LFS for important ones)
+# Temporary files
 .tmp/
 !.tmp/.gitkeep
 
@@ -65,7 +64,7 @@ npm-debug.log*
 *.pem
 *.p12
 
-# Build system internal files (prevent 10K+ changes)
+# Build system internal files
 build/.cache/
 build/logs/
 build/*.backup
@@ -73,8 +72,7 @@ vector-vrl/target/
 vector-vrl/dist/
 vector-bindings/target/
 
-# Cargo registry and git checkouts (major source of 10K+ changes) -
-# NOT .cargo/config.toml, which is meant to be committed
+# Cargo registry and git checkouts. .cargo/config.toml is committed.
 .cargo/registry/
 .cargo/git/
 */.cargo/registry/
@@ -86,7 +84,7 @@ vector-bindings/target/
 */incremental/
 **/incremental/
 
-# Large files (no longer using LFS since /vector is ignored)
+# Archives and packages
 *.tar.gz
 *.zip
 *.dmg

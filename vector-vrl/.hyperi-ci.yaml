@@ -5,12 +5,7 @@
 # License:   Apache-2.0
 # Copyright: (c) 2026 HyperSec
 #
-# The publishable artefact: maturin build wraps ../vector-bindings.
-# release stays gated - fires only on the Release: true trailer or an
-# explicit workflow_dispatch, never on a plain push.
-#
-# Override defaults with HYPERCI_* env vars.
-# Reference: config/defaults.yaml in hyperi-ci.
+# The release trailer: CONTRIBUTING.md. Defaults: config/defaults.yaml in hyperi-ci.
 
 language: python
 license: Apache-2.0
@@ -27,6 +22,6 @@ build:
   - native
 release:
   enabled: true
-  # Wheels go to PyPI only; there are no standalone binaries to publish.
+  # Wheels go to PyPI. There are no standalone binaries to publish.
   destinations:
     binaries: false

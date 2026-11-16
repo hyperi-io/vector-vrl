@@ -1,4 +1,2 @@
 [build]
-# No custom rustflags/linker required - default toolchain is sufficient
-# for this crate. No private registry - crates.io only (JFrog removed
-# from this project entirely).
+# No custom rustflags, linker or registry: the default toolchain and crates.io.

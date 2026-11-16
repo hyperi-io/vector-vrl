@@ -1,22 +1,7 @@
 # Project:   vector-vrl
 # File:      .github/workflows/vector-auto-update.yml
-# Purpose:   Daily check for a new Vector release (7-day release-age
-#            cooldown - build/vector_pin.py skips anything newer). When one is
-#            found it is tried, and a PR is opened only if it builds and passes.
-#
-# Nothing touches git until the same `make check` gate every normal push gets
-# passes clean. The bump then goes to a vector-bump/<version> branch with a PR
-# against the default branch, so main only moves when a person merges it.
-#
-# The branch and the PR are made with the default GITHUB_TOKEN. Events that
-# token causes start no push run, and GitHub holds the PR's own CI runs until
-# someone with write access selects "Approve workflows to run".
-#
-# One bump PR at a time: while a vector-bump/* PR is open the job stays quiet.
-#
-# Requires this repo's Settings -> Actions -> General -> "Allow GitHub Actions
-# to create and approve pull requests" - a repo setting, not something this
-# file can grant itself.
+# Purpose:   Daily check for a new Vector release, tried and opened as a PR
+#            when it passes. How it works: build/README.md.
 
 name: Vector auto-update
 
@@ -69,7 +54,7 @@ jobs:
       contents: write # push the vector-bump branch
       pull-requests: write # open the PR
     env:
-      # hyperi-ci 2.10 and later need Python 3.14, so uv must not fall back to the runner's 3.12.
+      # hyperi-ci needs Python 3.14, so uv must not fall back to the runner's interpreter.
       UV_PYTHON: "3.14"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -83,8 +68,7 @@ jobs:
       - uses: hyperi-io/hyperi-ci/.github/actions/setup-osv-scanner@main
       # vector-bindings sets `test.rust.nextest: true`, which fails the test stage without it.
       - uses: hyperi-io/hyperi-ci/.github/actions/setup-nextest@main
-      # Pin the interpreter pyo3-build-config finds so the build does not
-      # depend on the runner image's default.
+      # Pin the interpreter pyo3-build-config finds, not the runner image's default.
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
@@ -106,8 +90,7 @@ jobs:
 
       - name: Verify - the same gate every normal push gets
         run: make check
-      # Reached only if `make check` passed. Nothing above this line
-      # touches git state, so a failure leaves main untouched.
+      # Reached only if `make check` passed. Nothing above this line touches git.
       - name: Open the bump PR
         run: |
           conftest=vector-vrl/tests/conftest.py

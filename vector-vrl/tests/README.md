@@ -1,120 +1,38 @@
-# vector-vrl Test Suite
+# vector-vrl test suite
 
-Real pytest, organised by test type. No bespoke runner, no mocks - subprocess
-tests get a real `vector` binary (locally built if found, else a throwaway
-`timberio/vector` container, else skip/fail per `conftest.py`), and binding
-tests use the compiled PyO3 module in-process.
+Plain pytest, no bespoke runner and no mocks. Binding tests call the compiled PyO3 module in-process, and subprocess tests run a `vector` binary.
 
-## Overview
-
-The test suite validates vector-vrl functionality including:
-
-1. **Unit Tests**: Isolated component testing (VRL functions, subprocess Vector calls)
-2. **Integration Tests**: Component interaction testing (vector-vrl Python bindings, subprocess Vector configs)
-3. **E2E Tests**: End-to-end production scenarios (regex2vrl with real patterns)
-4. **Smoke Tests**: Mandatory startup check (`smoke/test_startup.py`)
-
-## Test Structure
-
-```text
-vector-vrl/tests/
-├── conftest.py                        # vector_runner fixture: run(args, cwd) against a real vector binary/container
-├── smoke/                             # Mandatory startup smoke test
-├── unit/                              # Unit tests - isolated components, no explicit marker
-│   ├── test_native_vrl_*.py           # In-process PyO3 VRL execution (no subprocess)
-│   ├── test_vrl_in_memory.py          # In-process VRL execution
-│   └── test_*_vector*.py / test_*_subprocess.py  # Real vector subprocess tests (vector_runner fixture)
-├── integration/                       # @pytest.mark.integration
-│   ├── bindings.py                    # vector-vrl Python bindings, in-process, no subprocess
-│   └── test_*.py                      # Bindings and subprocess-config integration tests
-├── e2e/                                # @pytest.mark.e2e
-│   ├── test_production_patterns.py    # Production pattern E2E tests
-│   └── test_regex2vrl.py              # Full regex2vrl pipeline tests
-├── manual/                            # NOT collected as tests - debug/audit/scratch scripts kept for reference
-├── vrl/                                # Fixture data: sample logs and a VRL script
-└── fixtures/                          # Shared test data and configurations
-```
-
-## Running Tests
+| Directory | What's in it |
+|---|---|
+| `smoke/` | `test_startup.py`: the package imports and `get_bindings_info()` reports a source |
+| `unit/` | No marker. Most call the bindings in-process: `test_vector_class.py`, `test_native_vrl_simple.py`, enrichment tables, config checks, VRL's upstream examples, every stdlib function. `test_minimal_vector.py`, `test_quick_vector.py`, `test_simple_subprocess.py`, `test_working_ip_vrl.py` and `test_working_vector.py` run a `vector` binary through `vector_runner`. `test_readme_examples.py` runs every Python block in both READMEs except `>>>` transcripts |
+| `integration/` | `@pytest.mark.integration`. `VectorTestRunner`, `validate_config_with_vector`, and in-process VRL against a `vector` subprocess on the same input |
+| `e2e/` | `@pytest.mark.e2e`. A multi-branch VRL pipeline, run through the bindings and through `vector test` |
+| `manual/` | Debug and audit scripts. Not collected: run one with `python tests/manual/<script>.py` |
+| `data/` | The function expectation table and the dump of VRL's upstream examples |
+| `vrl/`, `fixtures/` | Sample logs, VRL scripts, configs and patterns |
 
 ```bash
-# All tests
 cd vector-vrl
 uv run --with pytest pytest tests/ -v
-
-# By marker
-uv run --with pytest pytest tests/ -m unit -v
 uv run --with pytest pytest tests/ -m integration -v
-uv run --with pytest pytest tests/ -m e2e -v
-uv run --with pytest pytest tests/ -m smoke -v
-
-# A single file or test
+uv run --with pytest pytest tests/ -m "not slow" -v
+uv run --with pytest pytest tests/smoke -v
 uv run --with pytest pytest tests/unit/test_working_vector.py -v
 ```
 
-`hyperi-ci run test -C vector-vrl` (what CI actually calls, via `make
-test-python`) runs plain `pytest` under the hood - there is no separate
-runner script to keep in sync.
+Unit tests have no marker, and the smoke test doesn't apply the declared `smoke` marker, so select those two by directory. `make test-python` at the root runs `hyperi-ci run test` here, which is plain pytest.
 
-### Vector binary resolution (see `conftest.py`)
+The `vector_runner` fixture in `conftest.py` takes the first of these: a local build (`vector/target/release/vector` and its siblings) or `vector` on `PATH`, then a one-shot `docker run --rm` of `timberio/vector` at the pinned `_VECTOR_TAG` with the test's `tmp_path` mounted as the working directory. With neither it skips the test, or fails it when `$CI` is set, because a gate that can't run must not pass silently.
 
-The `vector_runner` fixture picks, in order: a locally-built binary
-(`vector/target/release/vector` etc, or `vector` on `PATH`), then a one-shot
-`docker run --rm timberio/vector:<pinned tag>` with the test's `tmp_path`
-mounted as the working directory, then `pytest.skip` - or `pytest.fail` if
-`$CI` is set, since a gate that cannot run must not silently pass. Expect
-subprocess-backed unit/integration/e2e tests to skip in an environment with
-neither a local vector checkout nor docker; that is correct behaviour, not a
-bug.
-
-## Test Categories
-
-### Unit Tests (`unit/`)
-
-Isolated component testing - no dependencies between tests. VRL function
-tests run in-process against the compiled bindings; subprocess tests spin a
-real `vector` process via `vector_runner` per test.
-
-### Integration Tests (`integration/`)
-
-Component interaction testing. `bindings.py` uses `vector.Vector()` directly,
-in-process, no subprocess. Other files here exercise a real `vector`
-subprocess against a generated config (regex2vrl output, YAML configs,
-auto-stop behaviour, etc) via `vector_runner`.
-
-### E2E Tests (`e2e/`)
-
-Full regex2vrl -> VRL -> Vector -> validation pipelines against production-
-shaped patterns (Apache/Nginx/syslog/JSON/Docker/Kubernetes logs, grok
-patterns) via `vector_runner`.
-
-## Manual / non-test scripts (`manual/`)
-
-`tests/manual/` holds debug, audit, and scratch scripts that were previously
-disguised as tests (`if __name__ == '__main__':`, print-based pass/fail, no
-real assertions) - forcing pytest asserts onto them would have invented fake
-coverage. They are not collected by pytest (no `test_*.py` naming, and
-outside the collected tree in intent). Run one directly with `python
-tests/manual/<script>.py` if you need the manual/human-in-the-loop check it
-was written for. Some are candidates for outright deletion (fully superseded,
-no remaining reference value) - flagged as such wherever that applies; ask
-before removing.
-
-## Known product bugs surfaced by this migration
-
-Converting the bespoke subprocess/regex2vrl tests to real pytest asserts
-surfaced genuine regex2vrl/grok conversion bugs that the old print-based
-runner was silently swallowing. Tracked in GH issue #13 (with a follow-up
-comment covering the wider grok/regex2vrl findings) - not re-litigated here.
-
-## Adding New Tests
+The integration tests take `vector_binary` from `integration/conftest.py` instead. It looks on `PATH` alone, with no container fallback, and skips or fails by the same rule. A new test follows one of these shapes:
 
 ```python
-# unit/ or integration/ - a real vector subprocess test
+# unit/ or integration/ - a vector subprocess test
 def test_new_pattern(vector_runner, tmp_path):
     config = tmp_path / "vector.yaml"
     config.write_text(render_config(some_vrl))
-    result = vector_runner.run(["validate", str(config)], cwd=tmp_path)
+    result = vector_runner(["validate", str(config)], tmp_path)
     assert result.returncode == 0, result.stderr
 
 
@@ -131,13 +49,4 @@ def test_new_binding_case(): ...
 def test_new_production_pattern(vector_runner, tmp_path): ...
 ```
 
-## Troubleshooting
-
-1. **Vector binary not found, no docker**: expected skip outside CI/a dev
-   box with `vector` built - not a failure. Under `$CI` this is a hard
-   `pytest.fail` instead, by design.
-2. **vector-vrl import error** (bindings-based tests): the compiled PyO3
-   module must be built and importable - see the top-level build docs.
-3. **Slow/flaky subprocess tests**: mark genuinely slow ones
-   `@pytest.mark.slow` so they can be excluded from a fast local loop
-   (`-m "not slow"`).
+Mark a test over 30 seconds `@pytest.mark.slow`, so a fast local loop can leave it out with `-m "not slow"`. A bindings import error means the compiled module isn't built: see [docs/how-to-build-and-test.md](../../docs/how-to-build-and-test.md).

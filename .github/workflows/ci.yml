@@ -3,18 +3,7 @@
 # Purpose:   CI for the 3-component repo (vector-bindings Rust crate,
 #            vector-vrl Python package, build/ orchestration tooling).
 #
-# hyperi-ci's reusable python-ci.yml assumes the checkout root IS the project
-# and has no wheel matrix, so this repo cannot call it the way scalo-py does.
-# Everything it would have given us is reused piece by piece instead: the
-# predict-version and setup-semantic-release composite actions, and the
-# hyperi-ci CLI for check-commits / stamp-version / release / release-commit
-# / release-notify. Only the cross-component fan-out and the wheel matrix are
-# bespoke.
-#
-# Version, CHANGELOG.md and git tags are semantic-release's, never hand-set.
-# A push to main whose HEAD commit carries a `Release: true` trailer (or a
-# workflow_dispatch with from-head/tag) tags and publishes; everything else
-# validates only.
+# The jobs and the release trailer: CONTRIBUTING.md.
 
 name: CI
 
@@ -121,8 +110,7 @@ jobs:
       - uses: hyperi-io/hyperi-ci/.github/actions/setup-osv-scanner@main
       # make test-rust runs the suite under cargo-nextest, pinned by hyperi-ci.
       - uses: hyperi-io/hyperi-ci/.github/actions/setup-nextest@main
-      # Pin the interpreter pyo3-build-config finds so the build does not
-      # depend on the runner image's default.
+      # Pin the interpreter pyo3-build-config finds, not the runner image's default.
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
@@ -141,11 +129,7 @@ jobs:
           fetch-depth: 0 # gitleaks scans history
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
-      # The subprocess surface (VectorTestRunner, THG) shells out to a `vector`
-      # binary on PATH and its integration tests hard-fail under $CI without
-      # one. The version is the docker tag pinned in tests/conftest.py, read
-      # from there so the two cannot drift; the release tarball unpacks to
-      # vector-<target>/bin/vector.
+      # The binary-gated integration tests fail under $CI without one. The version is _VECTOR_TAG in tests/conftest.py.
       - name: Install the pinned vector binary
         run: |
           version="$(sed -n 's/^_VECTOR_TAG = "\(.*\)-debian"$/\1/p' vector-vrl/tests/conftest.py)"
@@ -166,9 +150,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # maturin-action builds inside a manylinux container, so the wheel is
-          # tagged manylinux_*_<arch>, not the bare linux_<arch> tag PyPI has
-          # never accepted for uploads.
+          # maturin-action builds in a manylinux container, which gives the manylinux tag PyPI accepts.
           - name: linux-x86_64
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -176,15 +158,11 @@ jobs:
           - name: linux-aarch64
             os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-          # One wheel per Mac architecture rather than a universal2 fat binary:
-          # pip resolves the right one and each download carries a single
-          # architecture. Both build on the arm64 runner, since `abi3` plus
-          # `extension-module` links no libpython and so cross-compiles.
+          # One wheel per Mac architecture, both from the arm64 runner: abi3 links no libpython, so it cross-compiles.
           - name: macos-arm64
             os: macos-latest
             target: aarch64-apple-darwin
-          # Cross-built, so its wheel cannot be installed on the runner that
-          # produced it and the smoke check has to sit this one out.
+          # Cross-built, so the smoke check can't install it on this runner.
           - name: macos-x86_64
             os: macos-latest
             target: x86_64-apple-darwin
@@ -201,28 +179,18 @@ jobs:
           cache-suffix: ${{ matrix.name }}
 
       - name: Stamp the predicted version
-        # Version-first: the wheel must carry the version about to be tagged,
-        # because `vector_vrl.__version__` reads its own package metadata.
-        # Skipped on a plain `tag` dispatch, where the tag's tree is correct.
+        # `vector_vrl.__version__` reads the package metadata, so the wheel carries the version about to be tagged.
         if: needs.plan.outputs.will-release == 'true' && (github.event_name == 'push' || inputs.from-head == 'true')
         env:
           VERSION: ${{ needs.plan.outputs.next-version }}
         run: ${{ env.HYPERCI_INSTALL }} stamp-version "$VERSION" -C vector-vrl
 
-      # Pins the interpreter maturin builds against on macOS; the Linux legs
-      # use the manylinux container's own, found by --find-interpreter.
+      # The macOS build interpreter. The Linux legs use the manylinux container's, via --find-interpreter.
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
-      # v1.9.0 was tagged in 2021: it declares no `working-directory`, so the
-      # input was silently dropped and the build ran at the checkout root, and
-      # it defaults Linux to the retired manylinux2010 image whose glibc 2.12
-      # is too old for current rustup-init.
-      #
-      # --find-interpreter because manylinux containers keep their CPythons
-      # under /opt/python with no plain `python3` on PATH. The crate is abi3,
-      # so however many it finds, the result is one wheel for this platform.
+      # manylinux keeps its CPythons under /opt/python, off PATH. abi3 makes one wheel however many it finds.
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           working-directory: vector-vrl
@@ -230,9 +198,7 @@ jobs:
           args: --release --out dist --find-interpreter
           manylinux: auto # ignored on macOS
 
-      # Installs the wheel just built ON THIS RUNNER into a throwaway venv and
-      # exercises the real public API through it, not the dev tree's own .so.
-      # A platform whose wheel fails this never reaches publish.
+      # Runs VRL through the wheel just built, installed in a throwaway venv.
       - if: matrix.cross != true
         run: python3 build/wheel_smoke_check.py vector-vrl/dist
 
@@ -252,8 +218,7 @@ jobs:
       contents: write # semantic-release tag + release-commit
       issues: write # release-notify
       pull-requests: write
-      # hyperi-ci's publish handler passes --token when PYPI_TOKEN is set and
-      # falls back to OIDC when it is not; both paths stay open.
+      # hyperi-ci's publish handler passes --token when PYPI_TOKEN is set and falls back to OIDC when it isn't.
       id-token: write
     env:
       # The `secrets` context is not readable from a step-level `if`, and the
@@ -269,9 +234,7 @@ jobs:
           persist-credentials: false
 
       - name: Mint the release bot token
-        # A GITHUB_TOKEN push triggers no workflows and cannot be excepted from
-        # a branch ruleset, so the tag and the release commit go out as the app
-        # when its key is visible to this repo.
+        # A GITHUB_TOKEN push triggers no workflows and can't bypass a branch ruleset, so the release pushes as the app.
         id: bot
         if: env.RELEASE_APP_KEY != ''
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
@@ -301,8 +264,7 @@ jobs:
         uses: hyperi-io/hyperi-ci/.github/actions/setup-semantic-release@main
 
       - name: Guard - the predicted tag must not already exist off-HEAD
-        # A collision means semantic-release mispredicted (it is blind to tags
-        # not reachable from HEAD); proceeding would rewrite release history.
+        # semantic-release is blind to tags off HEAD, and tagging past one would rewrite release history.
         if: ${{ github.event_name == 'push' || (inputs.from-head == 'true' && inputs.bump == 'auto') }}
         run: |
           predicted="v${{ needs.plan.outputs.next-version }}"
@@ -319,8 +281,7 @@ jobs:
           fi
 
       - name: Tag (semantic-release)
-        # Analyses commits, tags HEAD and renders CHANGELOG.md. The version it
-        # picks is the same one plan predicted, so the wheels already carry it.
+        # Picks the version plan predicted, so the wheels already carry it.
         if: ${{ github.event_name == 'push' || (inputs.from-head == 'true' && inputs.bump == 'auto') }}
         env:
           GITHUB_TOKEN: ${{ steps.bot.outputs.token || secrets.GITHUB_TOKEN }}
@@ -328,8 +289,7 @@ jobs:
         run: npx semantic-release
 
       - name: Tag HEAD (forced bump / explicit version)
-        # semantic-release cannot force a version; tag-head resolves `last tag +
-        # bump`, or an exact X.Y.Z, and tags HEAD via the API.
+        # semantic-release cannot force a version. tag-head takes last tag + bump, or an exact X.Y.Z.
         id: forcedtag
         if: ${{ inputs.from-head == 'true' && inputs.bump != 'auto' && inputs.bump != '' }}
         env:
@@ -349,15 +309,12 @@ jobs:
         env:
           HYPERCI_VERSION: ${{ steps.forcedtag.outputs.version || needs.plan.outputs.next-version }}
           PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-          # This step also cuts the GitHub Release once the upload lands, so
-          # it needs a gh token; without one the upload succeeds and the step
-          # still fails, leaving a tag and a shipped version behind it.
+          # The step cuts the GitHub Release after the upload, and fails without a gh token.
           GH_TOKEN: ${{ steps.bot.outputs.token || secrets.GITHUB_TOKEN }}
         run: ${{ env.HYPERCI_INSTALL }} run release -C .
 
       - name: Stamp the released version
-        # This job checked out the pre-release tree, and the build's stamp ran
-        # on a different runner, so VERSION has not moved here yet.
+        # The build's stamp ran on another runner, so VERSION has not moved in this checkout.
         if: steps.publish.outcome == 'success'
         continue-on-error: true
         env:
@@ -367,8 +324,7 @@ jobs:
         run: ${{ env.HYPERCI_INSTALL }} stamp-version "$RELEASE_VERSION"
 
       - name: Commit the rendered release artefacts
-        # Puts VERSION + CHANGELOG.md back on main as an UNTAGGED commit, so no
-        # tag points at machine-authored history. Never fails a shipped release.
+        # An untagged commit, so no tag points at machine-authored history.
         if: steps.publish.outcome == 'success'
         continue-on-error: true
         env:

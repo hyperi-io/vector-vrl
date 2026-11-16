@@ -11,41 +11,17 @@ name = "vector_bindings"
 crate-type = ["cdylib"]
 
 [dependencies]
-# abi3-py312 targets CPython's stable ABI: one wheel per platform serves 3.12
-# and every later release.
+# CPython's stable ABI: one wheel per platform. docs/how-to-build-and-test.md.
 pyo3 = { version = "0.29.3", features = ["extension-module", "abi3-py312"] }
 serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
-# Enrichment tables. `csv` parses a registered `file` table; it is already in
-# the tree via vrl's stdlib-base, so declaring it adds no new dependency.
+# Parses a registered `file` enrichment table. vrl's stdlib-base already pulls it in.
 csv = "1.4"
-# MaxMind DB reader for registered `geoip` tables. Vector's own enrichment
-# lib is unpublished, so the GeoIP2/GeoLite2 reader is taken direct. 0.31+
-# bounds the work a crafted database can force during decoding, and a
-# registered table is a file the caller hands us.
+# Reads registered `geoip` tables. 0.31 and later bound the decode work a crafted database can force.
 maxminddb = "0.32"
-# VRL - synced from Vector's workspace dependencies (NO HARDCODING).
-# stdlib-base only, NOT the default `stdlib`/`cli`: this crate executes
-# caller-supplied VRL text, so the three host-reaching feature groups stay
-# off by default. enable_crypto_functions is safe to keep.
-#
-# Held back by enable_env_functions:     get_env_var
-# Held back by enable_system_functions:  encode_proto, parse_proto, parse_etld,
-#                                        validate_json_schema, get_hostname,
-#                                        get_timezone_name
-# Held back by enable_network_functions: http_request, dns_lookup, reverse_dns
-#
-# The `full-stdlib` feature below turns all ten on for callers who control
-# their own VRL source.
+# Sandboxed feature set. What it holds back: docs/architecture.md, "What caller-supplied VRL cannot reach".
 vrl = { git = "https://github.com/vectordotdev/vrl.git", branch = "main", default-features = false, features = ["stdlib-base", "enable_crypto_functions"] }
 
 [features]
 default = []
-# Opt in to VRL's complete stdlib, adding the ten functions the sandboxed
-# default holds back. `vrl/stdlib` is additive over the features already
-# named above, so this unions in enable_env_functions, enable_system_functions
-# and enable_network_functions.
-#
-# A build with this on can read the host environment, resolve DNS and make
-# arbitrary outbound HTTP requests from VRL source. Enable it only where the
-# VRL text is trusted; the published wheel is built without it.
+# Trusted VRL only: adds the host, DNS and HTTP functions. The published wheel is built without it.
 full-stdlib = ["vrl/stdlib"]

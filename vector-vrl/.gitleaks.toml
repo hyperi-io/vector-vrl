@@ -1,11 +1,5 @@
-# Gitleaks configuration -- allowlist false positives.
-#
-# A config defining only allowlists leaves gitleaks with an EMPTY ruleset
-# (matches nothing at all), so [extend] useDefault = true is required to load
-# the default rules first. hyperi-ci's gitleaks stage looks for this file
-# relative to its own working directory, not the repo root, so an identical
-# copy lives in every component directory that runs `hyperi-ci run quality`
-# (vector-bindings/, vector-vrl/, build/) alongside this root copy.
+# Allowlists on top of the default rules, which useDefault loads.
+# hyperi-ci reads this file from each component directory, so vector-bindings/, vector-vrl/ and build/ keep copies.
 [extend]
 useDefault = true
 

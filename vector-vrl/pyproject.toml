@@ -34,8 +34,7 @@ dependencies = []
 # Reading a Vector config from YAML. TOML and JSON need no extra (stdlib).
 yaml = ["pyyaml>=6.0"]
 
-# Test tooling is a dependency-group, not an extra: uv installs the default
-# groups for `uv run`, and groups stay out of published wheel metadata.
+# A dependency-group, not an extra, so test tooling stays out of the wheel's metadata.
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
@@ -92,11 +91,7 @@ markers = [
 testpaths = ["tests"]
 
 [tool.coverage.run]
-# thg_performance and vector_test_utils shell out to a `vector` binary and
-# are reached only by the binary-gated integration tests, so measuring them
-# here would report a surface the unit suite is not meant to cover.
-# version_detection is a standalone GitHub-API CLI nothing in the package
-# imports; it is excluded pending its removal or a move to build/.
+# Reached only by the binary-gated integration tests, or (version_detection) imported by nothing.
 omit = [
     "src/vector_vrl/thg_performance.py",
     "src/vector_vrl/vector_test_utils.py",

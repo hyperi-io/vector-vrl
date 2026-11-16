@@ -1,0 +1,11 @@
+# Project:   vector-vrl
+# File:      .hyperi-ci.yaml
+# Purpose:   Docs checks over the repo's markdown (make quality-docs)
+#
+# License:   Apache-2.0
+# Copyright: (c) 2026 HyperSec
+#
+# Each component directory carries its own config. Defaults: config/defaults.yaml in hyperi-ci.
+
+quality:
+  mermaid_parse: blocking

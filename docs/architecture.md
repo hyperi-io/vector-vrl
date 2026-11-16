@@ -53,7 +53,7 @@ Dependency runs one way, `vector-bindings` into `vector-vrl`, and `build/` drive
 
 `vector-vrl/pyproject.toml` builds through maturin, with `manifest-path` pointing at `../vector-bindings/Cargo.toml`, so installing the Python package always compiles the Rust crate. A plain `pip install .` from a setuptools habit won't do what you expect here.
 
-`vector-bindings` reads no Vector checkout. Its `Cargo.toml` pulls the `vrl` crate straight from https://github.com/vectordotdev/vrl.git, branch `main`. Every entry point in the [Python API](reference-python-api.md) works from a fresh checkout with nothing else cloned.
+`vector-bindings` reads no Vector checkout. Its `Cargo.toml` pulls the `vrl` crate straight from <https://github.com/vectordotdev/vrl.git>, branch `main`. Every entry point in the [Python API](reference-python-api.md) works from a fresh checkout with nothing else cloned.
 
 The orchestrator in `build/` downloads and compiles Vector into a gitignored `vector/` directory at the repo root. Neither `vector-bindings` nor `vector-vrl` reads it. Never edit anything under `vector/`: it's upstream source.
 

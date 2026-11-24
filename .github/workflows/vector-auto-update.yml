@@ -101,7 +101,7 @@ jobs:
           body=$(printf '%s\n' \
             "The daily check found Vector ${new%-debian}, past the 7-day cooldown and ahead of the pinned ${old%-debian}." \
             "" \
-            "- changes the _VECTOR_TAG pin in ${conftest} and nothing else" \
+            "- changes the _VECTOR_TAG and _VECTOR_DIGEST pins in ${conftest} and nothing else" \
             "- make check passed against it on the runner before this PR was opened" \
             "- CI runs on this PR wait for 'Approve workflows to run', because the PR is opened with the default token" \
             "" \

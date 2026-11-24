@@ -23,7 +23,7 @@ uv run --with pytest pytest tests/unit/test_working_vector.py -v
 
 Unit tests have no marker, and the smoke test doesn't apply the declared `smoke` marker, so select those two by directory. `make test-python` at the root runs `hyperi-ci run test` here, which is plain pytest.
 
-The `vector_runner` fixture in `conftest.py` takes the first of these: a local build (`vector/target/release/vector` and its siblings) or `vector` on `PATH`, then a one-shot `docker run --rm` of `timberio/vector` at the pinned `_VECTOR_TAG` with the test's `tmp_path` mounted as the working directory. With neither it skips the test, or fails it when `$CI` is set, because a gate that can't run must not pass silently.
+The `vector_runner` fixture in `conftest.py` takes the first of these: a local build (`vector/target/release/vector` and its siblings) or `vector` on `PATH`, then a one-shot `docker run --rm` of `timberio/vector` at the pinned `_VECTOR_TAG` and `_VECTOR_DIGEST` with the test's `tmp_path` mounted as the working directory. With neither it skips the test, or fails it when `$CI` is set, because a gate that can't run must not pass silently.
 
 The integration tests take `vector_binary` from `integration/conftest.py` instead. It looks on `PATH` alone, with no container fallback, and skips or fails by the same rule. A new test follows one of these shapes:
 

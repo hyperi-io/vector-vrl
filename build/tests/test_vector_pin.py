@@ -1,9 +1,9 @@
 """Unit tests for vector_pin.py's pure, deterministic logic.
 
 No mocks - `current_docker_tag` reads the real conftest.py this repo ships,
-and `_version_tuple` and `first_cleared_release` are pure.
-`_tags_newest_first`/`_release_published_at` need a real network call to
-GitHub and are exercised by actually running `python3 vector_pin.py check`
+and `_version_tuple`, `first_cleared_release` and `pin_image` are pure.
+`_tags_newest_first`/`_release_published_at`/`docker_index_digest` need a
+real network call to GitHub or Docker Hub and are exercised by actually running `python3 vector_pin.py check`
 (see docs/how-to-run-the-build-orchestrator.md), not by a unit test that
 would otherwise have to fake the response.
 """
@@ -17,9 +17,12 @@ import pytest
 
 from vector_pin import (
     CONFTEST_PATH,
+    DIGEST_RE,
     _version_tuple,
+    current_docker_digest,
     current_docker_tag,
     first_cleared_release,
+    pin_image,
 )
 
 
@@ -44,8 +47,15 @@ def test_current_docker_tag_reads_the_real_conftest():
     assert tag.endswith("-debian")
 
 
-def test_current_docker_tag_returns_none_without_a_match(tmp_path: Path, monkeypatch):
-    """A conftest.py with no `_VECTOR_TAG` line yields None, not a crash."""
+def test_current_docker_digest_reads_the_real_conftest():
+    """conftest.py's `_VECTOR_DIGEST` is present and a full sha256 digest."""
+    digest = current_docker_digest()
+    assert digest is not None
+    assert DIGEST_RE.match(digest)
+
+
+def test_current_docker_pins_return_none_without_a_match(tmp_path: Path, monkeypatch):
+    """A conftest.py with no pin lines yields None for both, not a crash."""
     import vector_pin
 
     fake_conftest = tmp_path / "conftest.py"
@@ -53,6 +63,53 @@ def test_current_docker_tag_returns_none_without_a_match(tmp_path: Path, monkeyp
     monkeypatch.setattr(vector_pin, "CONFTEST_PATH", fake_conftest)
 
     assert current_docker_tag() is None
+    assert current_docker_digest() is None
+
+
+OLD_DIGEST = "sha256:" + "a" * 64
+NEW_DIGEST = "sha256:" + "b" * 64
+PIN_SRC = f'_VECTOR_TAG = "0.61.0-debian"\n_VECTOR_DIGEST = "{OLD_DIGEST}"\n'
+
+
+@pytest.mark.parametrize(
+    ("src", "digest", "want"),
+    [
+        pytest.param(
+            PIN_SRC,
+            NEW_DIGEST,
+            f'_VECTOR_TAG = "0.62.0-debian"\n_VECTOR_DIGEST = "{NEW_DIGEST}"\n',
+            id="rewrites_both",
+        ),
+        pytest.param(
+            f'_VECTOR_TAG = "0.61.0-debian"\n_VECTOR_DIGEST = (\n    "{OLD_DIGEST}"\n)\n',
+            NEW_DIGEST,
+            f'_VECTOR_TAG = "0.62.0-debian"\n_VECTOR_DIGEST = (\n    "{NEW_DIGEST}"\n)\n',
+            id="rewrites_a_wrapped_digest",
+        ),
+        pytest.param(PIN_SRC, "sha256:abc", ValueError, id="short_digest"),
+        pytest.param(PIN_SRC, "b" * 64, ValueError, id="digest_without_algorithm"),
+        pytest.param(PIN_SRC, "sha256:" + "B" * 64, ValueError, id="uppercase_digest"),
+        pytest.param(
+            '_VECTOR_TAG = "0.61.0-debian"\n',
+            NEW_DIGEST,
+            ValueError,
+            id="no_digest_line",
+        ),
+        pytest.param(
+            f'_VECTOR_DIGEST = "{OLD_DIGEST}"\n',
+            NEW_DIGEST,
+            ValueError,
+            id="no_tag_line",
+        ),
+        pytest.param(PIN_SRC + PIN_SRC, NEW_DIGEST, ValueError, id="duplicate_pins"),
+    ],
+)
+def test_pin_image_writes_tag_and_digest_or_refuses(src, digest, want):
+    if want is ValueError:
+        with pytest.raises(ValueError):
+            pin_image(src, "0.62.0-debian", digest)
+    else:
+        assert pin_image(src, "0.62.0-debian", digest) == want
 
 
 @pytest.mark.parametrize("bad_tag", ["not-a-version", ""])

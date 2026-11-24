@@ -3,6 +3,16 @@
 Rendered by CI and committed back at the end of a release -- do not edit by
 hand. Release notes also appear on the GitHub Releases page, one per tag.
 
+## [1.0.15](https://github.com/hyperi-io/vector-vrl/compare/v1.0.14...v1.0.15) (2026-11-24)
+
+### Bug Fixes
+
+* **ci:** lint the root docs in CI ([6045256](https://github.com/hyperi-io/vector-vrl/commit/6045256026cfb125e7d3d71b60d3f1688e896338))
+* **ci:** run the locked semantic-release ([f5ce218](https://github.com/hyperi-io/vector-vrl/commit/f5ce2183cdaadd07cb4a1894df276c9c3050902c))
+* **deps:** accept the pin-utils unmaintained advisory ([#65](https://github.com/hyperi-io/vector-vrl/issues/65)) ([1317768](https://github.com/hyperi-io/vector-vrl/commit/13177682b92e1805ea452e1ffcf753a38f2b8f8e))
+* **deps:** move to Vector 0.62 ([6b946d9](https://github.com/hyperi-io/vector-vrl/commit/6b946d952b272cd333382ac43c0ee8cdff0f18e3)), closes [#73](https://github.com/hyperi-io/vector-vrl/issues/73)
+* **licences:** record the loguru and httpx licences for the gate ([#66](https://github.com/hyperi-io/vector-vrl/issues/66)) ([acf80d2](https://github.com/hyperi-io/vector-vrl/commit/acf80d231d7fa934644bf19ff7f7d0943bf7dda9))
+
 ## [1.0.14](https://github.com/hyperi-io/vector-vrl/compare/v1.0.13...v1.0.14) (2026-11-12)
 
 ### Bug Fixes

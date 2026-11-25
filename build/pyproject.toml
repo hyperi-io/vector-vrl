@@ -7,6 +7,8 @@ build-backend = "setuptools.build_meta"
 package = false
 # Supply-chain cooldown. A CVE fix bypasses it with a per-package exclude-newer-package entry.
 exclude-newer = "7 days"
+# Our own releases are exempt: hyperi-ci before 2.15.1 fails pip-audit on a runner home that another user can write to.
+exclude-newer-package = { hyperi-ci = false, scalo = false }
 
 [project]
 name = "vector-vrl-build-system"

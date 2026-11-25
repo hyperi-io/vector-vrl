@@ -7,7 +7,7 @@ Tooling run in place from the repo root, with a separate venv, never imported by
 | File | What it does |
 |---|---|
 | `build`, `build_system.py` | The build orchestrator: compile Vector, then `vector-bindings`, then the Python layer. See [docs/how-to-run-the-build-orchestrator.md](../docs/how-to-run-the-build-orchestrator.md) |
-| `vector_pin.py` | Checks and updates the Vector release the tests run against (`_VECTOR_TAG` in `vector-vrl/tests/conftest.py`). The daily `vector-auto-update.yml` workflow runs it |
+| `vector_pin.py` | Checks and updates the Vector release the tests run against (`_VECTOR_TAG` and its image digest `_VECTOR_DIGEST` in `vector-vrl/tests/conftest.py`). The daily `vector-auto-update.yml` workflow runs it |
 | `wheel_smoke_check.py` | Installs a built wheel into a throwaway venv and runs VRL through it. CI runs it on every wheel it can execute |
 | `vrl-examples-probe/` | Prints every VRL stdlib function's upstream examples as JSON, the source of `vector-vrl/tests/data/vrl_examples.json` |
 

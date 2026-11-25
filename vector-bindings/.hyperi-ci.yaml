@@ -8,7 +8,6 @@
 # The component layout: CONTRIBUTING.md. Defaults: config/defaults.yaml in hyperi-ci.
 
 language: rust
-license: Apache-2.0
 classification: general-oss
 project:
   status: experimental

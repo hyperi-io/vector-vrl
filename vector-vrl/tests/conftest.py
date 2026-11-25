@@ -20,8 +20,12 @@ from pathlib import Path
 import pytest
 
 # renovate: datasource=docker depName=timberio/vector
-_VECTOR_TAG = "0.61.0-debian"
-_DEFAULT_IMAGE = f"timberio/vector:{_VECTOR_TAG}"
+_VECTOR_TAG = "0.62.0-debian"
+# The multi-arch index digest of _VECTOR_TAG. build/vector_pin.py update rewrites both.
+_VECTOR_DIGEST = (
+    "sha256:6266b1d35c844918ff1c48ea2ec4f57c2b0664c46f3e17fc2418d5dda1692068"
+)
+_DEFAULT_IMAGE = f"timberio/vector:{_VECTOR_TAG}@{_VECTOR_DIGEST}"
 
 _SUITE_LABEL = "io.hyperi.test.suite=vector_vrl"
 

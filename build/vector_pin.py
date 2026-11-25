@@ -1,7 +1,8 @@
 """Check and update the Vector version this repo builds and tests against.
 
-One pin: the `timberio/vector` Docker tag the test suite's vector_runner
-fixture pulls (vector-vrl/tests/conftest.py's _VECTOR_TAG). `vector-bindings`
+One pin: the `timberio/vector` Docker image the test suite's vector_runner
+fixture pulls, as a tag plus the digest of that tag's multi-arch index
+(vector-vrl/tests/conftest.py's _VECTOR_TAG and _VECTOR_DIGEST). `vector-bindings`
 itself reads no local Vector checkout, so there is nothing else to pin here.
 
 vectordotdev/vector tags two independent things under one repo: product
@@ -16,6 +17,7 @@ against yet.
 """
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -31,6 +33,18 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CONFTEST_PATH = REPO_ROOT / "vector-vrl" / "tests" / "conftest.py"
 VECTOR_TAG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 COOLDOWN_DAYS = 7
+DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+DOCKER_AUTH_URL = (
+    "https://auth.docker.io/token?service=registry.docker.io"
+    "&scope=repository:timberio/vector:pull"
+)
+DOCKER_MANIFEST_URL = "https://registry-1.docker.io/v2/timberio/vector/manifests/{tag}"
+INDEX_ACCEPT = ", ".join(
+    [
+        "application/vnd.oci.image.index.v1+json",
+        "application/vnd.docker.distribution.manifest.list.v2+json",
+    ]
+)
 
 
 def _tags_newest_first() -> list[str]:
@@ -125,6 +139,52 @@ def current_docker_tag() -> str | None:
     return match.group(1) if match else None
 
 
+def current_docker_digest() -> str | None:
+    """The `_VECTOR_DIGEST` value conftest.py currently pins."""
+    match = re.search(r'_VECTOR_DIGEST = \(?\s*"([^"]+)"', CONFTEST_PATH.read_text())
+    return match.group(1) if match else None
+
+
+def docker_index_digest(tag: str) -> str:
+    """The `sha256:` digest of the multi-arch index Docker Hub serves for `tag`.
+
+    Anonymous: a pull-scope token from auth.docker.io, no login. The digest is
+    the hash of the index bytes, so it is computed from the body and not taken
+    from a header. A tag that resolves to a single-platform manifest is an error,
+    because a digest of one architecture would break the other runner.
+    """
+    # Fixed https:// URLs, the tag matched VECTOR_TAG_RE upstream of this call.
+    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+    with urllib.request.urlopen(DOCKER_AUTH_URL, timeout=30) as resp:  # noqa: S310
+        token = json.load(resp)["token"]
+    req = urllib.request.Request(  # noqa: S310
+        DOCKER_MANIFEST_URL.format(tag=tag),
+        headers={"Authorization": f"Bearer {token}", "Accept": INDEX_ACCEPT},
+    )
+    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+        body = resp.read()
+    if not json.loads(body).get("manifests"):
+        raise RuntimeError(f"timberio/vector:{tag} is not a multi-arch index")
+    return f"sha256:{hashlib.sha256(body).hexdigest()}"
+
+
+def pin_image(src: str, tag: str, digest: str) -> str:
+    """`src` with `_VECTOR_TAG` and `_VECTOR_DIGEST` set to `tag` and `digest`.
+
+    Raises ValueError for a digest that isn't `sha256:` plus 64 hex characters,
+    and for a source missing either assignment, so a bad write never lands.
+    """
+    if not DIGEST_RE.match(digest):
+        raise ValueError(f"not a sha256 digest: {digest!r}")
+    for name, value in (("_VECTOR_TAG", tag), ("_VECTOR_DIGEST", digest)):
+        # ruff format wraps the long digest line in parentheses.
+        src, count = re.subn(rf'({name} = \(?\s*)"[^"]*"', rf'\g<1>"{value}"', src)
+        if count != 1:
+            raise ValueError(f"expected one {name} assignment, found {count}")
+    return src
+
+
 def check() -> None:
     """Warn (never fail) if the Docker pin is behind the cooldown-cleared latest."""
     latest = latest_vector_version()
@@ -162,25 +222,28 @@ def update() -> None:
 
     docker_tag = current_docker_tag()
     docker_version = f"v{docker_tag.removesuffix('-debian')}" if docker_tag else None
-    if docker_version is not None and _version_tuple(docker_version) >= _version_tuple(
-        latest
-    ):
+    current = docker_version is not None and _version_tuple(
+        docker_version
+    ) >= _version_tuple(latest)
+    if current and current_docker_digest() is not None:
         log_message(
             f"already at {docker_tag}, >= cooldown-cleared {latest} - nothing to do"
         )
         return
 
-    new_tag = f"{latest.removeprefix('v')}-debian"
+    if current and docker_tag is not None:
+        new_tag = docker_tag
+    else:
+        new_tag = f"{latest.removeprefix('v')}-debian"
+    digest = docker_index_digest(new_tag)
 
     conftest_src = CONFTEST_PATH.read_text()
-    new_src = re.sub(
-        r'_VECTOR_TAG = "[^"]+"', f'_VECTOR_TAG = "{new_tag}"', conftest_src
-    )
+    new_src = pin_image(conftest_src, new_tag, digest)
     if new_src == conftest_src:
-        log_message(f"conftest.py already pins {new_tag}")
+        log_message(f"conftest.py already pins {new_tag}@{digest}")
     else:
         CONFTEST_PATH.write_text(new_src)
-        log_message(f"conftest.py -> {new_tag}")
+        log_message(f"conftest.py -> {new_tag}@{digest}")
 
 
 def main() -> int:

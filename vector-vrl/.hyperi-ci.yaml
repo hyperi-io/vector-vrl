@@ -8,7 +8,6 @@
 # The release trailer: CONTRIBUTING.md. Defaults: config/defaults.yaml in hyperi-ci.
 
 language: python
-license: Apache-2.0
 classification: general-oss
 project:
   status: experimental

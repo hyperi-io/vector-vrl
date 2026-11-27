@@ -19,7 +19,7 @@ serde_json = { version = "1.0.154", default-features = false, features = ["std"]
 # Parses a registered `file` enrichment table. vrl's stdlib-base already pulls it in.
 csv = "1.4"
 # Reads registered `geoip` tables. 0.31 and later bound the decode work a crafted database can force.
-maxminddb = "0.32"
+maxminddb = "0.33"
 # Sandboxed feature set. What it holds back: docs/architecture.md, "What caller-supplied VRL cannot reach".
 vrl = { git = "https://github.com/vectordotdev/vrl.git", branch = "main", default-features = false, features = ["stdlib-base", "enable_crypto_functions"] }
 

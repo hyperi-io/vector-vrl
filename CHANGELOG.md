@@ -3,6 +3,12 @@
 Rendered by CI and committed back at the end of a release -- do not edit by
 hand. Release notes also appear on the GitHub Releases page, one per tag.
 
+## [1.0.16](https://github.com/hyperi-io/vector-vrl/compare/v1.0.15...v1.0.16) (2026-11-27)
+
+### Bug Fixes
+
+* keep deep events off the caller stack and redact secrets ([0ff23a7](https://github.com/hyperi-io/vector-vrl/commit/0ff23a749ac484d4464dd3c59eaa9448155e4dce))
+
 ## [1.0.15](https://github.com/hyperi-io/vector-vrl/compare/v1.0.14...v1.0.15) (2026-11-24)
 
 ### Bug Fixes

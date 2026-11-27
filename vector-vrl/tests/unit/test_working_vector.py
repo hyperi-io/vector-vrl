@@ -4,8 +4,6 @@ Runs through `vector vrl` rather than a file-source/sink daemon, which
 never exits on its own.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 
@@ -39,8 +37,8 @@ def test_remap_adds_processed_flag_and_copies_message(
     )
 
     assert result.returncode == 0, result.stderr
-    # vector's own startup log line shares stdout with the printed event;
-    # only lines that open a JSON object are output data.
+    # vector's startup log line shares stdout with the printed event, so only
+    # lines that open a JSON object are output data.
     data_lines = [
         line for line in result.stdout.splitlines() if line.strip().startswith("{")
     ]

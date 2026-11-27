@@ -48,7 +48,7 @@ class _SecretsEntry(TypedDict):
     secrets: dict[str, str]
 
 class VrlResult:
-    """Outcome of `validate_vrl`. Read-only; never constructed from Python."""
+    """Outcome of `validate_vrl`. Read-only, and never constructed from Python."""
 
     @property
     def success(self) -> bool: ...
@@ -73,7 +73,7 @@ class Vector:
     def process_logs(
         self, logs: list[str] | tuple[str, ...], vrl_code: str
     ) -> list[dict[str, Any]]:
-        """Run `vrl_code` over each log; raises RuntimeError before `initialize()`."""
+        """Run `vrl_code` over each log. Raises RuntimeError before `initialize()`."""
 
     def get_stats(self) -> _VectorStats:
         """Counts since the last `initialize()`."""
@@ -93,14 +93,14 @@ def execute_vrl_with_secrets(
     """One entry per event: `event` is what `execute_vrl` returns, `secrets` its final store."""
 
 def validate_vrl(vrl_code: str) -> VrlResult:
-    """Compile only; never runs the program."""
+    """Compile `vrl_code` without running it."""
 
 def get_vrl_performance(
     vrl_code: str,
     test_data: list[str] | tuple[str, ...],
     iterations: int | None = None,
 ) -> _PerformanceMetrics:
-    """Run `test_data` `iterations` times (default 100); capped at 1M events total."""
+    """Run `test_data` `iterations` times (default 100), capped at 1M events in all."""
 
 def register_enrichment_table(
     name: str,
@@ -111,7 +111,7 @@ def register_enrichment_table(
     """Register a `file` (CSV) or `geoip` (mmdb) table before compiling VRL that uses it."""
 
 def clear_enrichment_tables() -> None:
-    """Empty the registry; already-compiled programs keep their captured tables."""
+    """Empty the registry. Programs compiled before keep the tables they captured."""
 
 def list_enrichment_tables() -> list[_EnrichmentTableInfo]:
-    """Registered tables, name-ordered; `rows` is None for a geoip table."""
+    """Registered tables, name-ordered. `rows` is None for a geoip table."""

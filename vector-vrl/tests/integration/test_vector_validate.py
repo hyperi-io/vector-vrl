@@ -6,8 +6,6 @@ broken wiring between components, and VRL whose enrichment table is declared
 in the config rather than in the VRL.
 """
 
-from __future__ import annotations
-
 import os
 import shutil
 from pathlib import Path
@@ -35,7 +33,7 @@ sinks:
       codec: json
 """
 
-# The VRL compiles fine; the transform reads from a component that is not
+# The VRL compiles, but the transform reads from a component that is not
 # there. Nothing in-process can see this.
 BAD_WIRING = GOOD.replace("inputs: [in]", "inputs: [does_not_exist]")
 
@@ -80,15 +78,19 @@ def _require_vector() -> None:
     pytest.skip("no vector binary on PATH")
 
 
-def _write(tmp_path: Path, body: str) -> Path:
-    cfg = tmp_path / "vector.yaml"
+def _write(tmp_path: Path, body: str, name: str = "vector.yaml") -> Path:
+    cfg = tmp_path / name
     cfg.write_text(body, encoding="utf-8")
     return cfg
 
 
-def test_a_good_config_validates(tmp_path: Path):
+# A relative path starting with `-` must reach Vector as a file, not an option.
+@pytest.mark.parametrize("name", ["vector.yaml", "-vector.yaml"])
+def test_a_good_config_validates(tmp_path: Path, monkeypatch, name: str):
     _require_vector()
-    result = validate_config_with_vector(_write(tmp_path, GOOD))
+    _write(tmp_path, GOOD, name)
+    monkeypatch.chdir(tmp_path)
+    result = validate_config_with_vector(name)
     assert result.ok, result.output
     assert result.returncode == 0
 

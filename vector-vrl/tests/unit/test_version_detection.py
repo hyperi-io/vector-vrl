@@ -1,8 +1,7 @@
-"""Config-file loading in `version_detection`.
+"""Config-file loading in `version_detection`, which reads with the stdlib `tomllib`.
 
-The loader used to import the third-party `toml` package, which this
-package never declares, so every config file was silently ignored behind a
-printed warning. It reads with the stdlib `tomllib` now; these pin that.
+This package declares no dependencies, so a third-party TOML parser would be
+missing and every config file ignored behind a printed warning.
 """
 
 from vector_vrl.version_detection import VectorVersionDetector

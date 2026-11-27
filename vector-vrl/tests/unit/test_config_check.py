@@ -4,8 +4,6 @@ Every "this VRL is broken" case here is broken according to the actual
 compiler, not according to a fixture that asserts what we hoped it would say.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 
@@ -152,8 +150,7 @@ class TestFunctionsThisBuildCannotCompile:
     def test_secrets_vrl_is_genuinely_checked_now(self):
         """The secret functions are compiled in, so a config using them is judged.
 
-        This was unchecked until the three were implemented; if it ever goes
-        back to unchecked, something dropped them from the build.
+        An unchecked result here means something dropped them from the build.
         """
         result = validate_config(
             {"transforms": {"t": _remap('.k = get_secret("datadog_api_key")')}}

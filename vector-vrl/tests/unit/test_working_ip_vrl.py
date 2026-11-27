@@ -6,8 +6,6 @@ Runs the VRL program (unchanged from the original) through the
 since the daemon never exits on its own.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 
@@ -54,8 +52,8 @@ def _run_vrl(vector_runner, tmp_path: Path, message: str) -> dict:
         tmp_path,
     )
     assert result.returncode == 0, result.stderr
-    # vector's own startup log line shares stdout with the printed event;
-    # only lines that open a JSON object are output data.
+    # vector's startup log line shares stdout with the printed event, so only
+    # lines that open a JSON object are output data.
     data_lines = [
         line for line in result.stdout.splitlines() if line.strip().startswith("{")
     ]

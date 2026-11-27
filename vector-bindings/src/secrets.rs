@@ -382,7 +382,7 @@ mod tests {
             .iter()
             .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect();
-        let outcome = execute_vrl_on_event(&program, r#"{"message":"seed"}"#, initial);
+        let outcome = execute_vrl_on_event(&program, r#"{"message":"seed"}"#, &initial);
         Ok((vrl_value_to_json(outcome.result?), outcome.secrets))
     }
 

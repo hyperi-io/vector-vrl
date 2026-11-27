@@ -38,7 +38,6 @@ if TYPE_CHECKING:
     _bindings_available = True
 else:
     try:
-        # Try bundled extension first (included in PyPI wheel)
         from ._bindings import (
             Vector,
             VrlResult,
@@ -54,72 +53,55 @@ else:
         _bindings_source = "bundled"
         _bindings_available = True
 
-    except ImportError:  # pragma: no cover - only reachable if the wheel shipped without its compiled extension
-        # Fallback to external vector-bindings if available
-        try:
-            import vector_bindings
+    # Only a wheel shipped without its compiled extension gets here. There is
+    # no fallback to a top-level `vector_bindings`: nobody owns that PyPI name.
+    except ImportError as e:  # pragma: no cover
+        print(f"Warning: vector bindings not available: {e}")
+        _bindings_available = False
+        _bindings_source = "none"
 
-            Vector = vector_bindings.Vector
-            VrlResult = vector_bindings.VrlResult
-            execute_vrl = vector_bindings.execute_vrl
-            execute_vrl_with_secrets = vector_bindings.execute_vrl_with_secrets
-            validate_vrl = vector_bindings.validate_vrl
-            get_vrl_performance = vector_bindings.get_vrl_performance
-            register_enrichment_table = vector_bindings.register_enrichment_table
-            clear_enrichment_tables = vector_bindings.clear_enrichment_tables
-            list_enrichment_tables = vector_bindings.list_enrichment_tables
+        # Stub implementations: any call raises, whatever arguments it was given.
+        class Vector:
+            """Placeholder Vector used when the native bindings are unavailable."""
 
-            _bindings_source = "external"
-            _bindings_available = True
+            def __init__(self, *_args, **_kwargs):
+                """Raise ImportError because Vector bindings are not available."""
+                raise ImportError("Vector bindings not available")
 
-        except ImportError as e:
-            # No bindings available
-            print(f"Warning: vector bindings not available: {e}")
-            _bindings_available = False
-            _bindings_source = "none"
+        class VrlResult:
+            """Placeholder VrlResult used when the native bindings are unavailable."""
 
-            # Stub implementations: any call raises, whatever arguments it was given.
-            class Vector:
-                """Placeholder Vector used when the native bindings are unavailable."""
-
-                def __init__(self, *_args, **_kwargs):
-                    """Raise ImportError because Vector bindings are not available."""
-                    raise ImportError("Vector bindings not available")
-
-            class VrlResult:
-                """Placeholder VrlResult used when the native bindings are unavailable."""
-
-                def __init__(self, *_args, **_kwargs):
-                    """Raise ImportError because VRL bindings are not available."""
-                    raise ImportError("VRL bindings not available")
-
-            def execute_vrl(*_args, **_kwargs):
+            def __init__(self, *_args, **_kwargs):
                 """Raise ImportError because VRL bindings are not available."""
                 raise ImportError("VRL bindings not available")
 
-            def execute_vrl_with_secrets(*_args, **_kwargs):
-                """Raise ImportError because VRL bindings are not available."""
-                raise ImportError("VRL bindings not available")
+        def execute_vrl(*_args, **_kwargs):
+            """Raise ImportError because VRL bindings are not available."""
+            raise ImportError("VRL bindings not available")
 
-            def validate_vrl(*_args, **_kwargs):
-                """Raise ImportError because VRL bindings are not available."""
-                raise ImportError("VRL bindings not available")
+        def execute_vrl_with_secrets(*_args, **_kwargs):
+            """Raise ImportError because VRL bindings are not available."""
+            raise ImportError("VRL bindings not available")
 
-            def get_vrl_performance(*_args, **_kwargs):
-                """Raise ImportError because VRL bindings are not available."""
-                raise ImportError("VRL bindings not available")
+        def validate_vrl(*_args, **_kwargs):
+            """Raise ImportError because VRL bindings are not available."""
+            raise ImportError("VRL bindings not available")
 
-            def register_enrichment_table(*_args, **_kwargs):
-                """Raise ImportError because VRL bindings are not available."""
-                raise ImportError("VRL bindings not available")
+        def get_vrl_performance(*_args, **_kwargs):
+            """Raise ImportError because VRL bindings are not available."""
+            raise ImportError("VRL bindings not available")
 
-            def clear_enrichment_tables():
-                """Raise ImportError because VRL bindings are not available."""
-                raise ImportError("VRL bindings not available")
+        def register_enrichment_table(*_args, **_kwargs):
+            """Raise ImportError because VRL bindings are not available."""
+            raise ImportError("VRL bindings not available")
 
-            def list_enrichment_tables():
-                """Raise ImportError because VRL bindings are not available."""
-                raise ImportError("VRL bindings not available")
+        def clear_enrichment_tables():
+            """Raise ImportError because VRL bindings are not available."""
+            raise ImportError("VRL bindings not available")
+
+        def list_enrichment_tables():
+            """Raise ImportError because VRL bindings are not available."""
+            raise ImportError("VRL bindings not available")
 
 
 # Version information - read from the installed package's own metadata

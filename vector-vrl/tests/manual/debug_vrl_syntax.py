@@ -83,16 +83,13 @@ if .ip_found {
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
 
-        # Create directories
         vector_data_dir = temp_path / "vector_data"
         vector_data_dir.mkdir()
 
-        # Create input file
         input_file = temp_path / "input.log"
         with open(input_file, "w") as f:
             f.write("Client IP: 192.168.1.100\n")
 
-        # Create config
         output_file = temp_path / "output.jsonl"
         config_content = f'''
 data_dir = "{vector_data_dir}"

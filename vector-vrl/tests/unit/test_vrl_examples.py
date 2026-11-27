@@ -3,14 +3,12 @@
 Every stdlib function ships `examples()` - runnable VRL WITH its expected
 result, authored by the people who wrote the function. That is a far better
 conformance corpus than anything written here would be, and it refreshes when
-vrl does. tests/data/vrl_examples.json is a dump of it; regenerate with
+vrl does. tests/data/vrl_examples.json is a dump of it, regenerated with
 build/vrl-examples-probe.
 
 This complements test_function_coverage.py rather than repeating it: that one
 proves each function EXISTS, this one proves it BEHAVES.
 """
-
-from __future__ import annotations
 
 import json
 from pathlib import Path

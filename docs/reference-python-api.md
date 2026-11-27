@@ -11,7 +11,7 @@ from vector_vrl import execute_vrl, validate_vrl, get_vrl_performance, Vector, V
 from vector_vrl._bindings import execute_vrl   # equivalent
 ```
 
-`vector-vrl/src/vector_vrl/__init__.py` re-exports from `._bindings`, falls back to a top-level `vector_bindings` module, and failing both installs stubs that raise `ImportError` on call. Check which you got:
+`vector-vrl/src/vector_vrl/__init__.py` re-exports from `._bindings`, and failing that installs stubs that raise `ImportError` on call. Check which you got:
 
 ```python
 import vector_vrl
@@ -19,7 +19,7 @@ vector_vrl.get_bindings_info()
 # {'available': True, 'source': 'bundled', 'version': <the package version>, 'bundled': True}
 ```
 
-`source` is `bundled`, `external` or `none`.
+`source` is `bundled` or `none`.
 
 Every call that compiles or runs VRL releases the GIL while the VRL compiles and runs, so other Python threads keep running. Converting the Python arguments and building the returned dicts hold it. Several threads may share one `Vector`: each `process_logs` call adds its counts to `get_stats()`.
 
@@ -92,8 +92,13 @@ A float that is infinite (`parse_float!("1e999")`) has no JSON form, so that
 event comes back as an `error` naming the field (``field `.x` is an infinite
 float``) rather than as a number.
 
-Two more shapes fail the event the same way rather than coming back wrong:
+Three more shapes fail the event the same way rather than coming back wrong:
 
+- An event that nests arrays and objects more than 128 levels deep, the event
+  itself being level 1, as `. = unflatten(.)` makes of a key with 200 dots.
+  The `error` names the first field past the limit (``field `.a.a...` nests
+  past the 128-level limit for an event``). Converting it would recurse once
+  per level on the calling thread and could overflow that thread's stack.
 - A program that sets the whole event to something other than an object
   (`. = [1, 2]`, `. = "text"`) has no dict to return. The `error` names the
   type it was set to. Vector splits an event set to an array, as
@@ -116,7 +121,7 @@ on every build:
 | `set_secret(key, secret)` | Stores it, replacing any value under that key. Returns `null` |
 | `remove_secret(key)` | Drops it. Removing a key that is not set is not an error |
 
-These match the semantics of Vector 0.58.0's functions. Secrets never appear in the event dict - they are a separate channel.
+These match the semantics of Vector 0.58.0's functions. Secrets are a separate channel, and reach the event dict only where the program copies one into a field. A runtime error that quotes a secret's value, as `to_int!(get_secret("k"))` does, has `<redacted secret>` in its place.
 
 ```python
 >>> execute_vrl('.k = get_secret("api_key")', ['{"x":1}'], {"api_key": "abc123"})
@@ -420,7 +425,9 @@ validate_config_with_vector(
 
 Runs `vector validate` on a config file. Checks everything `validate_config` cannot - sources, sinks, wiring between components, component options, and the VRL that uses enrichment tables or secrets declared in the config.
 
-One-shot: Vector exits as soon as it has answered. This never starts a daemon and never moves data. `no_environment` passes `--no-environment`, skipping the component and health checks that would open network connections, so validating a file does not dial the configured sinks.
+One-shot: Vector exits as soon as it has answered. This never starts a daemon and never moves data. `no_environment` passes `--no-environment`, skipping the component and health checks that would open network connections, so validating a file does not dial the configured sinks. With it off, Vector also resolves the config's secret backends, and an `exec` backend runs its command.
+
+Pass only configs you trust. Vector compiles the VRL with its whole function set, outside the [VRL restrictions](#vrl-restrictions), so a file path in a `parse_groks` or `parse_proto` call is read at compile time.
 
 Raises `FileNotFoundError` when the binary is not on PATH, and
 `subprocess.TimeoutExpired` if Vector outlives `timeout`.
@@ -435,9 +442,9 @@ True
 
 ## VRL restrictions
 
-Two guards apply to every entry point that compiles VRL.
+Two guards apply to every entry point that compiles VRL in-process. `validate_config_with_vector` and [the subprocess surface](#the-subprocess-surface) are outside both.
 
-Environment, system and network functions are not compiled in, so caller-supplied VRL cannot read the host or reach the network. Ten of them fail to compile with `undefined function`: `get_env_var`, `encode_proto`, `parse_proto`, `parse_etld`, `validate_json_schema`, `get_hostname`, `get_timezone_name`, `http_request`, `dns_lookup` and `reverse_dns`. That is what the published wheel ships. A source build can turn all ten on with the `full-stdlib` Cargo feature. The reasoning is in [What caller-supplied VRL cannot reach](architecture.md#what-caller-supplied-vrl-cannot-reach).
+Environment, system and network functions are not compiled in, so caller-supplied VRL cannot read the host, read a file it names, or reach the network. Ten of them fail to compile with `undefined function`: `get_env_var`, `encode_proto`, `parse_proto`, `parse_etld`, `validate_json_schema`, `get_hostname`, `get_timezone_name`, `http_request`, `dns_lookup` and `reverse_dns`. That is what the published wheel ships. A source build can turn all ten on with the `full-stdlib` Cargo feature. The reasoning is in [What caller-supplied VRL cannot reach](architecture.md#what-caller-supplied-vrl-cannot-reach).
 
 VRL source may not nest brackets more than 64 levels deep (`MAX_VRL_NESTING_DEPTH`). Deep enough nesting overflows the parser's recursion and takes the process down, which no Python `except` can catch, so the check runs before the parser sees the input. Brackets inside string, raw string, regex and timestamp literals and `#` comments do not count. Over the limit you get a message containing `nests`:
 
@@ -447,6 +454,8 @@ VRL source may not nest brackets more than 64 levels deep (`MAX_VRL_NESTING_DEPT
 ```
 
 Chains that nest no bracket (`a + b + c ...`, long `else if` ladders, `!!!x`) recurse just as deep, so compiling and running VRL happens on a thread with a 256 MiB stack, whatever stack the calling thread has. If the process cannot reserve that much address space the work runs on the calling thread instead. A far longer chain still overflows it.
+
+Neither guard bounds memory. `decode_gzip`, `decode_zlib`, `decode_zstd`, `decode_lz4` and `decode_snappy` are compiled in and expand their input with no limit, so a small event can decompress to gigabytes under a program you trust. Run hostile VRL, or VRL over hostile events, in a child process under a memory and a time limit.
 
 The bracket limit is tested in `vector-bindings/src/nesting.rs` and `vector-vrl/tests/unit/test_vector_class.py`, the VRL stack in `vector-bindings/src/lib.rs`.
 
@@ -458,7 +467,7 @@ These are a different thing to everything above. They shell out to a
 `vector` BINARY - the first `vector` on PATH, else `/usr/bin/vector`, or
 the path you pass - and `VectorTestRunner` raises `RuntimeError` at
 construction if no binary exists there. They do not use the compiled
-bindings.
+bindings, so neither VRL guard applies: the binary has Vector's whole function set, `http_request` and `get_env_var` included. Give them only VRL you trust.
 
 `VectorTestRunner` feeds the logs to Vector on stdin and returns when Vector
 exits, so a run takes as long as the work. Its `timeout` (60 s by default)

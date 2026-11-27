@@ -57,7 +57,10 @@ jobs:
       # hyperi-ci needs Python 3.14, so uv must not fall back to the runner's interpreter.
       UV_PYTHON: "3.14"
     steps:
+      # make check runs the bumped binary and the build tooling, so the push token stays out of .git/config.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
           components: clippy, rustfmt
@@ -84,7 +87,13 @@ jobs:
           version="$(sed -n 's/^_VECTOR_TAG = "\(.*\)-debian"$/\1/p' vector-vrl/tests/conftest.py)"
           test -n "$version" || { echo "::error::could not read _VECTOR_TAG from vector-vrl/tests/conftest.py"; exit 1; }
           target="$(uname -m)-unknown-linux-gnu"
-          curl -sSfL "https://github.com/vectordotdev/vector/releases/download/v${version}/vector-${version}-${target}.tar.gz" | tar -xz -C "$RUNNER_TEMP"
+          name="vector-${version}-${target}.tar.gz"
+          base="https://github.com/vectordotdev/vector/releases/download/v${version}"
+          curl -sSfL -o "$RUNNER_TEMP/$name" "${base}/${name}"
+          curl -sSfL -o "$RUNNER_TEMP/vector-SHA256SUMS" "${base}/vector-${version}-SHA256SUMS"
+          # An empty match fails sha256sum -c, so a missing entry stops the job.
+          (cd "$RUNNER_TEMP" && awk -v n="$name" '$2 == n' vector-SHA256SUMS | sha256sum -c -)
+          tar -xzf "$RUNNER_TEMP/$name" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/vector-${target}/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/vector-${target}/bin/vector" --version
 
@@ -111,6 +120,7 @@ jobs:
           git checkout -b "$branch"
           git add "$conftest"
           git commit -m "$title"
+          gh auth setup-git
           git push origin "$branch"
           gh pr create --base "$BASE" --head "$branch" --title "$title" --body "$body"
         env:

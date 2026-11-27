@@ -56,9 +56,9 @@ def remap_chain(config: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
 
 
 class VectorTestRunner:
-    """Centralized Vector test runner that handles shell escaping and configuration properly.
+    """Run VRL through a `vector` binary, with events on stdin and a file sink.
 
-    NO shell escaping issues - uses file-based communication only.
+    The binary has Vector's whole function set, so give it only VRL you trust.
     """
 
     def __init__(self, vector_binary: str | None = None, verbose: bool = False):

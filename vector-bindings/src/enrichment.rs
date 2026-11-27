@@ -193,7 +193,7 @@ fn apply_select(row: &ObjectMap, select: Option<&[String]>) -> Result<ObjectMap,
 impl FileTable {
     /// Load a CSV, taking the first record as the header row.
     ///
-    /// Every cell is stored as a string; column typing is not supported.
+    /// Every cell is stored as a string. Columns carry no type.
     fn load(path: &Path, delimiter: u8) -> Result<Self, String> {
         let mut reader = csv::ReaderBuilder::new()
             .delimiter(delimiter)
@@ -851,7 +851,7 @@ mod tests {
 
     fn run(vrl: &str) -> Result<serde_json::Value, String> {
         let program = compile_vrl_program(vrl)?;
-        execute_vrl_on_event(&program, r#"{"message":"seed"}"#, BTreeMap::new())
+        execute_vrl_on_event(&program, r#"{"message":"seed"}"#, &BTreeMap::new())
             .result
             .map(vrl_value_to_json)
     }

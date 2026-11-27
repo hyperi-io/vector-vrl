@@ -5,6 +5,6 @@ updates:
     schedule:
       interval: "daily"
   - package-ecosystem: "cargo"
-    directory: "/"
+    directory: "/vector-bindings"
     schedule:
       interval: "daily"

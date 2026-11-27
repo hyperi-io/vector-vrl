@@ -8,8 +8,6 @@ enrichment tables and secret backends Vector registers from its own config.
 of that. It needs the binary, and runs it one-shot - never as a daemon.
 """
 
-from __future__ import annotations
-
 import json
 import re
 import shutil
@@ -258,12 +256,18 @@ def validate_config_with_vector(
     config. Vector exits as soon as it has answered - this never starts a
     daemon and never moves data.
 
+    Pass only a config you trust. Vector compiles its VRL with every function
+    Vector ships, none of the in-process guards included, so a `parse_groks`
+    `alias_sources` or `parse_proto` descriptor path is read at compile time.
+
     Args:
         path: The Vector config file. Vector detects the format from the name.
         vector_binary: Binary to run, resolved on PATH unless given a path.
         no_environment: Pass `--no-environment`, skipping the component and
-            health checks that would open network connections. Turn it off
-            only when reaching the configured sinks is the point.
+            health checks that would open network connections. Off, Vector
+            also resolves the config's secret backends, and an `exec` backend
+            runs its command. Turn it off only when reaching the configured
+            sinks is the point.
         deny_warnings: Pass `--deny-warnings`, failing on warnings too.
         timeout: Seconds to wait before giving up on the binary.
 
@@ -291,7 +295,8 @@ def validate_config_with_vector(
         cmd.append("--no-environment")
     if deny_warnings:
         cmd.append("--deny-warnings")
-    cmd.append(str(path))
+    # `--` keeps a path that starts with `-` from being read as an option.
+    cmd.extend(["--", str(path)])
 
     # An argv list with no shell: the caller names the binary and the config path.
     run = subprocess.run(  # noqa: S603

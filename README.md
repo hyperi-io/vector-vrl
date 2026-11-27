@@ -42,13 +42,15 @@ validate_vrl(vrl).success
 
 ## Safer to hand untrusted VRL
 
-Two guards apply to every entry point that compiles VRL.
+Two guards apply to every entry point that compiles VRL in-process.
 
-The environment, system and network functions aren't compiled in. `get_env_var`, `get_hostname`, `http_request`, `dns_lookup` and six more fail to compile, so caller-supplied VRL can't read your environment or reach out of the process. A source build can turn the ten back on with the `full-stdlib` Cargo feature. Turn them on just where you control the VRL text.
+The environment, system and network functions aren't compiled in. `get_env_var`, `get_hostname`, `http_request`, `dns_lookup` and six more fail to compile, so caller-supplied VRL can't read your environment, read a file it names, or reach out of the process. A source build can turn the ten back on with the `full-stdlib` Cargo feature. Turn them on just where you control the VRL text.
 
 VRL source may not nest brackets past 64 levels, and nothing switches that check off. Deep enough nesting overflows the parser's recursion and kills the process, which no Python `except` can catch, so the check runs before the parser sees the input. VRL runs on a thread with 256 MiB of stack as well, so a long chain of operators with no brackets compiles where the caller's thread would overflow.
 
-Neither guard bounds memory. A short program that doubles a string in a loop asks for gigabytes and aborts the process, and an operator chain tens of thousands of terms long still overflows the VRL stack. So where the VRL comes from someone who may be hostile (a multi-tenant playground, a customer-supplied transform), run it in a child process under a memory limit (`RLIMIT_AS`) and a time limit, and treat a dead child as a refused program. The reasoning is in [docs/architecture.md](docs/architecture.md#what-caller-supplied-vrl-cannot-reach).
+Neither guard bounds memory. A few dozen lines that keep doubling a string ask for gigabytes and abort the process, and an operator chain tens of thousands of terms long still overflows the VRL stack. The decoders (`decode_gzip`, `decode_zlib`, `decode_zstd`, `decode_lz4`, `decode_snappy`) are compiled in and expand their input with no limit, so a program you trust can still be handed a small event that decompresses to gigabytes. So where the VRL or the events come from someone who may be hostile (a multi-tenant playground, a customer-supplied transform, data off the network), run it in a child process under a memory limit (`RLIMIT_AS`) and a time limit, and treat a dead child as a refused program. The reasoning is in [docs/architecture.md](docs/architecture.md#what-caller-supplied-vrl-cannot-reach).
+
+The binary runners sit outside both guards. `validate_config_with_vector`, `VectorTestRunner`, `execute_vector_pipeline` and the THG assessors hand the VRL to a `vector` binary with Vector's whole function set, which compiles it and, for all but `validate_config_with_vector`, runs it. Give them only VRL and configs you trust. With `no_environment=False`, `validate_config_with_vector` also resolves the config's secret backends, which runs an `exec` backend's command.
 
 ## The API
 

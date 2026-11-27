@@ -4,8 +4,6 @@ Runs `vector vrl` (which exits after one pass) rather than a
 file-source/sink daemon, since a daemon never exits on its own.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 
@@ -32,8 +30,8 @@ def test_event_passes_through_unchanged(vector_runner, tmp_path: Path) -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    # vector's own startup log line shares stdout with the printed event;
-    # only lines that open a JSON object are output data.
+    # vector's startup log line shares stdout with the printed event, so only
+    # lines that open a JSON object are output data.
     data_lines = [
         line for line in result.stdout.splitlines() if line.strip().startswith("{")
     ]

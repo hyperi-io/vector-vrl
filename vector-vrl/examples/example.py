@@ -2,9 +2,8 @@
 
 Everything here is synchronous and in-process - there is no streaming
 pipeline, no `.start()`/`.send()`/`.stop()` lifecycle, and no `vector`
-top-level module. The three entry points below are what the compiled
-extension actually exposes; see README.md and docs/reference-python-api.md
-for the full reference.
+top-level module. The three entry points below come from the compiled
+extension. README.md and docs/reference-python-api.md have the full reference.
 """
 
 import json

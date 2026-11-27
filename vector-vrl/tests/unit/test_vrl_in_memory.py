@@ -57,7 +57,6 @@ class TestVRLInMemory(unittest.TestCase):
         # Execute in-memory (no subprocess)
         results = execute_vrl(vrl_code, test_logs)
 
-        # Validate results
         self.assertEqual(len(results), 2)
 
         # Check uppercase transformation
@@ -182,7 +181,6 @@ class TestVRLInMemory(unittest.TestCase):
         # Execute in-memory
         results = execute_vrl(vrl_code, test_logs)
 
-        # Validate enrichment
         self.assertEqual(len(results), 2)
 
         # Check that enrichment occurred
@@ -230,7 +228,6 @@ class TestVRLInMemory(unittest.TestCase):
         # Get performance metrics
         metrics = get_vrl_performance(vrl_code, test_logs, iterations=100)
 
-        # Validate metrics
         self.assertIn("events_per_second", metrics)
         self.assertIn("processing_time_seconds", metrics)
         self.assertIn("total_events", metrics)

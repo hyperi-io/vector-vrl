@@ -4,8 +4,8 @@
 produce the same number of processed events as a real `vector test` run
 of the identical VRL against the identical input logs. Skips the
 in-memory half when the compiled `vector_bindings` module is not built
-into the active environment; the subprocess half always runs via the
-shared vector_runner fixture (real binary or container, no mocks).
+into the active environment. The subprocess half always runs through the
+shared vector_runner fixture (a binary or a container, no mocks).
 
 Every case's message is a JSON object string, matching `execute_vrl`'s own
 rule: a string starting with `{` is parsed and its fields become the
@@ -15,8 +15,6 @@ under `.message` regardless of content - so the fixture uses `log_fields`
 (the already-parsed dict) to put the same top-level fields in front of
 both execution paths.
 """
-
-from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -32,7 +30,7 @@ vector_bindings = pytest.importorskip("vector_vrl._bindings")
 def _run_vector_unit_tests(
     vector_runner, tmp_path: Path, vrl_source: str, cases: list[tuple[str, str, str]]
 ) -> int:
-    """Run one `vector test` per (name, message, condition) case; return the pass count."""
+    """Run one `vector test` per (name, message, condition) case and return the pass count."""
     passed = 0
     for name, message, condition in cases:
         config = {

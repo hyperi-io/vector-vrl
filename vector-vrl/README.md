@@ -40,6 +40,6 @@ validate_vrl(vrl).success
 
 Reading a YAML config needs `vector-vrl[yaml]`. TOML and JSON need nothing more.
 
-The function and nesting guards do not bound memory. Where the VRL comes from someone who may be hostile, run it in a child process under a memory and a time limit, and treat a dead child as a refused program. The reasoning is at <https://github.com/hyperi-io/vector-vrl/blob/main/docs/architecture.md>.
+The function and nesting guards do not bound memory, and the five decompressing functions (`decode_gzip` and its siblings) expand an event with no limit. Where the VRL or the events come from someone who may be hostile, run it in a child process under a memory and a time limit, and treat a dead child as a refused program. The `vector` binary runners have none of these guards, so give them only VRL you trust. The reasoning is at <https://github.com/hyperi-io/vector-vrl/blob/main/docs/architecture.md>.
 
 Docs and source are at <https://github.com/hyperi-io/vector-vrl>, the API reference at <https://github.com/hyperi-io/vector-vrl/blob/main/docs/reference-python-api.md>. Needs Python 3.14 or later. Licensed Apache-2.0: <https://github.com/hyperi-io/vector-vrl/blob/main/LICENSE>.

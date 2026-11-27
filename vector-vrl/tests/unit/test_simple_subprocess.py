@@ -2,8 +2,6 @@
 subcommand: a field assignment, a string split, and a `now()` call.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 
@@ -34,8 +32,8 @@ CASES = [
 
 
 def _parse_single_event(stdout: str) -> dict:
-    # vector's own startup log line shares stdout with the printed event;
-    # only lines that open a JSON object are output data.
+    # vector's startup log line shares stdout with the printed event, so only
+    # lines that open a JSON object are output data.
     data_lines = [line for line in stdout.splitlines() if line.strip().startswith("{")]
     assert len(data_lines) == 1
     return json.loads(data_lines[0])

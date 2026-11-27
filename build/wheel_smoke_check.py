@@ -6,8 +6,7 @@ hits first, run against the actual wheel artifact rather than the dev tree
 and would happily hide a wheel that shipped broken). Runs from a temp
 directory outside the repo so nothing here can shadow the installed
 package, and fails loudly if the compiled extension did not make it into
-the wheel - `get_bindings_info()['source']` must be `bundled`, never
-`external` or `none`.
+the wheel - `get_bindings_info()['source']` must be `bundled`, never `none`.
 """
 
 import re

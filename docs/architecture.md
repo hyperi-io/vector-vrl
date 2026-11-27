@@ -1,6 +1,6 @@
 # Architecture
 
-Three components in one checkout, each built and tested from inside its directory. No single venv, lockfile or `pip install -e .` covers the whole tree.
+Three components in one checkout, each built and tested from inside its directory.
 
 A call goes through the `vector_vrl` package to the compiled extension, which has the `vrl` compiler linked in, or to a `vector` binary the package runs as a subprocess.
 
@@ -33,15 +33,19 @@ flowchart LR
     class pkg group
 ```
 
-*Figure 1. L3 Components -- vector-vrl. Dashed boxes are external.* Up: top of vector-vrl.
+*Figure 1. L3 Components -- vector-vrl. The caller, the vrl crate and the vector binary are external.* Up: top of vector-vrl.
+
+## Components
 
 | Box | Code |
 |---|---|
-| `vector_vrl` package | `vector-vrl/src/vector_vrl/__init__.py`, which re-exports the extension, and `config_check.py` |
-| `vector_bindings` extension | `vector-bindings/src/`, compiled to a `.so` in `vector-vrl/src/vector_vrl/_bindings/` |
+| `vector_vrl` | The package: `vector-vrl/src/vector_vrl/__init__.py`, which re-exports the extension, and `config_check.py` |
+| `vector_bindings` | The extension: `vector-bindings/src/`, compiled to a `.so` in `vector-vrl/src/vector_vrl/_bindings/` |
 | Binary runners | `validate_config_with_vector` in `config_check.py`, `VectorTestRunner` in `vector_test_utils.py`, and the THG assessor that drives it |
 
-The three components build separately:
+## Building
+
+The three components build separately, and no single venv, lockfile or `pip install -e .` covers the whole tree:
 
 | Component | Language | Build | What it does |
 |---|---|---|---|
@@ -69,10 +73,14 @@ The compiled extension lands in `vector-vrl/src/vector_vrl/_bindings/`. The rest
 | `enable_system_functions` | `encode_proto`, `parse_proto`, `parse_etld`, `validate_json_schema`, `get_hostname`, `get_timezone_name` |
 | `enable_network_functions` | `http_request`, `dns_lookup`, `reverse_dns` |
 
+With `enable_system_functions` off, `vrl` also rejects `parse_groks`' `alias_sources` argument, the one file read left in `stdlib-base`. The five decoders (`decode_gzip`, `decode_zlib`, `decode_zstd`, `decode_lz4`, `decode_snappy`) are in `stdlib-base` and expand their input with no output limit, so they bound neither memory nor time on a hostile event.
+
 The crate's `full-stdlib` Cargo feature (`full-stdlib = ["vrl/stdlib"]`) turns all ten on for callers who control their VRL source. It's off by default and the published wheel is built without it. The feature's existence pulls `reqwest` and its TLS stack into `Cargo.lock`, because Cargo resolves the lockfile over the union of all features, but a default build links none of it. If you widen the `vrl` feature set, check what it re-enables before you ship it.
 
 A VRL source string can't nest brackets more than 64 levels deep (`MAX_VRL_NESTING_DEPTH` in `nesting.rs`). The VRL parser recurses once per level, unbounded, and deep enough nesting overflows the stack and aborts the process. The count skips string, raw string, regex and timestamp literals and `#` comments, as VRL's lexer does, so a `")"` inside a literal can't hide a level.
 
 Compiling and running happen on a thread with a 256 MiB stack (`VRL_STACK_BYTES` in `lib.rs`), because operator chains with no brackets recurse as deep. Where the process can't reserve that much address space, the work runs on the calling thread instead.
 
-Tests cover each guard: the function list in `vector-bindings/src/lib.rs`, the bracket count in `nesting.rs` and `vector-vrl/tests/unit/test_vector_class.py`, and the VRL stack in `lib.rs`.
+Tests cover each guard: the function list and the `alias_sources` refusal in `vector-bindings/src/lib.rs`, the bracket count in `nesting.rs` and `vector-vrl/tests/unit/test_vector_class.py`, and the VRL stack in `lib.rs`.
+
+None of this reaches the binary runners. They hand the VRL to a `vector` binary, which has every function Vector ships.

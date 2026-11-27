@@ -11,6 +11,8 @@ name = "vector_bindings"
 crate-type = ["cdylib"]
 
 [dependencies]
+# Redacts secret values from runtime errors. regex already pulls it in.
+aho-corasick = "1.1"
 # CPython's stable ABI: one wheel per platform. docs/how-to-build-and-test.md.
 pyo3 = { version = "0.29.3", features = ["extension-module", "abi3-py312"] }
 serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
